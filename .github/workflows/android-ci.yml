@@ -1,0 +1,41 @@
+name: Android CI
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "app/**"
+      - "ai/**"
+      - "common/**"
+      - "document/**"
+      - "highlight/**"
+      - "material3/**"
+      - "search/**"
+      - "speech/**"
+      - "web/**"
+      - "workspace/**"
+      - "*.gradle.kts"
+      - "gradle/**"
+      - "gradle.properties"
+      - "settings.gradle.kts"
+      - ".github/workflows/android-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - name: Compile debug Kotlin
+        run: ./gradlew :app:compileDebugKotlin --stacktrace
