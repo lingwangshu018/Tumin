@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -431,6 +431,12 @@ fun ChatDrawerContent(
                     onClick = {
                         navController.navigate(Screen.Favorite)
                     },
+                )
+
+                DrawerAction(
+                    icon = { Icon(HugeIcons.InLove, "情侣空间") },
+                    label = { Text("情侣空间") },
+                    onClick = { navController.navigate(Screen.CoupleSpace) },
                 )
 
                 DrawerAction(
