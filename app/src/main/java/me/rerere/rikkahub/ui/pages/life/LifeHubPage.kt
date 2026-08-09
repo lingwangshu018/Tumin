@@ -1,6 +1,10 @@
 package me.rerere.rikkahub.ui.pages.life
 
 import android.content.Context
+import android.content.Intent
+import android.provider.CalendarContract
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -18,7 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -35,8 +39,10 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 private enum class LifeSection(val title: String, val emoji: String, val hint: String) {
+    HOME("今日", "🏡", "今天的状态、安排与共同生活"),
     STATUS("身体状态", "🌸", "记录心情、精力和身体感受"),
     MEMO("备忘录", "📝", "保存我的、AI 的和共同计划"),
+    CALENDAR("日历提醒", "📅", "把计划和纪念日加入系统日历"),
     MUSIC("音乐记忆", "🎵", "收藏一起听过的歌和当时的心情"),
     READING("共读书架", "📖", "记录书籍、进度、书签和共同想法"),
 }
@@ -54,16 +60,29 @@ private data class LifeEntry(
 @Composable
 fun LifeHubPage() {
     val context = LocalContext.current
-    var section by remember { mutableStateOf(LifeSection.STATUS) }
+    var section by remember { mutableStateOf(LifeSection.HOME) }
     var entries by remember { mutableStateOf(loadEntries(context)) }
     var showAdd by remember { mutableStateOf(false) }
+    val bookImporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            val name = uri.lastPathSegment?.substringAfterLast('/') ?: "导入的小说"
+            val preview = runCatching {
+                context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText().take(800) }
+            }.getOrNull().orEmpty()
+            entries = entries + LifeEntry(section = LifeSection.READING, title = name, detail = preview, tag = "刚刚导入")
+            saveEntries(context, entries)
+            section = LifeSection.READING
+        }
+    }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("生活空间") }, navigationIcon = { BackButton() }) },
-        floatingActionButton = { FloatingActionButton(onClick = { showAdd = true }) { Text("＋") } },
+        floatingActionButton = {
+            if (section != LifeSection.HOME) FloatingActionButton(onClick = { showAdd = true }) { Text("＋") }
+        },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            TabRow(selectedTabIndex = section.ordinal) {
+            ScrollableTabRow(selectedTabIndex = section.ordinal, edgePadding = 8.dp) {
                 LifeSection.entries.forEach { item ->
                     Tab(
                         selected = section == item,
@@ -86,10 +105,25 @@ fun LifeHubPage() {
                         }
                     }
                 }
-                if (filtered.isEmpty()) item {
+                if (section == LifeSection.READING) item {
+                    TextButton(onClick = { bookImporter.launch(arrayOf("text/plain", "text/*")) }) {
+                        Text("＋ 导入 TXT 小说")
+                    }
+                }
+                if (section == LifeSection.HOME) {
+                    items(LifeSection.entries.filterNot { it == LifeSection.HOME }) { destination ->
+                        val latest = entries.filter { it.section == destination }.maxByOrNull { it.createdAt }
+                        Card(onClick = { section = destination }, modifier = Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Text(destination.emoji + " " + destination.title, style = MaterialTheme.typography.titleLarge)
+                                Text(latest?.title ?: destination.hint, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                } else if (filtered.isEmpty()) item {
                     Text("这里还没有记录，点击右下角开始。", modifier = Modifier.padding(8.dp))
                 }
-                items(filtered, key = { it.id }) { entry ->
+                if (section != LifeSection.HOME) items(filtered, key = { it.id }) { entry ->
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -97,6 +131,9 @@ fun LifeHubPage() {
                                 if (entry.tag.isNotBlank()) Text(entry.tag, color = MaterialTheme.colorScheme.primary)
                             }
                             if (entry.detail.isNotBlank()) Text(entry.detail)
+                            if (entry.section == LifeSection.CALENDAR) TextButton(onClick = { openCalendar(context, entry) }) {
+                                Text("添加到系统日历")
+                            }
                             TextButton(onClick = {
                                 entries = entries.filterNot { it.id == entry.id }
                                 saveEntries(context, entries)
@@ -129,8 +166,10 @@ private fun AddLifeEntryDialog(
     var detail by remember(section) { mutableStateOf("") }
     var tag by remember(section) { mutableStateOf("") }
     val labels = when (section) {
+        LifeSection.HOME -> Triple("", "", "")
         LifeSection.STATUS -> Triple("今天感觉怎么样", "身体感受或想让 AI 知道的事", "心情 / 精力")
         LifeSection.MEMO -> Triple("备忘标题", "计划或想法", "我的 / AI / 我们的")
+        LifeSection.CALENDAR -> Triple("安排或提醒标题", "时间、地点和需要 AI 提醒的事情", "今天 / 本周 / 纪念日")
         LifeSection.MUSIC -> Triple("歌曲名", "歌手、故事或一起听歌的回忆", "想念 / 开心 / 安慰")
         LifeSection.READING -> Triple("书名", "阅读进度、批注或共同观点", "在读 / 想读 / 读完")
     }
@@ -147,6 +186,16 @@ private fun AddLifeEntryDialog(
         confirmButton = { TextButton(enabled = title.isNotBlank(), onClick = { onSave(title.trim(), detail.trim(), tag.trim()) }) { Text("保存") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
+}
+
+private fun openCalendar(context: Context, entry: LifeEntry) {
+    val intent = Intent(Intent.ACTION_INSERT).setData(CalendarContract.Events.CONTENT_URI).apply {
+        putExtra(CalendarContract.Events.TITLE, entry.title)
+        putExtra(CalendarContract.Events.DESCRIPTION, entry.detail)
+        putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, System.currentTimeMillis() + 60 * 60 * 1000)
+        putExtra(CalendarContract.EXTRA_EVENT_END_TIME, System.currentTimeMillis() + 2 * 60 * 60 * 1000)
+    }
+    context.startActivity(intent)
 }
 
 private fun loadEntries(context: Context): List<LifeEntry> = runCatching {

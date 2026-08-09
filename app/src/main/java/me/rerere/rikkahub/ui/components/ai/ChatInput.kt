@@ -116,6 +116,7 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.service.VoiceCallService
 import me.rerere.rikkahub.ui.components.ui.KeepScreenOn
+import me.rerere.rikkahub.ui.components.ui.EmojiPicker
 import me.rerere.rikkahub.ui.components.ui.toComposeColor
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionRecordAudio
@@ -136,7 +137,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.Uuid
 
 enum class ExpandState {
-    Collapsed, Files,
+    Collapsed, Files, Emoji,
 }
 
 @Composable
@@ -592,6 +593,10 @@ fun ChatInput(
                                     model = chatModel,
                                 )
 
+                                ActionIconButton(onClick = { expandToggle(ExpandState.Emoji) }) {
+                                    Text(if (expand == ExpandState.Emoji) "×" else "😊", fontSize = 18.sp)
+                                }
+
                                 // Reasoning
                                 val model = settings.getCurrentChatModel()
                                 if (model?.abilities?.contains(ModelAbility.REASONING) == true) {
@@ -759,6 +764,19 @@ fun ChatInput(
                             onPickVideo = { videoPickerLauncher.launch("video/*") },
                             onPickAudio = { audioPickerLauncher.launch("audio/*") },
                             onPickFile = { filePickerLauncher.launch(arrayOf("*/*")) },
+                        )
+                    }
+                }
+                if (expand == ExpandState.Emoji) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)),
+                        shape = RoundedCornerShape(20.dp),
+                        color = hazeTintColor,
+                    ) {
+                        EmojiPicker(
+                            modifier = Modifier.fillMaxWidth(),
+                            height = 320,
+                            onEmojiSelected = { emoji -> state.appendText(emoji.emoji) },
                         )
                     }
                 }
