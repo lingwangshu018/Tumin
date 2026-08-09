@@ -16,7 +16,7 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "me.rerere.orangechat"
+        applicationId = "com.lingwangshu018.bennychat"
         minSdk = 26
         targetSdk = 37
         versionCode = 160
