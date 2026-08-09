@@ -51,8 +51,14 @@ jobs:
           cache: gradle
       - name: Make Gradle executable
         run: chmod +x gradlew
-      - name: Compile debug Kotlin
-        run: ./gradlew :app:compileDebugKotlin --stacktrace
+      - name: Build debug APK
+        run: ./gradlew :app:assembleDebug --stacktrace
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: orangechat-2.3.0-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
 
   website:
     runs-on: ubuntu-latest
