@@ -19,8 +19,8 @@ android {
         applicationId = "com.lingwangshu018.tumin"
         minSdk = 26
         targetSdk = 37
-        versionCode = 161
-        versionName = "2.3.1"
+        versionCode = 162
+        versionName = "2.3.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
