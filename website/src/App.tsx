@@ -1,5 +1,8 @@
 import { useReveal } from './useReveal'
 
+const REPOSITORY_URL = 'https://github.com/lingwangshu018/orangechat'
+const DOWNLOAD_URL = `${REPOSITORY_URL}/releases/latest`
+
 function Navbar() {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-xl border-b border-neutral-100">
@@ -15,7 +18,7 @@ function Navbar() {
           <a href="#architecture" className="hover:text-brand transition-colors">架构对比</a>
         </div>
         <a
-          href="https://rikka-ai.com/download"
+          href={DOWNLOAD_URL}
           target="_blank"
           rel="noopener noreferrer"
           className="px-5 py-2 bg-brand text-white text-sm font-medium rounded-full hover:bg-brand-dark transition-colors"
@@ -72,7 +75,7 @@ function Hero() {
           style={{ animationDelay: '0.4s' }}
         >
           <a
-            href="https://rikka-ai.com/download"
+            href={DOWNLOAD_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-8 py-4 bg-brand text-white font-semibold rounded-full hover:bg-brand-dark transition-all hover:scale-105 shadow-lg shadow-brand/25"
@@ -83,7 +86,7 @@ function Hero() {
             下载橘瓣
           </a>
           <a
-            href="https://play.google.com/store/apps/details?id=me.rerere.rikkahub"
+            href={REPOSITORY_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-8 py-4 bg-neutral-900 text-white font-semibold rounded-full hover:bg-neutral-800 transition-all hover:scale-105"
@@ -91,7 +94,7 @@ function Hero() {
             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
               <path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 01-.61-.92V2.734a1 1 0 01.609-.92zm10.89 10.893l2.302 2.302-10.937 6.333 8.635-8.635zm3.199-3.199l2.302 1.33a1 1 0 010 1.724l-2.302 1.33-2.543-2.543 2.543-2.541zM5.864 2.658L16.8 8.99l-2.302 2.303-8.634-8.635z"/>
             </svg>
-            Google Play
+            查看源码
           </a>
         </div>
 
@@ -146,6 +149,13 @@ function Philosophy() {
 }
 
 const uniqueFeatures = [
+  {
+    icon: '💕',
+    title: '情侣空间',
+    subtitle: '和 TA 生活在一起',
+    description: '绑定一个现有 AI 助手作为恋人，在专属空间记录恋爱天数、朋友圈、日记和纪念日。',
+    highlight: '朋友圈 + 日记 + 纪念日'
+  },
   {
     icon: '🧩',
     title: '插件系统',
@@ -543,7 +553,7 @@ function DownloadSection() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <a
-              href="https://rikka-ai.com/download"
+              href={DOWNLOAD_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-brand text-white font-semibold rounded-full hover:bg-brand-dark transition-all hover:scale-105 shadow-lg shadow-brand/30 text-lg"
@@ -551,10 +561,10 @@ function DownloadSection() {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
               </svg>
-              官网下载
+              下载最新版 APK
             </a>
             <a
-              href="https://play.google.com/store/apps/details?id=me.rerere.rikkahub"
+              href={REPOSITORY_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white/10 text-white font-semibold rounded-full hover:bg-white/20 transition-all hover:scale-105 border border-white/10 text-lg"
@@ -562,7 +572,7 @@ function DownloadSection() {
               <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 01-.61-.92V2.734a1 1 0 01.609-.92zm10.89 10.893l2.302 2.302-10.937 6.333 8.635-8.635zm3.199-3.199l2.302 1.33a1 1 0 010 1.724l-2.302 1.33-2.543-2.543 2.543-2.541zM5.864 2.658L16.8 8.99l-2.302 2.303-8.634-8.635z"/>
               </svg>
-              Google Play
+              GitHub 源码
             </a>
           </div>
           <div className="mt-8 flex items-center justify-center gap-6 text-sm text-neutral-500">
@@ -582,7 +592,7 @@ function DownloadSection() {
               <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
               </svg>
-              Apache 2.0
+              AGPL v3 / 商业许可
             </span>
           </div>
         </div>
@@ -605,7 +615,7 @@ function Footer() {
           </div>
           <div className="flex items-center gap-6 text-sm">
             <a
-              href="https://github.com/sue1231513/orangechat"
+              href={REPOSITORY_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="hover:text-white transition-colors flex items-center gap-1.5"
@@ -616,12 +626,12 @@ function Footer() {
               GitHub
             </a>
             <a
-              href="https://rikka-ai.com/download"
+              href={DOWNLOAD_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="hover:text-white transition-colors"
             >
-              官网
+              下载
             </a>
             <a
               href="https://github.com/rikkahub/rikkahub"
@@ -634,7 +644,7 @@ function Footer() {
           </div>
         </div>
         <div className="mt-8 pt-6 border-t border-neutral-800 text-center text-xs text-neutral-600">
-          <p>橘瓣 OrangeChat · 基于 Apache License 2.0 开源 · 致谢 RikkaHub</p>
+          <p>橘瓣 OrangeChat · 遵循仓库分段双重许可 · 致谢 RikkaHub</p>
         </div>
       </div>
     </footer>
