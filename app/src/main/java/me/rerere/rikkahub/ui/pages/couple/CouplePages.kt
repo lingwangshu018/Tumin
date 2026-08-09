@@ -22,13 +22,14 @@ fun CoupleSpacePage(vm: CoupleVM = koinViewModel()) {
     val relationship by vm.relationship.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val partner = settings.assistants.firstOrNull { it.id.toString() == relationship?.assistantId }
+    var pendingPartnerId by remember { mutableStateOf<String?>(null) }
     Scaffold(topBar = { TopAppBar(title = { Text("情侣空间") }, navigationIcon = { BackButton() }) }) { padding ->
         if (relationship == null || partner == null) {
             LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 item { Text("选择你的恋人", style = MaterialTheme.typography.headlineSmall) }
                 item { Text("绑定后，朋友圈、日记和纪念日都会属于你们两个人。") }
                 items(settings.assistants) { assistant ->
-                    Card(onClick = { vm.bind(assistant.id.toString()) }, modifier = Modifier.fillMaxWidth()) {
+                    Card(onClick = { pendingPartnerId = assistant.id.toString() }, modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp)) {
                             Text(assistant.name.ifBlank { "未命名助手" }, style = MaterialTheme.typography.titleMedium)
                             Text("设为恋人")
@@ -39,6 +40,16 @@ fun CoupleSpacePage(vm: CoupleVM = koinViewModel()) {
         } else {
             CoupleHome(relationship!!, partner.name.ifBlank { "恋人" }, Modifier.padding(padding))
         }
+    }
+    pendingPartnerId?.let { assistantId ->
+        DateChooserDialog(
+            title = "选择恋爱开始日期",
+            onDismiss = { pendingPartnerId = null },
+            onConfirm = { date ->
+                vm.bind(assistantId, date)
+                pendingPartnerId = null
+            },
+        )
     }
 }
 
@@ -75,19 +86,34 @@ private fun FeatureCard(emoji: String, title: String, subtitle: String, onClick:
 @Composable
 fun CoupleMomentsPage(vm: CoupleVM = koinViewModel()) {
     val posts by vm.posts.collectAsStateWithLifecycle()
-    EntryListPage("朋友圈", "发布动态", posts, { it.content }, { formatDate(it.createdAt) }, onLike = { vm.toggleLike(it) }) { text, _ -> vm.addPost(text) }
+    EntryListPage(
+        "朋友圈",
+        "发布动态",
+        posts,
+        { it.content },
+        { formatDate(it.createdAt) },
+        onLike = { vm.toggleLike(it) },
+        likeLabel = { if (it.liked) "已喜欢" else "喜欢" },
+    ) { text, _, _ -> vm.addPost(text) }
 }
 
 @Composable
 fun CoupleDiaryPage(vm: CoupleVM = koinViewModel()) {
     val entries by vm.diaries.collectAsStateWithLifecycle()
-    EntryListPage("日记", "写日记", entries, { it.title + "\n" + it.content }, { formatDate(it.entryDate) }) { title, content -> vm.addDiary(title, content) }
+    EntryListPage("日记", "写日记", entries, { it.title + "\n" + it.content }, { formatDate(it.entryDate) }) { title, content, _ -> vm.addDiary(title, content) }
 }
 
 @Composable
 fun CoupleAnniversariesPage(vm: CoupleVM = koinViewModel()) {
     val entries by vm.anniversaries.collectAsStateWithLifecycle()
-    EntryListPage("纪念日", "添加纪念日", entries, { it.title }, { formatDate(it.eventDate) }) { title, _ -> vm.addAnniversary(title) }
+    EntryListPage(
+        "纪念日",
+        "添加纪念日",
+        entries,
+        { it.title },
+        { formatDate(it.eventDate) },
+        chooseDate = true,
+    ) { title, _, date -> vm.addAnniversary(title, date) }
 }
 
 @Composable
@@ -98,11 +124,15 @@ private fun <T> EntryListPage(
     content: (T) -> String,
     date: (T) -> String,
     onLike: ((T) -> Unit)? = null,
-    onAdd: (String, String) -> Unit,
+    likeLabel: ((T) -> String)? = null,
+    chooseDate: Boolean = false,
+    onAdd: (String, String, Long) -> Unit,
 ) {
     var showAdd by remember { mutableStateOf(false) }
     var first by remember { mutableStateOf("") }
     var second by remember { mutableStateOf("") }
+    var selectedDate by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var showDateChooser by remember { mutableStateOf(false) }
     Scaffold(
         topBar = { TopAppBar(title = { Text(title) }, navigationIcon = { BackButton() }) },
         floatingActionButton = { FloatingActionButton(onClick = { showAdd = true }) { Text("＋") } },
@@ -115,7 +145,9 @@ private fun <T> EntryListPage(
                         Text(content(entry), style = MaterialTheme.typography.bodyLarge)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(date(entry), style = MaterialTheme.typography.bodySmall)
-                            if (onLike != null) TextButton(onClick = { onLike(entry) }) { Text("喜欢") }
+                            if (onLike != null) TextButton(onClick = { onLike(entry) }) {
+                                Text(likeLabel?.invoke(entry) ?: "喜欢")
+                            }
                         }
                     }
                 }
@@ -129,11 +161,42 @@ private fun <T> EntryListPage(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(first, { first = it }, label = { Text(if (title == "朋友圈") "内容" else "标题") })
                 if (title == "日记") OutlinedTextField(second, { second = it }, label = { Text("正文") }, minLines = 4)
+                if (chooseDate) TextButton(onClick = { showDateChooser = true }) {
+                    Text("日期：${formatDate(selectedDate)}")
+                }
             }
         },
-        confirmButton = { TextButton(enabled = first.isNotBlank(), onClick = { onAdd(first, second); first = ""; second = ""; showAdd = false }) { Text("保存") } },
+        confirmButton = { TextButton(enabled = first.isNotBlank(), onClick = { onAdd(first, second, selectedDate); first = ""; second = ""; showAdd = false }) { Text("保存") } },
         dismissButton = { TextButton(onClick = { showAdd = false }) { Text("取消") } },
     )
+    if (showDateChooser) DateChooserDialog(
+        title = "选择纪念日",
+        initialDate = selectedDate,
+        onDismiss = { showDateChooser = false },
+        onConfirm = { selectedDate = it; showDateChooser = false },
+    )
+}
+
+@Composable
+private fun DateChooserDialog(
+    title: String,
+    initialDate: Long = System.currentTimeMillis(),
+    onDismiss: () -> Unit,
+    onConfirm: (Long) -> Unit,
+) {
+    val state = rememberDatePickerState(initialSelectedDateMillis = initialDate)
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = { onConfirm(state.selectedDateMillis ?: initialDate) }) { Text("确定") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    ) {
+        Column {
+            Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(24.dp, 20.dp, 24.dp, 0.dp))
+            DatePicker(state = state, showModeToggle = false)
+        }
+    }
 }
 
 private fun formatDate(value: Long): String = DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(value))
