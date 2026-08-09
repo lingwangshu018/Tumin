@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.pages.life
 import android.content.Context
 import android.content.Intent
 import android.provider.CalendarContract
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -134,6 +135,9 @@ fun LifeHubPage() {
                             if (entry.section == LifeSection.CALENDAR) TextButton(onClick = { openCalendar(context, entry) }) {
                                 Text("添加到系统日历")
                             }
+                            if (entry.section == LifeSection.MUSIC) TextButton(onClick = { openMusic(context, entry.title) }) {
+                                Text("一起听这首歌")
+                            }
                             TextButton(onClick = {
                                 entries = entries.filterNot { it.id == entry.id }
                                 saveEntries(context, entries)
@@ -171,7 +175,7 @@ private fun AddLifeEntryDialog(
         LifeSection.MEMO -> Triple("备忘标题", "计划或想法", "我的 / AI / 我们的")
         LifeSection.CALENDAR -> Triple("安排或提醒标题", "时间、地点和需要 AI 提醒的事情", "今天 / 本周 / 纪念日")
         LifeSection.MUSIC -> Triple("歌曲名", "歌手、故事或一起听歌的回忆", "想念 / 开心 / 安慰")
-        LifeSection.READING -> Triple("书名", "阅读进度、批注或共同观点", "在读 / 想读 / 读完")
+        LifeSection.READING -> Triple("书名或章节", "阅读进度、原文、你的批注以及想问 AI 的问题", "普通书签 / 情绪书签 / 猜想书签 / 记忆书签")
     }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -196,6 +200,13 @@ private fun openCalendar(context: Context, entry: LifeEntry) {
         putExtra(CalendarContract.EXTRA_EVENT_END_TIME, System.currentTimeMillis() + 2 * 60 * 60 * 1000)
     }
     context.startActivity(intent)
+}
+
+private fun openMusic(context: Context, title: String) {
+    val query = Uri.encode(title)
+    val appIntent = Intent(Intent.ACTION_VIEW, Uri.parse("orpheus://search?keyword=$query"))
+    val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://music.163.com/#/search/m/?s=$query"))
+    runCatching { context.startActivity(appIntent) }.getOrElse { context.startActivity(webIntent) }
 }
 
 private fun loadEntries(context: Context): List<LifeEntry> = runCatching {

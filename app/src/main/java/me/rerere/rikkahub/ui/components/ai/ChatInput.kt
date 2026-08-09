@@ -137,7 +137,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.Uuid
 
 enum class ExpandState {
-    Collapsed, Files, Emoji,
+    Collapsed, Files, Emoji, LifeCards,
 }
 
 @Composable
@@ -597,6 +597,10 @@ fun ChatInput(
                                     Text(if (expand == ExpandState.Emoji) "×" else "😊", fontSize = 18.sp)
                                 }
 
+                                ActionIconButton(onClick = { expandToggle(ExpandState.LifeCards) }) {
+                                    Text(if (expand == ExpandState.LifeCards) "×" else "♡", fontSize = 20.sp)
+                                }
+
                                 // Reasoning
                                 val model = settings.getCurrentChatModel()
                                 if (model?.abilities?.contains(ModelAbility.REASONING) == true) {
@@ -778,6 +782,27 @@ fun ChatInput(
                             height = 320,
                             onEmojiSelected = { emoji -> state.appendText(emoji.emoji) },
                         )
+                    }
+                }
+                if (expand == ExpandState.LifeCards) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)),
+                        shape = RoundedCornerShape(20.dp),
+                        color = hazeTintColor,
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            listOf(
+                                "🎁 礼物" to "[礼物] 我想送你一份礼物：",
+                                "🎵 点歌" to "[一起听歌] 我想和你听：",
+                                "📅 事件" to "[共同事件] 今天我们一起：",
+                                "💌 心情" to "[此刻心情] 我现在感到：",
+                            ).forEach { (label, template) ->
+                                TextButton(onClick = { state.appendText(template); dismissExpand() }) { Text(label) }
+                            }
+                        }
                     }
                 }
             }
