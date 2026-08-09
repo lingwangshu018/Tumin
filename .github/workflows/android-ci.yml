@@ -5,6 +5,7 @@ on:
     branches: [master]
     paths:
       - "app/**"
+      - "website/**"
       - "ai/**"
       - "common/**"
       - "document/**"
@@ -52,3 +53,20 @@ jobs:
         run: chmod +x gradlew
       - name: Compile debug Kotlin
         run: ./gradlew :app:compileDebugKotlin --stacktrace
+
+  website:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - name: Install website dependencies
+        working-directory: website
+        run: npm ci
+      - name: Build website
+        working-directory: website
+        run: npm run build
