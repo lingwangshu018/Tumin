@@ -1,4 +1,4 @@
-﻿import com.android.build.api.dsl.Packaging
+import com.android.build.api.dsl.Packaging
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import java.io.FileInputStream
@@ -16,11 +16,11 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.lingwangshu018.bennychat"
+        applicationId = "com.lingwangshu018.tumin"
         minSdk = 26
         targetSdk = 37
-        versionCode = 160
-        versionName = "2.3.0"
+        versionCode = 161
+        versionName = "2.3.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

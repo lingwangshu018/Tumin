@@ -37,7 +37,7 @@ class DailySummaryService {
 
     companion object {
         const val TAG = "DailySummaryService"
-        const val ACTION_DAILY_CRON = "me.rerere.orangechat.DAILY_CRON"
+        const val ACTION_DAILY_CRON = "com.lingwangshu018.tumin.DAILY_CRON"
         private const val REQUEST_CODE = 10003
 
         private const val PREFS_NAME = "daily_cron_prefs"

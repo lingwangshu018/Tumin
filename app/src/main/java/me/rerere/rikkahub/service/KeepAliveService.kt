@@ -39,7 +39,7 @@ class KeepAliveService : Service() {
         // 前台服务通知 ID
         private const val NOTIFICATION_ID = 30001
         // 自启动广播 Action
-        const val ACTION_RESTART_KEEP_ALIVE = "me.rerere.orangechat.RESTART_KEEP_ALIVE"
+        const val ACTION_RESTART_KEEP_ALIVE = "com.lingwangshu018.tumin.RESTART_KEEP_ALIVE"
 
         /**
          * 检查服务是否正在运行（高版本系统 getRunningServices 可能受限，仅作参考）

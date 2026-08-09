@@ -94,7 +94,7 @@ class ProactiveMessageService : KoinComponent {
 
     companion object {
         const val TAG = "ProactiveMessageService"
-        const val ACTION_PROACTIVE_MESSAGE = "me.rerere.orangechat.PROACTIVE_MESSAGE"
+        const val ACTION_PROACTIVE_MESSAGE = "com.lingwangshu018.tumin.PROACTIVE_MESSAGE"
         private const val REQUEST_CODE = 10001
 
         internal const val PREFS_NAME = "proactive_message_prefs"
