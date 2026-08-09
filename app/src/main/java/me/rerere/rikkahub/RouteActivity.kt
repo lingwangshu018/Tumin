@@ -1,4 +1,4 @@
-/*
+﻿/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -436,7 +436,162 @@ class RouteActivity : ComponentActivity() {
                             }
                         }
                 ) {
-   …1772 tokens truncated…Screen.SettingModels> {
+                    NavDisplay(
+                        backStack = backStack,
+                        entryDecorators = listOf(
+                            rememberSaveableStateHolderNavEntryDecorator(),
+                            rememberViewModelStoreNavEntryDecorator(),
+                        ),
+                        modifier = Modifier.fillMaxSize(),
+                        onBack = { backStack.removeLastOrNull() },
+                        transitionSpec = {
+                            if (backStack.size == 1) fadeIn() togetherWith fadeOut()
+                            else {
+                                slideInHorizontally { it } togetherWith
+                                    slideOutHorizontally { -it / 2 } + scaleOut(targetScale = 0.7f) + fadeOut()
+                            }
+                        },
+                        popTransitionSpec = {
+                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
+                                slideOutHorizontally { it }
+                        },
+                        predictivePopTransitionSpec = {
+                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
+                                slideOutHorizontally { it }
+                        },
+                        entryProvider = entryProvider {
+                            entry<Screen.Chat>(
+                                metadata = NavDisplay.transitionSpec { fadeIn() togetherWith fadeOut() }
+                                        + NavDisplay.popTransitionSpec { fadeIn() togetherWith fadeOut() }
+                            ) { key ->
+                                ChatPage(
+                                    id = Uuid.parse(key.id),
+                                    text = key.text,
+                                    files = key.files.map { it.toUri() },
+                                    nodeId = key.nodeId?.let { Uuid.parse(it) },
+                                    autoStartVoice = key.autoStartVoice,
+                                )
+                            }
+
+                            entry<Screen.ShareHandler> { key ->
+                                ShareHandlerPage(
+                                    text = key.text,
+                                    image = key.streamUri
+                                )
+                            }
+
+                            entry<Screen.History> {
+                                HistoryPage()
+                            }
+
+                            entry<Screen.Favorite> {
+                                FavoritePage()
+                            }
+
+                            entry<Screen.CoupleSpace> { CoupleSpacePage() }
+                            entry<Screen.CoupleMoments> { CoupleMomentsPage() }
+                            entry<Screen.CoupleDiary> { CoupleDiaryPage() }
+                            entry<Screen.CoupleAnniversaries> { CoupleAnniversariesPage() }
+
+                            entry<Screen.Assistant> {
+                                AssistantPage()
+                            }
+
+                            entry<Screen.AssistantDetail> { key ->
+                                AssistantDetailPage(key.id)
+                            }
+
+                            entry<Screen.AssistantBasic> { key ->
+                                AssistantBasicPage(key.id)
+                            }
+
+                            entry<Screen.AssistantPrompt> { key ->
+                                AssistantPromptPage(key.id)
+                            }
+
+                            entry<Screen.AssistantMemory> { key ->
+                                AssistantMemoryPage(key.id)
+                            }
+
+                            entry<Screen.AssistantRequest> { key ->
+                                AssistantRequestPage(key.id)
+                            }
+
+                            entry<Screen.AssistantMcp> { key ->
+                                AssistantMcpPage(key.id)
+                            }
+
+                            entry<Screen.AssistantLocalTool> { key ->
+                                AssistantLocalToolPage(key.id)
+                            }
+
+                            entry<Screen.AssistantInjections> { key ->
+                                AssistantExtensionsPage(key.id)
+                            }
+
+                            entry<Screen.Translator> {
+                                TranslatorPage()
+                            }
+
+                            entry<Screen.Setting> {
+                                SettingPage()
+                            }
+
+                            entry<Screen.Backup> {
+                                BackupPage()
+                            }
+
+                            entry<Screen.ImageGen> {
+                                ImageGenPage()
+                            }
+
+                            entry<Screen.WebView> { key ->
+                                WebViewPage(key.url, key.content)
+                            }
+
+                            entry<Screen.SettingDisplay> {
+                                SettingDisplayPage()
+                            }
+
+                            entry<Screen.SettingTheme> {
+                                SettingThemePage()
+                            }
+
+                            entry<Screen.SettingDisplayTheme> {
+                                SettingDisplayThemePage()
+                            }
+                            entry<Screen.SettingDisplayColor> {
+                                SettingDisplayColorPage()
+                            }
+                            entry<Screen.SettingDisplayTransparency> {
+                                SettingDisplayTransparencyPage()
+                            }
+                            entry<Screen.SettingDisplayIllustration> {
+                                SettingDisplayIllustrationPage()
+                            }
+                            entry<Screen.SettingDisplayMessage> {
+                                SettingDisplayMessagePage()
+                            }
+                            entry<Screen.SettingDisplayCodeInteraction> {
+                                SettingDisplayCodeInteractionPage()
+                            }
+                            entry<Screen.SettingDisplayGeneral> {
+                                SettingDisplayGeneralPage()
+                            }
+                            entry<Screen.SettingDisplayNotification> {
+                                SettingDisplayNotificationPage()
+                            }
+
+                            entry<Screen.SettingProvider> {
+                                SettingProviderPage()
+                            }
+
+                            entry<Screen.SettingProviderDetail> { key ->
+                                val id = Uuid.parse(key.providerId)
+                                SettingProviderDetailPage(id = id)
+                            }
+
+                            entry<Screen.SettingModels> {
                                 SettingModelPage()
                             }
 
