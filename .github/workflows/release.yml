@@ -72,12 +72,20 @@ jobs:
           name: artifacts
           path: app/build/outputs/apk/release/*.apk
 
-      - name: Create GitHub Release
+      - name: Create or update GitHub Release
         if: success()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "v${{ steps.version.outputs.version }}" \
-            --title "Release ${{ steps.version.outputs.version }}" \
-            --generate-notes \
-            app/build/outputs/apk/release/*.apk
+          TAG="v${{ steps.version.outputs.version }}"
+          APK_GLOB="app/build/outputs/apk/release/*.apk"
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; replacing APK asset(s)."
+            gh release upload "$TAG" $APK_GLOB --clobber
+          else
+            gh release create "$TAG" \
+              --title "Release ${{ steps.version.outputs.version }}" \
+              --generate-notes \
+              $APK_GLOB
+          fi
