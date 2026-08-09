@@ -1,11 +1,14 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { AssistantPage, BackupPage, FavoritesPage, HistoryPage, QuickMessagesPage, SearchPage, StatsPage } from './MigratedPages'
 
-type Page = 'chat' | 'couple' | 'moments' | 'diary' | 'anniversaries' | 'settings' | 'about'
-type Message = { id: string; role: 'user' | 'assistant'; content: string }
+type Page = 'chat' | 'assistant' | 'history' | 'favorites' | 'search' | 'quick' | 'stats' | 'backup' | 'couple' | 'moments' | 'diary' | 'anniversaries' | 'settings' | 'about'
+export type Message = { id: string; role: 'user' | 'assistant'; content: string; favorite?: boolean }
+export type Conversation = { id: string; title: string; updatedAt: string; messages: Message[] }
+export type QuickMessage = { id: string; title: string; content: string }
 type Moment = { id: string; content: string; createdAt: string; liked: boolean }
 type Diary = { id: string; title: string; content: string; date: string }
 type Anniversary = { id: string; title: string; date: string }
-type Settings = { endpoint: string; apiKey: string; model: string; assistantName: string; partnerName: string; bound: boolean; startedAt: string }
+export type Settings = { endpoint: string; apiKey: string; model: string; assistantName: string; systemPrompt: string; memory: string; temperature: number; partnerName: string; bound: boolean; startedAt: string }
 
 const REPOSITORY_URL = 'https://github.com/lingwangshu018/Tumin'
 const DOWNLOAD_URL = `${REPOSITORY_URL}/releases/latest`
@@ -13,7 +16,7 @@ const ICON_URL = `${import.meta.env.BASE_URL}icon.png`
 const today = () => new Date().toISOString().slice(0, 10)
 const uid = () => crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`
 
-const defaults: Settings = { endpoint: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', assistantName: '小兔', partnerName: '恋人', bound: false, startedAt: today() }
+const defaults: Settings = { endpoint: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', assistantName: '小兔', systemPrompt: '你是兔眠中的温柔 AI 伴侣。', memory: '', temperature: 0.8, partnerName: '恋人', bound: false, startedAt: today() }
 function stored<T>(key: string, fallback: T): T { try { return JSON.parse(localStorage.getItem(key) || '') as T } catch { return fallback } }
 
 function Topbar({ title, subtitle, onMenu, onBack }: { title: string; subtitle?: string; onMenu: () => void; onBack?: () => void }) {
@@ -34,7 +37,14 @@ function Sidebar({ page, go, open, close, newChat }: { page: Page; go: (p: Page)
       <div className="conversation-heading"><span>功能</span></div>
       <nav className="side-nav primary-nav">
         <button className={page === 'chat' ? 'active' : ''} onClick={() => nav('chat')}><span>⌂</span> 聊天</button>
+        <button className={page === 'assistant' ? 'active' : ''} onClick={() => nav('assistant')}><span>♙</span> 助手设置</button>
+        <button className={page === 'history' ? 'active' : ''} onClick={() => nav('history')}><span>◷</span> 聊天记录</button>
+        <button className={page === 'search' ? 'active' : ''} onClick={() => nav('search')}><span>⌕</span> 搜索消息</button>
+        <button className={page === 'favorites' ? 'active' : ''} onClick={() => nav('favorites')}><span>☆</span> 收藏消息</button>
         <button className={['couple','moments','diary','anniversaries'].includes(page) ? 'active' : ''} onClick={() => nav('couple')}><span>♡</span> 情侣空间</button>
+        <button className={page === 'quick' ? 'active' : ''} onClick={() => nav('quick')}><span>⚡</span> 快捷消息</button>
+        <button className={page === 'stats' ? 'active' : ''} onClick={() => nav('stats')}><span>▥</span> 聊天统计</button>
+        <button className={page === 'backup' ? 'active' : ''} onClick={() => nav('backup')}><span>⇅</span> 数据与备份</button>
         <button className={page === 'settings' ? 'active' : ''} onClick={() => nav('settings')}><span>⚙</span> 设置</button>
         <button className={page === 'about' ? 'active' : ''} onClick={() => nav('about')}><span>ⓘ</span> 关于兔眠</button>
       </nav>
@@ -42,7 +52,7 @@ function Sidebar({ page, go, open, close, newChat }: { page: Page; go: (p: Page)
   </>
 }
 
-function ChatPage({ settings, messages, setMessages, onMenu, goSettings }: { settings: Settings; messages: Message[]; setMessages: (m: Message[]) => void; onMenu: () => void; goSettings: () => void }) {
+function ChatPage({ settings, messages, setMessages, quickMessages, onMenu, goSettings }: { settings: Settings; messages: Message[]; setMessages: (m: Message[]) => void; quickMessages: QuickMessage[]; onMenu: () => void; goSettings: () => void }) {
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const send = async (preset?: string) => {
@@ -51,7 +61,7 @@ function ChatPage({ settings, messages, setMessages, onMenu, goSettings }: { set
     if (!settings.apiKey) { setMessages([...next, { id: uid(), role: 'assistant', content: '请先在“设置 → AI 模型与服务商”中填写 API 密钥，我才能真正回复你。' }]); return }
     setBusy(true)
     try {
-      const response = await fetch(`${settings.endpoint.replace(/\/$/, '')}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.apiKey}` }, body: JSON.stringify({ model: settings.model, messages: [{ role: 'system', content: `你是${settings.assistantName}，兔眠中的温柔 AI 伴侣。` }, ...next.map(({ role, content: text }) => ({ role, content: text }))] }) })
+      const response = await fetch(`${settings.endpoint.replace(/\/$/, '')}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.apiKey}` }, body: JSON.stringify({ model: settings.model, temperature: settings.temperature, messages: [{ role: 'system', content: `${settings.systemPrompt}\n\n长期记忆：${settings.memory || '暂无'}` }, ...next.map(({ role, content: text }) => ({ role, content: text }))] }) })
       if (!response.ok) throw new Error(`请求失败（${response.status}）`)
       const data = await response.json(); const answer = data.choices?.[0]?.message?.content || '服务商没有返回文字。'
       setMessages([...next, { id: uid(), role: 'assistant', content: answer }])
@@ -59,9 +69,9 @@ function ChatPage({ settings, messages, setMessages, onMenu, goSettings }: { set
   }
   return <section className="page chat-page"><Topbar title={settings.assistantName} subtitle="陪你生活的 AI 伴侣" onMenu={onMenu} />
     <div className="messages"><div className="date-pill">今天</div>{messages.map(m => m.role === 'assistant'
-      ? <div className="message assistant-message" key={m.id}><img src={ICON_URL} alt={settings.assistantName} /><div><b>{settings.assistantName}</b><p>{m.content}</p></div></div>
-      : <div className="message user-message" key={m.id}><p>{m.content}</p></div>)}{busy && <div className="message assistant-message"><img src={ICON_URL} alt="" /><div><b>{settings.assistantName}</b><p>正在想……</p></div></div>}</div>
-    <div className="composer-wrap"><div className="suggestions"><button onClick={() => send('陪我聊聊今天发生的事')}>聊聊今天</button><button onClick={() => send('给我讲一个温柔的晚安故事')}>晚安故事</button><button onClick={goSettings}>模型设置</button></div>
+      ? <div className="message assistant-message" key={m.id}><img src={ICON_URL} alt={settings.assistantName} /><div><b>{settings.assistantName}</b><p>{m.content}</p><button className="favorite-message" onClick={() => setMessages(messages.map(x => x.id === m.id ? { ...x, favorite: !x.favorite } : x))}>{m.favorite ? '★ 已收藏' : '☆ 收藏'}</button></div></div>
+      : <div className="message user-message" key={m.id}><div><p>{m.content}</p><button className="favorite-message" onClick={() => setMessages(messages.map(x => x.id === m.id ? { ...x, favorite: !x.favorite } : x))}>{m.favorite ? '★ 已收藏' : '☆ 收藏'}</button></div></div>)}{busy && <div className="message assistant-message"><img src={ICON_URL} alt="" /><div><b>{settings.assistantName}</b><p>正在想……</p></div></div>}</div>
+    <div className="composer-wrap"><div className="suggestions">{quickMessages.slice(0, 4).map(item => <button key={item.id} onClick={() => send(item.content)}>{item.title}</button>)}<button onClick={() => send('陪我聊聊今天发生的事')}>聊聊今天</button><button onClick={() => send('给我讲一个温柔的晚安故事')}>晚安故事</button><button onClick={goSettings}>模型设置</button></div>
       <div className="composer"><textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }} placeholder={`和${settings.assistantName}说点什么…`} /><button disabled={busy || !draft.trim()} onClick={() => send()}>↑</button></div>
       <small>对话保存在当前浏览器中 · 密钥不会上传到兔眠服务器</small></div>
   </section>
@@ -103,11 +113,18 @@ function AboutPage({ onMenu }: { onMenu: () => void }) { return <section classNa
 
 export default function App() {
   const [page, setPage] = useState<Page>('chat'); const [drawer, setDrawer] = useState(false)
-  const [settings, setSettings] = useState(() => stored('tumin.settings', defaults))
+  const [settings, setSettings] = useState(() => ({ ...defaults, ...stored('tumin.settings', defaults) }))
   const [messages, setMessages] = useState<Message[]>(() => stored('tumin.messages', [{ id: 'welcome', role: 'assistant', content: '晚上好呀。今天过得怎么样？' }]))
+  const [conversations, setConversations] = useState<Conversation[]>(() => stored('tumin.conversations', []))
+  const [quickMessages, setQuickMessages] = useState<QuickMessage[]>(() => stored('tumin.quickMessages', [{ id: 'goodnight', title: '晚安', content: '晚安，陪我聊一会儿吧' }]))
   const [moments, setMoments] = useState<Moment[]>(() => stored('tumin.moments', [])); const [diaries, setDiaries] = useState<Diary[]>(() => stored('tumin.diaries', [])); const [anniversaries, setAnniversaries] = useState<Anniversary[]>(() => stored('tumin.anniversaries', []))
-  useEffect(() => localStorage.setItem('tumin.settings', JSON.stringify(settings)), [settings]); useEffect(() => localStorage.setItem('tumin.messages', JSON.stringify(messages)), [messages]); useEffect(() => localStorage.setItem('tumin.moments', JSON.stringify(moments)), [moments]); useEffect(() => localStorage.setItem('tumin.diaries', JSON.stringify(diaries)), [diaries]); useEffect(() => localStorage.setItem('tumin.anniversaries', JSON.stringify(anniversaries)), [anniversaries])
+  useEffect(() => localStorage.setItem('tumin.settings', JSON.stringify(settings)), [settings]); useEffect(() => localStorage.setItem('tumin.messages', JSON.stringify(messages)), [messages]); useEffect(() => localStorage.setItem('tumin.conversations', JSON.stringify(conversations)), [conversations]); useEffect(() => localStorage.setItem('tumin.quickMessages', JSON.stringify(quickMessages)), [quickMessages]); useEffect(() => localStorage.setItem('tumin.moments', JSON.stringify(moments)), [moments]); useEffect(() => localStorage.setItem('tumin.diaries', JSON.stringify(diaries)), [diaries]); useEffect(() => localStorage.setItem('tumin.anniversaries', JSON.stringify(anniversaries)), [anniversaries])
   const menu = () => setDrawer(true); const back = () => setPage('couple')
-  const body = useMemo(() => page === 'chat' ? <ChatPage settings={settings} messages={messages} setMessages={setMessages} onMenu={menu} goSettings={() => setPage('settings')} /> : page === 'couple' ? <CoupleHome settings={settings} saveSettings={setSettings} go={setPage} onMenu={menu} /> : page === 'moments' ? <CollectionPage kind="moments" items={moments} setItems={setMoments} onBack={back} onMenu={menu} /> : page === 'diary' ? <CollectionPage kind="diary" items={diaries} setItems={setDiaries} onBack={back} onMenu={menu} /> : page === 'anniversaries' ? <CollectionPage kind="anniversaries" items={anniversaries} setItems={setAnniversaries} onBack={back} onMenu={menu} /> : page === 'settings' ? <SettingsPage value={settings} save={setSettings} onMenu={menu} /> : <AboutPage onMenu={menu} />, [page, settings, messages, moments, diaries, anniversaries])
-  return <div className="app-shell"><Sidebar page={page} go={setPage} open={drawer} close={() => setDrawer(false)} newChat={() => setMessages([{ id: uid(), role: 'assistant', content: '新的对话开始啦。今天想聊什么？' }])} /><main className="main-stage">{body}<nav className="mobile-nav"><button className={page === 'chat' ? 'active' : ''} onClick={() => setPage('chat')}><span>⌂</span>聊天</button><button className={['couple','moments','diary','anniversaries'].includes(page) ? 'active' : ''} onClick={() => setPage('couple')}><span>♡</span>情侣空间</button><button className={page === 'settings' ? 'active' : ''} onClick={() => setPage('settings')}><span>⚙</span>设置</button></nav></main></div>
+  const openConversation = (c: Conversation) => { if (messages.length > 1) setConversations(list => [{ id: uid(), title: messages.find(m => m.role === 'user')?.content.slice(0, 28) || '未命名会话', updatedAt: new Date().toISOString(), messages }, ...list]); setMessages(c.messages); setConversations(list => list.filter(x => x.id !== c.id)); setPage('chat') }
+  const backup = { version: 1, settings, messages, conversations, quickMessages, moments, diaries, anniversaries }
+  const restore = (data: any) => { if (data.settings) setSettings({ ...defaults, ...data.settings }); if (Array.isArray(data.messages)) setMessages(data.messages); if (Array.isArray(data.conversations)) setConversations(data.conversations); if (Array.isArray(data.quickMessages)) setQuickMessages(data.quickMessages); if (Array.isArray(data.moments)) setMoments(data.moments); if (Array.isArray(data.diaries)) setDiaries(data.diaries); if (Array.isArray(data.anniversaries)) setAnniversaries(data.anniversaries) }
+  const toggleFavorite = (id: string) => setMessages(messages.map(m => m.id === id ? { ...m, favorite: !m.favorite } : m))
+  const body = useMemo(() => page === 'chat' ? <ChatPage settings={settings} messages={messages} setMessages={setMessages} quickMessages={quickMessages} onMenu={menu} goSettings={() => setPage('settings')} /> : page === 'assistant' ? <AssistantPage value={settings} save={setSettings} onMenu={menu} /> : page === 'history' ? <HistoryPage conversations={conversations} open={openConversation} remove={id => setConversations(conversations.filter(c => c.id !== id))} onMenu={menu} /> : page === 'favorites' ? <FavoritesPage messages={[...messages, ...conversations.flatMap(c => c.messages)]} toggle={toggleFavorite} onMenu={menu} /> : page === 'search' ? <SearchPage messages={messages} conversations={conversations} onMenu={menu} /> : page === 'quick' ? <QuickMessagesPage items={quickMessages} setItems={setQuickMessages} onMenu={menu} /> : page === 'stats' ? <StatsPage current={messages} conversations={conversations} onMenu={menu} /> : page === 'backup' ? <BackupPage data={backup} restore={restore} onMenu={menu} /> : page === 'couple' ? <CoupleHome settings={settings} saveSettings={setSettings} go={setPage} onMenu={menu} /> : page === 'moments' ? <CollectionPage kind="moments" items={moments} setItems={setMoments} onBack={back} onMenu={menu} /> : page === 'diary' ? <CollectionPage kind="diary" items={diaries} setItems={setDiaries} onBack={back} onMenu={menu} /> : page === 'anniversaries' ? <CollectionPage kind="anniversaries" items={anniversaries} setItems={setAnniversaries} onBack={back} onMenu={menu} /> : page === 'settings' ? <SettingsPage value={settings} save={setSettings} onMenu={menu} /> : <AboutPage onMenu={menu} />, [page, settings, messages, conversations, quickMessages, moments, diaries, anniversaries])
+  const newChat = () => { if (messages.length > 1) setConversations([{ id: uid(), title: messages.find(m => m.role === 'user')?.content.slice(0, 28) || '未命名会话', updatedAt: new Date().toISOString(), messages }, ...conversations]); setMessages([{ id: uid(), role: 'assistant', content: '新的对话开始啦。今天想聊什么？' }]) }
+  return <div className="app-shell"><Sidebar page={page} go={setPage} open={drawer} close={() => setDrawer(false)} newChat={newChat} /><main className="main-stage">{body}<nav className="mobile-nav"><button className={page === 'chat' ? 'active' : ''} onClick={() => setPage('chat')}><span>⌂</span>聊天</button><button className={['couple','moments','diary','anniversaries'].includes(page) ? 'active' : ''} onClick={() => setPage('couple')}><span>♡</span>情侣空间</button><button className={page === 'settings' ? 'active' : ''} onClick={() => setPage('settings')}><span>⚙</span>设置</button></nav></main></div>
 }
