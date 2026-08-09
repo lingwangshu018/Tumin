@@ -7,7 +7,7 @@
   <string name="about_page_version">バージョン</string>
   <string name="about_page_website">ウェブサイト</string>
   <string name="add">追加</string>
-  <string name="app_name">BennyChat</string>
+  <string name="app_name">Tumin</string>
   <string name="asr_button_content_description">音声認識</string>
   <string name="asr_button_stop">停止</string>
   <string name="assistant_detail_basic_desc">名前、アバター、モデル、パラメータを設定</string>
@@ -829,7 +829,7 @@
   <string name="setting_page_search_title">検索サービス</string>
   <string name="setting_page_share">共有</string>
   <string name="setting_page_share_desc">このアプリを友達と共有</string>
-  <string name="setting_page_share_text">BennyChat - オープンソースAndroid AIアシスタント\n\nウェブサイト: https://github.com/lingwangshu018/bennychat</string>
+  <string name="setting_page_share_text">Tumin - オープンソースAndroid AIアシスタント\n\nウェブサイト: https://github.com/lingwangshu018/Tumin</string>
   <string name="setting_page_sponsor_alert_confirm">寄付</string>
   <string name="setting_page_sponsor_alert_desc">アプリを100回以上起動しました！気に入っていただけたら、開発者をサポートしていただけると嬉しいです。</string>
   <string name="setting_page_sponsor_alert_dismiss">今はしない</string>

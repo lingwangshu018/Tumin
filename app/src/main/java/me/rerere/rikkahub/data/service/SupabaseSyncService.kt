@@ -26,7 +26,7 @@ class SupabaseSyncService : Service() {
 
     companion object {
         private const val TAG = "SupabaseSyncService"
-        const val ACTION_SUPABASE_SYNC = "me.rerere.orangechat.SUPABASE_SYNC"
+        const val ACTION_SUPABASE_SYNC = "com.lingwangshu018.tumin.SUPABASE_SYNC"
         private const val REQUEST_CODE = 10002
         private const val INTERVAL_MS = 15 * 60 * 1000L // 15 minutes
 

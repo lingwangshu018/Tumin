@@ -32,7 +32,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "rikkahub"
+rootProject.name = "Tumin"
 include(":app")
 include(":highlight")
 include(":ai")

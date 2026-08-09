@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="docs/icon.png" alt="橘瓣" width="120" />
+<img src="docs/icon.png" alt="兔眠" width="120" />
 
-<h1>橘瓣 OrangeChat</h1>
+<h1>兔眠 Tumin</h1>
 
 <p><strong>不止是聊天 · 更是生活在一起的 AI 伴侣平台</strong></p>
 
@@ -18,7 +18,7 @@
 
 ---
 
-## 🍊 为什么做橘瓣
+## 🍊 为什么做兔眠
 
 原版 RikkaHub 是一个优秀的 AI 聊天客户端，支持多供应商、MCP 协议、富文本渲染等功能。
 
@@ -28,15 +28,15 @@
 > 它应该能陪你一起看书、一起养宠物、一起经营一家小商店。
 > 它应该能记住你说过的每一句重要的话，在你需要的时候主动出现。
 
-**橘瓣就是这样一个尝试。**
+**兔眠就是这样一个尝试。**
 
 ---
 
-## ✨ 橘瓣独有功能
+## ✨ 兔眠独有功能
 
 ### 🧩 插件系统（核心）
 
-橘瓣最核心的新增。基于 QuickJS 沙箱的完整插件框架，让 JS 插件能安全执行并调用宿主能力。
+兔眠最核心的新增。基于 QuickJS 沙箱的完整插件框架，让 JS 插件能安全执行并调用宿主能力。
 
 ```
 plugin/
@@ -121,7 +121,7 @@ AI 不只是被动等你说话。让 AI 能在你需要的时候主动出现—�
 与原版 RikkaHub 的代码差异（基于仓库实际文件对比）：
 
 ```
-原版 RikkaHub                    橘瓣 OrangeChat
+原版 RikkaHub                    兔眠 Tumin
 ├── 3 个 Service                  ├── 18 个 Service (+15)
 │   ├── ChatService               │   ├── ChatService (增强)
 │   ├── ConversationSession       │   ├── ConversationSession
@@ -157,7 +157,7 @@ AI 不只是被动等你说话。让 AI 能在你需要的时候主动出现—�
 
 ## 🧩 开发插件
 
-橘瓣的插件系统基于 QuickJS 沙箱，一个插件由以下文件组成：
+兔眠的插件系统基于 QuickJS 沙箱，一个插件由以下文件组成：
 
 ```
 my-plugin/
@@ -293,7 +293,7 @@ AI 社交动态插件，使用 Supabase 作为后端存储，附带 `supabase_sc
 ## 📦 项目结构
 
 ```
-橘瓣/
+兔眠/
 ├── app/              # 主应用模块
 │   ├── data/         # 数据层
 │   │   ├── ai/       #   AI 对话与工具
@@ -341,8 +341,8 @@ AI 社交动态插件，使用 Supabase 作为后端存储，附带 `supabase_sc
 
 ## 💖 致谢
 
-- **[RikkaHub](https://github.com/rikkahub/rikkahub)** — 橘瓣的原版基础，一个优秀的 Android AI 聊天客户端
-- 所有为橘瓣开发插件的社区成员
+- **[RikkaHub](https://github.com/rikkahub/rikkahub)** — 兔眠的原版基础，一个优秀的 Android AI 聊天客户端
+- 所有为兔眠开发插件的社区成员
 
 ---
 
@@ -359,6 +359,6 @@ AI 社交动态插件，使用 Supabase 作为后端存储，附带 `supabase_sc
 
 <div align="center">
 
-**🍊 橘瓣 OrangeChat · 让 AI 不止活在对话框里**
+**🍊 兔眠 Tumin · 让 AI 不止活在对话框里**
 
 </div>

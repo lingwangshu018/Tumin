@@ -8,4 +8,4 @@
     android:canRetrieveWindowContent="true"
     android:canTakeScreenshot="true"
     android:notificationTimeout="100"
-    android:summary="允许橘瓣执行屏幕自动化（点击、滑动、读取界面元素、截图）。仅在助手开启「屏幕自动化」工具时生效。" />
+    android:summary="允许兔眠执行屏幕自动化（点击、滑动、读取界面元素、截图）。仅在助手开启「屏幕自动化」工具时生效。" />

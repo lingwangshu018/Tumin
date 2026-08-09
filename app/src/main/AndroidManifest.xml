@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
   xmlns:tools="http://schemas.android.com/tools">
 
@@ -199,7 +199,7 @@
       android:name=".data.service.ProactiveMessageReceiver"
       android:exported="true">
       <intent-filter>
-        <action android:name="com.lingwangshu018.bennychat.PROACTIVE_MESSAGE" />
+        <action android:name="com.lingwangshu018.tumin.PROACTIVE_MESSAGE" />
         <action android:name="android.intent.action.BOOT_COMPLETED" />
       </intent-filter>
     </receiver>
@@ -260,7 +260,7 @@
       android:name=".data.service.SupabaseSyncReceiver"
       android:exported="true">
       <intent-filter>
-        <action android:name="com.lingwangshu018.bennychat.SUPABASE_SYNC" />
+        <action android:name="com.lingwangshu018.tumin.SUPABASE_SYNC" />
         <action android:name="android.intent.action.BOOT_COMPLETED" />
       </intent-filter>
     </receiver>
@@ -270,7 +270,7 @@
       android:name=".data.service.DailySummaryReceiver"
       android:exported="true">
       <intent-filter>
-        <action android:name="com.lingwangshu018.bennychat.DAILY_CRON" />
+        <action android:name="com.lingwangshu018.tumin.DAILY_CRON" />
         <action android:name="android.intent.action.BOOT_COMPLETED" />
       </intent-filter>
     </receiver>
@@ -374,7 +374,7 @@
       android:name=".service.KeepAliveRestartReceiver"
       android:exported="false">
       <intent-filter>
-        <action android:name="com.lingwangshu018.bennychat.RESTART_KEEP_ALIVE" />
+        <action android:name="com.lingwangshu018.tumin.RESTART_KEEP_ALIVE" />
       </intent-filter>
     </receiver>
 
