@@ -112,6 +112,10 @@ import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantPromptPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantRequestPage
 import me.rerere.rikkahub.ui.pages.backup.BackupPage
 import me.rerere.rikkahub.ui.pages.chat.ChatPage
+import me.rerere.rikkahub.ui.pages.couple.CoupleAnniversariesPage
+import me.rerere.rikkahub.ui.pages.couple.CoupleDiaryPage
+import me.rerere.rikkahub.ui.pages.couple.CoupleMomentsPage
+import me.rerere.rikkahub.ui.pages.couple.CoupleSpacePage
 import me.rerere.rikkahub.ui.pages.debug.DebugPage
 import me.rerere.rikkahub.ui.pages.developer.DeveloperPage
 import me.rerere.rikkahub.ui.pages.disclaimer.DisclaimerPage
@@ -483,6 +487,11 @@ class RouteActivity : ComponentActivity() {
                             entry<Screen.Favorite> {
                                 FavoritePage()
                             }
+
+                            entry<Screen.CoupleSpace> { CoupleSpacePage() }
+                            entry<Screen.CoupleMoments> { CoupleMomentsPage() }
+                            entry<Screen.CoupleDiary> { CoupleDiaryPage() }
+                            entry<Screen.CoupleAnniversaries> { CoupleAnniversariesPage() }
 
                             entry<Screen.Assistant> {
                                 AssistantPage()
@@ -915,6 +924,18 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Favorite : Screen
+
+    @Serializable
+    data object CoupleSpace : Screen
+
+    @Serializable
+    data object CoupleMoments : Screen
+
+    @Serializable
+    data object CoupleDiary : Screen
+
+    @Serializable
+    data object CoupleAnniversaries : Screen
 
     @Serializable
     data object Assistant : Screen

@@ -434,6 +434,12 @@ fun ChatDrawerContent(
                 )
 
                 DrawerAction(
+                    icon = { Icon(HugeIcons.InLove, "情侣空间") },
+                    label = { Text("情侣空间") },
+                    onClick = { navController.navigate(Screen.CoupleSpace) },
+                )
+
+                DrawerAction(
                     icon = {
                         Icon(HugeIcons.ChartColumn, "统计数据")
                     },
