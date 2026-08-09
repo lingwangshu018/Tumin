@@ -83,6 +83,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
@@ -116,6 +117,7 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.service.VoiceCallService
 import me.rerere.rikkahub.ui.components.ui.KeepScreenOn
+import me.rerere.rikkahub.ui.components.ui.EmojiPicker
 import me.rerere.rikkahub.ui.components.ui.toComposeColor
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionRecordAudio
@@ -136,7 +138,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.Uuid
 
 enum class ExpandState {
-    Collapsed, Files,
+    Collapsed, Files, Emoji, LifeCards,
 }
 
 @Composable
@@ -592,6 +594,14 @@ fun ChatInput(
                                     model = chatModel,
                                 )
 
+                                ActionIconButton(onClick = { expandToggle(ExpandState.Emoji) }) {
+                                    Text(if (expand == ExpandState.Emoji) "×" else "😊", fontSize = 18.sp)
+                                }
+
+                                ActionIconButton(onClick = { expandToggle(ExpandState.LifeCards) }) {
+                                    Text(if (expand == ExpandState.LifeCards) "×" else "♡", fontSize = 20.sp)
+                                }
+
                                 // Reasoning
                                 val model = settings.getCurrentChatModel()
                                 if (model?.abilities?.contains(ModelAbility.REASONING) == true) {
@@ -760,6 +770,40 @@ fun ChatInput(
                             onPickAudio = { audioPickerLauncher.launch("audio/*") },
                             onPickFile = { filePickerLauncher.launch(arrayOf("*/*")) },
                         )
+                    }
+                }
+                if (expand == ExpandState.Emoji) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)),
+                        shape = RoundedCornerShape(20.dp),
+                        color = hazeTintColor,
+                    ) {
+                        EmojiPicker(
+                            modifier = Modifier.fillMaxWidth(),
+                            height = 320,
+                            onEmojiSelected = { emoji -> state.appendText(emoji.emoji) },
+                        )
+                    }
+                }
+                if (expand == ExpandState.LifeCards) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)),
+                        shape = RoundedCornerShape(20.dp),
+                        color = hazeTintColor,
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            listOf(
+                                "🎁 礼物" to "[礼物] 我想送你一份礼物：",
+                                "🎵 点歌" to "[一起听歌] 我想和你听：",
+                                "📅 事件" to "[共同事件] 今天我们一起：",
+                                "💌 心情" to "[此刻心情] 我现在感到：",
+                            ).forEach { (label, template) ->
+                                TextButton(onClick = { state.appendText(template); dismissExpand() }) { Text(label) }
+                            }
+                        }
                     }
                 }
             }

@@ -440,6 +440,12 @@ fun ChatDrawerContent(
                 )
 
                 DrawerAction(
+                    icon = { Icon(HugeIcons.Rocket01, "生活空间") },
+                    label = { Text("生活空间") },
+                    onClick = { navController.navigate(Screen.LifeHub) },
+                )
+
+                DrawerAction(
                     icon = {
                         Icon(HugeIcons.ChartColumn, "统计数据")
                     },

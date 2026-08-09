@@ -131,6 +131,7 @@ import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspacePage
 import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceTerminalPage
 import me.rerere.rikkahub.ui.pages.favorite.FavoritePage
 import me.rerere.rikkahub.ui.pages.health.HealthPage
+import me.rerere.rikkahub.ui.pages.life.LifeHubPage
 import me.rerere.rikkahub.ui.pages.history.HistoryPage
 import me.rerere.rikkahub.ui.pages.imggen.ImageGenPage
 import me.rerere.rikkahub.ui.pages.log.LogPage
@@ -492,6 +493,7 @@ class RouteActivity : ComponentActivity() {
                             entry<Screen.CoupleMoments> { CoupleMomentsPage() }
                             entry<Screen.CoupleDiary> { CoupleDiaryPage() }
                             entry<Screen.CoupleAnniversaries> { CoupleAnniversariesPage() }
+                            entry<Screen.LifeHub> { LifeHubPage() }
 
                             entry<Screen.Assistant> {
                                 AssistantPage()
@@ -1101,6 +1103,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Health : Screen
+
+    @Serializable
+    data object LifeHub : Screen
 
     @Serializable
     data object SettingPlugins : Screen

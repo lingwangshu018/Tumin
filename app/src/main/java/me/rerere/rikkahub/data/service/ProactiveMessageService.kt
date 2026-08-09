@@ -45,6 +45,7 @@ import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
+import me.rerere.rikkahub.data.ai.transformers.LifeContextTransformer
 import me.rerere.rikkahub.data.ai.transformers.PromptInjectionTransformer
 import me.rerere.rikkahub.data.ai.transformers.PlaceholderTransformer
 import me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer
@@ -426,6 +427,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     private val inputTransformers by lazy {
         listOf(
             TimeReminderTransformer,
+            LifeContextTransformer,
             PromptInjectionTransformer,
             PlaceholderTransformer,
             DocumentAsPromptTransformer,
