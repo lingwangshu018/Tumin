@@ -88,8 +88,27 @@ class CoupleVM(
                 }
                 .ifBlank { "这里还没有动态，你可以发第一条。" }
 
-            coupleAi.createPost(relation.assistantId, recentContext)?.let { content ->
-                repository.addPost(relation.id, "assistant", content)
+            val draft = coupleAi.createPostDraft(relation.assistantId, recentContext)
+                ?: return@launch
+            if (draft.content.isBlank() && !draft.needImage) return@launch
+
+            val generatedImages = if (draft.needImage && draft.imagePrompt.isNotBlank()) {
+                coupleAi.generatePostImages(
+                    prompt = draft.imagePrompt,
+                    count = draft.imageCount,
+                )
+            } else {
+                emptyList()
+            }
+
+            // 生图失败时仍然保留 AI 想发的文字动态；成功时直接作为 QQ 空间图文动态发布。
+            if (draft.content.isNotBlank() || generatedImages.isNotEmpty()) {
+                repository.addPost(
+                    relationshipId = relation.id,
+                    author = "assistant",
+                    content = draft.content.trim(),
+                    imageUris = generatedImages,
+                )
             }
         }
     }
