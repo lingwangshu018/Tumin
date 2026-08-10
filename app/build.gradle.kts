@@ -31,8 +31,6 @@ android {
 
     splits {
         abi {
-            // AppBundle tasks usually contain "bundle" in their name
-            //noinspection WrongGradleMethod
             val isBuildingBundle = gradle.startParameter.taskNames.any { it.lowercase().contains("bundle") }
             isEnable = !isBuildingBundle
             reset()
@@ -51,7 +49,6 @@ android {
         localProperties.getProperty("keyAlias") != null &&
         localProperties.getProperty("keyPassword") != null
 
-    // 构建溯源信息
     val gitCommit = try {
         providers.exec {
             commandLine("git", "rev-parse", "--short", "HEAD")
@@ -74,9 +71,6 @@ android {
                 keyPassword = localProperties.getProperty("keyPassword")
             }
         }
-        // 项目内置共享 debug keystore，保证所有机器/开发者构建的 debug 包签名一致，
-        // 避免 ~/.android/debug.keystore 因机器不同导致 adb install -r 覆盖安装失败（Failure [-99]）。
-        // keystore 参数与 Android 默认 debug 签名一致：alias=androiddebugkey, password=android。
         getByName("debug") {
             storeFile = file("debug.keystore")
             storePassword = "android"
@@ -87,7 +81,6 @@ android {
 
     buildTypes {
         release {
-            // Release 签名配置在 tasks 执行阶段强制校验，避免 Gradle 配置阶段就阻断 debug 构建
             signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
@@ -102,8 +95,6 @@ android {
         }
         debug {
             applicationIdSuffix = ".debug"
-            // 统一使用项目内置共享 debug keystore；若配置了 release keystore则改用release签名，
-            // 保证不同机器签名一致，避免覆盖安装失败（Failure [-99]）。
             signingConfig = signingConfigs.getByName(if (hasReleaseSigning) "release" else "debug")
             buildConfigField("String", "VERSION_NAME", "\"${android.defaultConfig.versionName}\"")
             buildConfigField("String", "VERSION_CODE", "\"${android.defaultConfig.versionCode}\"")
@@ -118,80 +109,205 @@ android {
             isDebuggable = false
             isMinifyEnabled = false
             isShrinkResources = false
+            isProfileable = true
+            buildConfigField("String", "GIT_COMMIT", "\"$gitCommit\"")
+            buildConfigField("String", "BUILD_TIME", "\"$buildTime\"")
         }
     }
-
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
-
-    kotlin {
-        compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_21)
-            freeCompilerArgs.addAll(
-                "-opt-in=kotlin.RequiresOptIn",
-                "-opt-in=kotlin.time.ExperimentalTime",
-                "-Xcontext-parameters",
-            )
-        }
-    }
-
     buildFeatures {
+        compose = true
         buildConfig = true
     }
-
+    sourceSets {
+        getByName("androidTest").assets.srcDirs("$projectDir/schemas")
+    }
+    androidResources {
+        generateLocaleConfig = true
+    }
     packaging {
-        resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
-            excludes += "META-INF/DEPENDENCIES"
-            excludes += "META-INF/LICENSE*"
-            excludes += "META-INF/NOTICE*"
-            excludes += "META-INF/*.kotlin_module"
+        jniLibs {
+            useLegacyPackaging = true
+            pickFirsts += "lib/*/libtermux.so"
+        }
+    }
+    tasks.withType<KotlinCompile>().configureEach {
+        compilerOptions.optIn.add("androidx.compose.material3.ExperimentalMaterial3Api")
+        compilerOptions.optIn.add("androidx.compose.material3.ExperimentalMaterial3ExpressiveApi")
+        compilerOptions.optIn.add("androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi")
+        compilerOptions.optIn.add("androidx.compose.animation.ExperimentalAnimationApi")
+        compilerOptions.optIn.add("androidx.compose.animation.ExperimentalSharedTransitionApi")
+        compilerOptions.optIn.add("androidx.compose.foundation.ExperimentalFoundationApi")
+        compilerOptions.optIn.add("androidx.compose.foundation.layout.ExperimentalLayoutApi")
+        compilerOptions.optIn.add("kotlin.uuid.ExperimentalUuidApi")
+        compilerOptions.optIn.add("kotlin.time.ExperimentalTime")
+        compilerOptions.optIn.add("kotlinx.coroutines.ExperimentalCoroutinesApi")
+        compilerOptions.optIn.add("androidx.navigation3.runtime.ExperimentalNavigation3Api")
+    }
+
+    tasks.configureEach {
+        val taskName = name
+        if (taskName.contains("Release", ignoreCase = true) &&
+            (taskName.startsWith("assemble") || taskName.startsWith("bundle") || taskName.startsWith("package"))) {
+            doFirst {
+                if (!hasReleaseSigning) {
+                    throw GradleException(
+                        "Release build requires a release keystore. " +
+                        "Please configure storeFile, storePassword, keyAlias and keyPassword in local.properties."
+                    )
+                }
+            }
         }
     }
 }
 
+composeCompiler {
+    stabilityConfigurationFiles.add(
+        project.layout.projectDirectory.file("compose_compiler_config.conf")
+    )
+}
+
+tasks.register("buildAll") {
+    dependsOn("assembleRelease", "bundleRelease")
+    description = "Build both APK and AAB"
+}
+
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
+}
+
 dependencies {
-    implementation(project(":ai"))
-    implementation(project(":common"))
-    implementation(project(":highlight"))
-    implementation(project(":speech"))
-    implementation(project(":tts"))
-    implementation(project(":web"))
-    implementation(project(":workspace"))
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.process)
+    implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.browser)
+    implementation(libs.androidx.profileinstaller)
+    implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
+
+    implementation(libs.androidx.biometric)
+    implementation(libs.termux.terminal.view)
+    implementation(libs.guava.listenablefuture)
+
+    implementation("com.cronutils:cron-utils:9.2.1")
+    implementation("com.google.android.gms:play-services-location:21.3.0")
+    implementation("com.github.mwiede:jsch:0.2.21")
 
     implementation(libs.androidx.activity.compose)
-    implementation(libs.androidx.core.ktx)
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.ui)
+    implementation(libs.androidx.ui.graphics)
+    implementation(libs.androidx.ui.tooling.preview)
+    implementation(libs.androidx.material3)
+    implementation(libs.androidx.material3.adaptive)
+    implementation(libs.androidx.material3.adaptive.layout)
+
+    implementation(libs.androidx.navigation3.runtime)
+    implementation(libs.androidx.navigation3.ui)
+    implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+    implementation(libs.androidx.material3.adaptive.navigation3)
+
     implementation(libs.androidx.datastore.preferences)
-    implementation(libs.androidx.lifecycle.process)
-    implementation(libs.androidx.lifecycle.runtime.compose)
-    implementation(libs.androidx.lifecycle.viewmodel.compose)
-    implementation(libs.androidx.navigation.compose)
-    implementation(libs.androidx.room.ktx)
-    implementation(libs.androidx.room.runtime)
-    implementation(libs.androidx.work.runtime.ktx)
-    implementation(libs.coil.compose)
-    implementation(libs.coil.network.okhttp)
-    implementation(libs.kotlinx.coroutines.android)
-    implementation(libs.kotlinx.serialization.json)
-    implementation(libs.material.icons.extended)
-    implementation(libs.material3)
-    implementation(libs.media3.exoplayer)
-    implementation(libs.media3.session)
+    implementation(libs.metadata.extractor)
+
+    implementation(libs.haze)
+    implementation(libs.haze.materials)
+
+    implementation(platform(libs.koin.bom))
+    implementation(libs.koin.android)
+    implementation(libs.koin.compose)
+    implementation(libs.koin.androidx.workmanager)
+
+    implementation(libs.jetbrains.markdown)
+
     implementation(libs.okhttp)
-    implementation(libs.quickjs.android)
-    implementation(libs.richtext.commonmark)
-    implementation(libs.richtext.ui.material3)
+    implementation(libs.okhttp.sse)
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.serialization.json)
+
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.okhttp)
+    implementation(libs.ktor.client.content.negotiation)
+    implementation(libs.ktor.serialization.kotlinx.json)
+    implementation(libs.ktor.server.websockets)
+    implementation(libs.ktor.server.cio)
+    implementation(libs.ktor.server.core)
+
+    implementation(libs.ucrop)
+    implementation(libs.pebble)
+    implementation(libs.diffutils)
+
+    implementation(libs.coil.compose)
+    implementation(libs.coil.gif)
+    implementation(libs.coil.okhttp)
+    implementation(libs.coil.svg)
+    implementation(libs.coil.cache.control)
+
+    implementation(libs.kotlinx.serialization.json)
+
+    implementation(libs.zxing.core)
+    implementation(libs.quickie.bundled)
+    implementation(libs.barcode.scanning)
+    implementation(libs.text.recognition)
+    implementation(libs.androidx.camera.core)
+
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    implementation(libs.androidx.room.paging)
+    ksp(libs.androidx.room.compiler)
+
+    implementation(libs.androidx.paging.runtime)
+    implementation(libs.androidx.paging.compose)
+
+    implementation(libs.commons.text)
+    implementation(libs.sonner)
+    implementation(libs.reorderable)
+
+    implementation(libs.lucide.icons)
+    implementation(libs.huge.icons)
+    implementation(libs.image.viewer)
+
+    implementation(libs.jlatexmath)
+    implementation(libs.jlatexmath.font.greek)
+    implementation(libs.jlatexmath.font.cyrillic)
+
+    implementation(libs.modelcontextprotocol.kotlin.sdk)
     implementation(libs.shizuku.api)
     implementation(libs.shizuku.provider)
+    implementation(libs.jmdns)
+    implementation(libs.slf4j.api)
+    implementation(libs.slf4j.android)
+    implementation(libs.sqlite.android)
 
-    ksp(libs.androidx.room.compiler)
+    implementation(libs.androidx.media3.exoplayer)
+
+    implementation(project(":ai"))
+    implementation(project(":web"))
+    implementation(project(":document"))
+    implementation(project(":highlight"))
+    implementation(project(":search"))
+    implementation(project(":speech"))
+    implementation(project(":common"))
+    implementation(project(":workspace"))
+    implementation(project(":material3"))
+    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar", "*.aar"))))
+    implementation(kotlin("reflect"))
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
-    debugImplementation(libs.androidx.compose.ui.test.manifest)
+    androidTestImplementation(libs.androidx.ui.test.junit4)
+    androidTestImplementation(libs.androidx.room.testing)
+    debugImplementation(libs.androidx.ui.tooling)
+    debugImplementation(libs.androidx.ui.test.manifest)
 }
