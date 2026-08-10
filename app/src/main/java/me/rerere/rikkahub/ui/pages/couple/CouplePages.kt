@@ -3,11 +3,15 @@ package me.rerere.rikkahub.ui.pages.couple
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,8 +19,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import java.text.DateFormat
@@ -27,6 +33,7 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.delay
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.db.entity.CoupleCommentEntity
+import me.rerere.rikkahub.data.db.entity.CoupleDiaryEntity
 import me.rerere.rikkahub.data.db.entity.CouplePostEntity
 import me.rerere.rikkahub.data.db.entity.CoupleRelationshipEntity
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -44,7 +51,7 @@ fun CoupleSpacePage(vm: CoupleVM = koinViewModel()) {
         if (relationship == null || partner == null) {
             LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 item { Text("选择你的恋人", style = MaterialTheme.typography.headlineSmall) }
-                item { Text("绑定后，QQ空间、日记和纪念日都会属于你们两个人。") }
+                item { Text("绑定后，QQ空间、我们的日记和纪念日都会属于你们两个人。") }
                 items(settings.assistants) { assistant ->
                     Card(onClick = { pendingPartnerId = assistant.id.toString() }, modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp)) {
@@ -85,7 +92,7 @@ private fun CoupleHome(relationship: CoupleRelationshipEntity, partnerName: Stri
             }
         }
         item { FeatureCard("⭐", "QQ空间", "逛逛你和 $partnerName 各自的动态、照片与留言") { nav.navigate(Screen.CoupleMoments) } }
-        item { FeatureCard("📖", "日记", "写下个人与共同回忆") { nav.navigate(Screen.CoupleDiary) } }
+        item { FeatureCard("📖", "我们的日记", "THE PRIVATE JOURNAL · 写下心事，也等一封 $partnerName 的回信") { nav.navigate(Screen.CoupleDiary) } }
         item { FeatureCard("🎂", "纪念日", "收藏每一个值得记住的日子") { nav.navigate(Screen.CoupleAnniversaries) } }
     }
 }
@@ -402,7 +409,246 @@ private fun decodePostImages(raw: String?): List<String> {
 @Composable
 fun CoupleDiaryPage(vm: CoupleVM = koinViewModel()) {
     val entries by vm.diaries.collectAsStateWithLifecycle()
-    EntryListPage("日记", "写日记", entries, { it.title + "\n" + it.content }, { formatDate(it.entryDate) }) { title, content, _ -> vm.addDiary(title, content) }
+    val relationship by vm.relationship.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
+    val partner = settings.assistants.firstOrNull { it.id.toString() == relationship?.assistantId }
+    val partnerName = partner?.name?.ifBlank { "TA" } ?: "TA"
+
+    var query by remember { mutableStateOf("") }
+    var selectedFolder by remember { mutableStateOf("全部心事") }
+    var showAdd by remember { mutableStateOf(false) }
+    var selectedDiaryId by remember { mutableStateOf<String?>(null) }
+    var requestedReplyId by remember { mutableStateOf<String?>(null) }
+
+    val folders = remember(entries) {
+        listOf("全部心事") + entries.mapNotNull { it.folder?.takeIf(String::isNotBlank) }
+            .filter { it != "全部心事" }
+            .distinct()
+    }
+    val visibleEntries = entries.filter { entry ->
+        val folderMatch = selectedFolder == "全部心事" || entry.folder == selectedFolder
+        val queryMatch = query.isBlank() || entry.title.contains(query, true) || entry.content.contains(query, true)
+        folderMatch && queryMatch
+    }
+
+    Scaffold(
+        topBar = { TopAppBar(title = { Text("我们的日记") }, navigationIcon = { BackButton() }) },
+        floatingActionButton = { FloatingActionButton(onClick = { showAdd = true }) { Text("＋") } },
+    ) { padding ->
+        LazyColumn(
+            Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(bottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                ) {
+                    Column(Modifier.padding(22.dp, 26.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("我们的日记", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text("THE PRIVATE JOURNAL", style = MaterialTheme.typography.labelLarge, letterSpacing = androidx.compose.ui.unit.TextUnit.Unspecified)
+                        Text("把已经发生的故事写下来。原文永远是你的，$partnerName 的回信会单独留在这一页。", color = MaterialTheme.colorScheme.onSecondaryContainer)
+                    }
+                }
+            }
+            item {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
+                    placeholder = { Text("搜索心事……") },
+                    singleLine = true,
+                )
+            }
+            item {
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(horizontal = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(folders) { folder ->
+                        FilterChip(
+                            selected = selectedFolder == folder,
+                            onClick = { selectedFolder = folder },
+                            label = { Text(folder) },
+                        )
+                    }
+                }
+            }
+            if (visibleEntries.isEmpty()) {
+                item {
+                    Text(
+                        if (query.isBlank()) "这里还没有写下心事。" else "没有找到这篇心事。",
+                        modifier = Modifier.padding(20.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            items(visibleEntries, key = { it.id }) { entry ->
+                JournalCard(entry = entry, partnerName = partnerName, onClick = { selectedDiaryId = entry.id })
+            }
+        }
+    }
+
+    if (showAdd) {
+        AddJournalDialog(
+            existingFolders = folders,
+            onDismiss = { showAdd = false },
+            onSave = { title, content, folder, paper ->
+                vm.addDiary(title, content, folder, paper)
+                showAdd = false
+            },
+        )
+    }
+
+    selectedDiaryId?.let { diaryId ->
+        val current = entries.firstOrNull { it.id == diaryId }
+        if (current != null) {
+            LaunchedEffect(current.reply) {
+                if (!current.reply.isNullOrBlank()) requestedReplyId = null
+            }
+            JournalReaderDialog(
+                entry = current,
+                partnerName = partnerName,
+                waitingForReply = requestedReplyId == current.id && current.reply.isNullOrBlank(),
+                onDismiss = { selectedDiaryId = null },
+                onRequestReply = {
+                    requestedReplyId = current.id
+                    vm.requestDiaryReply(current)
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun JournalCard(entry: CoupleDiaryEntity, partnerName: String, onClick: () -> Unit) {
+    Card(onClick = onClick, modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp)) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(entry.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text(formatDate(entry.entryDate), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text(
+                entry.content.replace("\n", " ").take(120) + if (entry.content.length > 120) "…" else "",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                AssistChip(onClick = onClick, label = { Text(entry.folder ?: "全部心事") })
+                if (!entry.reply.isNullOrBlank()) {
+                    Text("✉ 已收到 $partnerName 的回信", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                } else {
+                    Text("还没有回信", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AddJournalDialog(
+    existingFolders: List<String>,
+    onDismiss: () -> Unit,
+    onSave: (String, String, String, String) -> Unit,
+) {
+    var title by remember { mutableStateOf("") }
+    var content by remember { mutableStateOf("") }
+    var folder by remember { mutableStateOf("全部心事") }
+    var paper by remember { mutableStateOf("ivory") }
+    var customFolder by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("写一篇日记") },
+        text = {
+            Column(
+                Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedTextField(title, { title = it }, modifier = Modifier.fillMaxWidth(), label = { Text("标题") }, singleLine = true)
+                OutlinedTextField(content, { content = it }, modifier = Modifier.fillMaxWidth(), label = { Text("正文") }, minLines = 7)
+                Text("分类", style = MaterialTheme.typography.labelLarge)
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    existingFolders.take(6).forEach { name ->
+                        FilterChip(selected = folder == name, onClick = { folder = name; customFolder = "" }, label = { Text(name) })
+                    }
+                }
+                OutlinedTextField(
+                    value = customFolder,
+                    onValueChange = { customFolder = it; if (it.isNotBlank()) folder = it.trim() },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("新分类（可选）") },
+                    singleLine = true,
+                )
+                Text("纸张", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = paper == "ivory", onClick = { paper = "ivory" }, label = { Text("象牙纸") })
+                    FilterChip(selected = paper == "rose", onClick = { paper = "rose" }, label = { Text("粉笺") })
+                    FilterChip(selected = paper == "mist", onClick = { paper = "mist" }, label = { Text("雾蓝") })
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = title.isNotBlank() && content.isNotBlank(),
+                onClick = { onSave(title.trim(), content.trim(), folder.ifBlank { "全部心事" }, paper) },
+            ) { Text("保存这页") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
+}
+
+@Composable
+private fun JournalReaderDialog(
+    entry: CoupleDiaryEntity,
+    partnerName: String,
+    waitingForReply: Boolean,
+    onDismiss: () -> Unit,
+    onRequestReply: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().heightIn(max = 680.dp),
+            shape = RoundedCornerShape(24.dp),
+            color = when (entry.paper) {
+                "rose" -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.72f)
+                "mist" -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.72f)
+                else -> MaterialTheme.colorScheme.surfaceContainerLow
+            },
+        ) {
+            Column(
+                Modifier.padding(22.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text("THE PRIVATE JOURNAL", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(entry.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("${formatDate(entry.entryDate)} · ${entry.folder ?: "全部心事"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                HorizontalDivider()
+                Text(entry.content, style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.height(8.dp))
+                HorizontalDivider()
+                Text("$partnerName 的回信", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                when {
+                    !entry.reply.isNullOrBlank() -> {
+                        Text(entry.reply, style = MaterialTheme.typography.bodyLarge, fontStyle = FontStyle.Italic)
+                        entry.replyAt?.let {
+                            Text("回信于 ${formatDateTime(it)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    waitingForReply -> Text("信已经送出去了，正在等 $partnerName 写回来……", color = MaterialTheme.colorScheme.primary)
+                    else -> Text("这一页还没有回信。你可以把它递给 $partnerName。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) { Text("合上日记") }
+                    FilledTonalButton(enabled = !waitingForReply, onClick = onRequestReply) {
+                        Text(if (entry.reply.isNullOrBlank()) "请 $partnerName 回信" else "请 $partnerName 再写一封")
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
