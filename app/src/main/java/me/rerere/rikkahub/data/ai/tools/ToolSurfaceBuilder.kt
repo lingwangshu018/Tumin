@@ -50,7 +50,6 @@ class ToolSurfaceBuilder(
         recentMessages: List<UIMessage> = emptyList(),
         workspaceCwd: String? = null,
     ): List<Tool> = buildList {
-        // Memory tools - mirror GenerationHandler: only when the assistant has memory enabled.
         if (assistant.enableMemory) {
             val memoryAssistantId = if (assistant.useGlobalMemory) {
                 MemoryRepository.GLOBAL_MEMORY_ID
@@ -73,13 +72,18 @@ class ToolSurfaceBuilder(
             addAll(SystemTools(context, settings).getTools(systemToolsOptions, recentMessages, filesManager))
         }
 
-        // Couple-space / QQ-space tools are always visible to chat assistants, but every execution
-        // verifies invocationContext.callerAssistantId against the relationship's bound assistant.
-        // This gives the bound partner real read/post/comment abilities without allowing one role
-        // to operate another role's couple space.
+        // Shared companion surfaces. Couple-bound data checks the calling assistant against
+        // the relationship. Personal life-space tools still require a real assistant caller
+        // and perform actual persistence/playback rather than returning simulated success.
         add(readCoupleSpaceTool(coupleRepository, invocationContext))
         add(postCoupleSpaceTool(coupleRepository, invocationContext))
         add(commentCoupleSpaceTool(coupleRepository, invocationContext))
+        add(sharedDiaryTool(coupleRepository, invocationContext))
+        add(anniversaryBookTool(coupleRepository, invocationContext))
+        add(lifeMemoTool(context, invocationContext))
+        add(lifeCalendarTool(context, invocationContext))
+        add(sharedReadingTool(context, invocationContext))
+        add(sharedMusicTool(context, invocationContext))
 
         addAll(createWorkspaceTools(assistant.workspaceId?.toString(), workspaceRepository, workspaceCwd))
         if (assistant.enabledSkills.isNotEmpty()) {
