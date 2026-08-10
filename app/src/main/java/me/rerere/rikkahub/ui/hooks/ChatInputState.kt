@@ -15,6 +15,8 @@ import androidx.compose.runtime.setValue
 import me.rerere.ai.ui.UIMessagePart
 import kotlin.uuid.Uuid
 
+private const val STICKER_MARKER = "__TUMIN_STICKER__:"
+
 class ChatInputState {
     val textContent = TextFieldState()
     var messageContent by mutableStateOf(listOf<UIMessagePart>())
@@ -37,6 +39,13 @@ class ChatInputState {
     }
 
     fun appendText(content: String) {
+        if (content.startsWith(STICKER_MARKER)) {
+            val url = content.removePrefix(STICKER_MARKER).trim()
+            if (url.startsWith("http://") || url.startsWith("https://")) {
+                messageContent = messageContent + UIMessagePart.Image(url)
+                return
+            }
+        }
         textContent.setTextAndPlaceCursorAtEnd(textContent.text.toString() + content)
     }
 
@@ -90,7 +99,7 @@ class ChatInputState {
     }
 
     fun isEmpty(): Boolean {
-        return textContent.text.isEmpty()
+        return textContent.text.isEmpty() && messageContent.isEmpty()
     }
 
     fun addImages(uris: List<Uri>) {
