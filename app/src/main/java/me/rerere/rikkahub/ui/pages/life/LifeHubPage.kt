@@ -31,7 +31,7 @@ import java.util.concurrent.TimeUnit
 
 private enum class LifeSection(val title: String, val emoji: String, val hint: String) {
     HOME("今日", "🏡", "今天的状态、安排与共同生活"),
-    STATUS("身体状态", "🌸", "记录心情、精力和身体感受"),
+    STATUS("周期与身体", "🌸", "记录经期、周期、身体状态、心情与精力"),
     MEMO("备忘录", "📝", "把想法、待办和两个人的小计划好好收起来"),
     CALENDAR("日历提醒", "📅", "把计划和纪念日加入系统日历"),
     MUSIC("音乐记忆", "🎵", "收藏一起听过的歌和当时的心情"),
@@ -101,7 +101,7 @@ fun LifeHubPage() {
     Scaffold(
         topBar = { TopAppBar(title = { Text("生活空间") }, navigationIcon = { BackButton() }) },
         floatingActionButton = {
-            if (section != LifeSection.HOME && section != LifeSection.CALENDAR && section != LifeSection.READING) {
+            if (section != LifeSection.HOME && section != LifeSection.STATUS && section != LifeSection.CALENDAR && section != LifeSection.READING) {
                 FloatingActionButton(onClick = { showAdd = true }) {
                     Text(if (section == LifeSection.MEMO) "✎" else "＋", style = MaterialTheme.typography.titleLarge)
                 }
@@ -119,7 +119,9 @@ fun LifeHubPage() {
                 }
             }
 
-            if (section == LifeSection.MEMO) {
+            if (section == LifeSection.STATUS) {
+                HealthCyclePanel()
+            } else if (section == LifeSection.MEMO) {
                 MemoBoard(
                     entries = entries.filter { it.section == LifeSection.MEMO },
                     onAdd = { showAdd = true },
