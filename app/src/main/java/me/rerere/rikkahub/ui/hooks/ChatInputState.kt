@@ -12,10 +12,14 @@ import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import me.rerere.ai.ui.UIMessagePart
 import kotlin.uuid.Uuid
 
 private const val STICKER_MARKER = "__TUMIN_STICKER__:"
+private const val STICKER_NAME_SEPARATOR = '\u001F'
+private const val STICKER_NAME_METADATA = "tumin_sticker_name"
 
 class ChatInputState {
     val textContent = TextFieldState()
@@ -40,9 +44,23 @@ class ChatInputState {
 
     fun appendText(content: String) {
         if (content.startsWith(STICKER_MARKER)) {
-            val url = content.removePrefix(STICKER_MARKER).trim()
+            val payload = content.removePrefix(STICKER_MARKER).trim()
+            val separatorIndex = payload.indexOf(STICKER_NAME_SEPARATOR)
+            val name = if (separatorIndex >= 0) {
+                payload.substring(0, separatorIndex).trim().ifBlank { "表情" }
+            } else {
+                "表情"
+            }
+            val url = if (separatorIndex >= 0) {
+                payload.substring(separatorIndex + 1).trim()
+            } else {
+                payload
+            }
             if (url.startsWith("http://") || url.startsWith("https://")) {
-                messageContent = messageContent + UIMessagePart.Image(url)
+                val metadata = buildJsonObject {
+                    put(STICKER_NAME_METADATA, JsonPrimitive(name))
+                }
+                messageContent = messageContent + UIMessagePart.Image(url = url, metadata = metadata)
                 return
             }
         }
