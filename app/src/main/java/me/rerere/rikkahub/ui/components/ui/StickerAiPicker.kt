@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import me.rerere.rikkahub.ui.context.LocalCurrentAssistant
 import me.rerere.rikkahub.utils.StickerAiSupport
 
 @Composable
@@ -36,8 +37,10 @@ fun StickerAiPicker(
     onStickerSelected: (name: String, url: String) -> Unit,
 ) {
     val context = LocalContext.current
+    val assistant = LocalCurrentAssistant.current
+    val assistantId = assistant.id.toString()
     var showAiSettings by remember { mutableStateOf(false) }
-    var summaries by remember { mutableStateOf(emptyList<StickerAiSupport.PackSummary>()) }
+    var summaries by remember(assistantId) { mutableStateOf(emptyList<StickerAiSupport.PackSummary>()) }
 
     Column(modifier.height(height.dp)) {
         Surface(
@@ -51,11 +54,11 @@ fun StickerAiPicker(
             ) {
                 Column(Modifier.weight(1f)) {
                     Text("TA 的表情权限", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                    Text("只让 AI 看见你勾选的表情分类", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("${assistant.name} 只会看到你勾选的分类", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 FilledTonalButton(
                     onClick = {
-                        summaries = StickerAiSupport.getPackSummaries(context)
+                        summaries = StickerAiSupport.getPackSummaries(context, assistantId)
                         showAiSettings = true
                     },
                     shape = RoundedCornerShape(14.dp),
@@ -74,7 +77,7 @@ fun StickerAiPicker(
         AlertDialog(
             onDismissRequest = { showAiSettings = false },
             shape = RoundedCornerShape(24.dp),
-            title = { Text("选择 TA 可以用的表情包") },
+            title = { Text("${assistant.name} 可以用哪些表情包？") },
             text = {
                 if (summaries.isEmpty()) {
                     Text("还没有表情分类。先从 URL 或相册导入一个表情包吧。")
@@ -99,7 +102,12 @@ fun StickerAiPicker(
                                     Switch(
                                         checked = pack.aiEnabled,
                                         onCheckedChange = { enabled ->
-                                            StickerAiSupport.setPackAiEnabled(context, pack.id, enabled)
+                                            StickerAiSupport.setPackAiEnabled(
+                                                context = context,
+                                                assistantId = assistantId,
+                                                packId = pack.id,
+                                                enabled = enabled,
+                                            )
                                             summaries = summaries.map {
                                                 if (it.id == pack.id) it.copy(aiEnabled = enabled) else it
                                             }
