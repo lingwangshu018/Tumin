@@ -101,7 +101,7 @@ fun LifeHubPage() {
     Scaffold(
         topBar = { TopAppBar(title = { Text("生活空间") }, navigationIcon = { BackButton() }) },
         floatingActionButton = {
-            if (section != LifeSection.HOME) {
+            if (section != LifeSection.HOME && section != LifeSection.CALENDAR) {
                 FloatingActionButton(onClick = { showAdd = true }) {
                     Text(if (section == LifeSection.MEMO) "✎" else "＋", style = MaterialTheme.typography.titleLarge)
                 }
@@ -129,6 +129,8 @@ fun LifeHubPage() {
                     onDelete = { entry -> saveAll(entries.filterNot { it.id == entry.id }) },
                     onAddCalendar = { openMemoCalendar(context, it) },
                 )
+            } else if (section == LifeSection.CALENDAR) {
+                LifeCalendarPanel()
             } else {
                 val filtered = entries.filter { it.section == section }.sortedByDescending { it.createdAt }
                 LazyColumn(
@@ -170,9 +172,6 @@ fun LifeHubPage() {
                                     if (entry.tag.isNotBlank()) Text(entry.tag, color = MaterialTheme.colorScheme.primary)
                                 }
                                 if (entry.detail.isNotBlank()) Text(entry.detail)
-                                if (entry.section == LifeSection.CALENDAR) TextButton(onClick = { openCalendar(context, entry) }) {
-                                    Text("添加到系统日历")
-                                }
                                 if (entry.section == LifeSection.MUSIC) TextButton(onClick = { openMusic(context, entry.title) }) {
                                     Text("一起听这首歌")
                                 }
