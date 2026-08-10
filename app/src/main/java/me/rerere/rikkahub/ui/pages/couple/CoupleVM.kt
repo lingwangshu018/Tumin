@@ -39,6 +39,11 @@ class CoupleVM(
         viewModelScope.launch { repository.updateJournalCover(relation, cover) }
     }
 
+    fun setJournalInscription(title: String?, date: String?) {
+        val relation = relationship.value ?: return
+        viewModelScope.launch { repository.updateJournalInscription(relation, title, date) }
+    }
+
     fun addPost(content: String, imageUris: List<String> = emptyList()) {
         val relation = relationship.value ?: return
         if (content.isBlank() && imageUris.isEmpty()) return
@@ -122,9 +127,13 @@ class CoupleVM(
         val relation = relationship.value ?: return
         viewModelScope.launch {
             coupleAi.replyToDiary(relation.assistantId, entry.title, entry.content)?.let { reply ->
-                repository.saveDiaryReply(entry, reply)
+                repository.saveDiaryReply(entry, reply, entry.replyPaper ?: "cream_letter")
             }
         }
+    }
+
+    fun setDiaryReplyPaper(entry: CoupleDiaryEntity, replyPaper: String) = viewModelScope.launch {
+        repository.updateReplyPaper(entry, replyPaper)
     }
 
     fun addAnniversary(title: String, date: Long = System.currentTimeMillis(), yearly: Boolean = true) = relationship.value?.let { value ->
