@@ -3,15 +3,23 @@ package me.rerere.rikkahub.ui.pages.couple
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.text.DateFormat
+import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.Locale
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.delay
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.db.entity.CoupleCommentEntity
+import me.rerere.rikkahub.data.db.entity.CouplePostEntity
 import me.rerere.rikkahub.data.db.entity.CoupleRelationshipEntity
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -27,7 +35,7 @@ fun CoupleSpacePage(vm: CoupleVM = koinViewModel()) {
         if (relationship == null || partner == null) {
             LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 item { Text("选择你的恋人", style = MaterialTheme.typography.headlineSmall) }
-                item { Text("绑定后，朋友圈、日记和纪念日都会属于你们两个人。") }
+                item { Text("绑定后，QQ空间、日记和纪念日都会属于你们两个人。") }
                 items(settings.assistants) { assistant ->
                     Card(onClick = { pendingPartnerId = assistant.id.toString() }, modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp)) {
@@ -67,7 +75,7 @@ private fun CoupleHome(relationship: CoupleRelationshipEntity, partnerName: Stri
                 }
             }
         }
-        item { FeatureCard("💞", "朋友圈", "记录你和 $partnerName 的生活动态") { nav.navigate(Screen.CoupleMoments) } }
+        item { FeatureCard("⭐", "QQ空间", "逛逛你和 $partnerName 各自的动态与留言") { nav.navigate(Screen.CoupleMoments) } }
         item { FeatureCard("📖", "日记", "写下个人与共同回忆") { nav.navigate(Screen.CoupleDiary) } }
         item { FeatureCard("🎂", "纪念日", "收藏每一个值得记住的日子") { nav.navigate(Screen.CoupleAnniversaries) } }
     }
@@ -83,18 +91,229 @@ private fun FeatureCard(emoji: String, title: String, subtitle: String, onClick:
     }
 }
 
+private enum class SpaceFilter { ALL, USER, AI }
+
 @Composable
 fun CoupleMomentsPage(vm: CoupleVM = koinViewModel()) {
     val posts by vm.posts.collectAsStateWithLifecycle()
-    EntryListPage(
-        "朋友圈",
-        "发布动态",
-        posts,
-        { it.content },
-        { formatDate(it.createdAt) },
-        onLike = { vm.toggleLike(it) },
-        likeLabel = { if (it.liked) "已喜欢" else "喜欢" },
-    ) { text, _, _ -> vm.addPost(text) }
+    val comments by vm.comments.collectAsStateWithLifecycle()
+    val relationship by vm.relationship.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
+
+    val partner = settings.assistants.firstOrNull { it.id.toString() == relationship?.assistantId }
+    val userName = settings.displaySetting.userNickname.ifBlank { "我" }
+    val partnerName = partner?.name?.ifBlank { "TA" } ?: "TA"
+
+    var filter by remember { mutableStateOf(SpaceFilter.ALL) }
+    var showAdd by remember { mutableStateOf(false) }
+    var draft by remember { mutableStateOf("") }
+
+    LaunchedEffect(relationship?.id) {
+        if (relationship != null) {
+            delay(700)
+            vm.maybeCreateAiPost()
+        }
+    }
+
+    val visiblePosts = when (filter) {
+        SpaceFilter.ALL -> posts
+        SpaceFilter.USER -> posts.filter { it.author == "user" }
+        SpaceFilter.AI -> posts.filter { it.author == "assistant" }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("我们的空间") },
+                navigationIcon = { BackButton() },
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = { showAdd = true }) { Text("＋") }
+        },
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(bottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                ) {
+                    Column(
+                        Modifier.padding(20.dp, 24.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        Text("⭐ 我们的 QQ 空间", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text("$userName × $partnerName", style = MaterialTheme.typography.titleMedium)
+                        Text("这里不是单向记录：你们都会发动态，也会真的在评论区说话。", color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilledTonalButton(onClick = { showAdd = true }) { Text("我发动态") }
+                            OutlinedButton(onClick = { vm.maybeCreateAiPost(force = true) }) { Text("让 $partnerName 发一条") }
+                        }
+                    }
+                }
+            }
+
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    FilterChip(
+                        selected = filter == SpaceFilter.ALL,
+                        onClick = { filter = SpaceFilter.ALL },
+                        label = { Text("全部") },
+                    )
+                    FilterChip(
+                        selected = filter == SpaceFilter.USER,
+                        onClick = { filter = SpaceFilter.USER },
+                        label = { Text("$userName 的空间") },
+                    )
+                    FilterChip(
+                        selected = filter == SpaceFilter.AI,
+                        onClick = { filter = SpaceFilter.AI },
+                        label = { Text("$partnerName 的空间") },
+                    )
+                }
+            }
+
+            if (visiblePosts.isEmpty()) {
+                item {
+                    Text(
+                        "这里还没有动态。",
+                        modifier = Modifier.padding(20.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            items(visiblePosts, key = { it.id }) { post ->
+                MomentCard(
+                    post = post,
+                    postComments = comments.filter { it.postId == post.id },
+                    userName = userName,
+                    partnerName = partnerName,
+                    onLike = { vm.toggleLike(post) },
+                    onComment = { vm.addUserComment(post, it) },
+                )
+            }
+        }
+    }
+
+    if (showAdd) {
+        AlertDialog(
+            onDismissRequest = { showAdd = false },
+            title = { Text("发表说说") },
+            text = {
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("这一刻想说什么？") },
+                    minLines = 4,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = draft.isNotBlank(),
+                    onClick = {
+                        vm.addPost(draft.trim())
+                        draft = ""
+                        showAdd = false
+                    },
+                ) { Text("发表") }
+            },
+            dismissButton = { TextButton(onClick = { showAdd = false }) { Text("取消") } },
+        )
+    }
+}
+
+@Composable
+private fun MomentCard(
+    post: CouplePostEntity,
+    postComments: List<CoupleCommentEntity>,
+    userName: String,
+    partnerName: String,
+    onLike: () -> Unit,
+    onComment: (String) -> Unit,
+) {
+    val authorName = if (post.author == "assistant") partnerName else userName
+    val avatarText = authorName.take(1).ifBlank { if (post.author == "assistant") "A" else "我" }
+    var commentDraft by remember(post.id) { mutableStateOf("") }
+
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer) {
+                    Box(Modifier.size(42.dp), contentAlignment = Alignment.Center) {
+                        Text(avatarText, fontWeight = FontWeight.Bold)
+                    }
+                }
+                Column {
+                    Text(authorName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(formatDateTime(post.createdAt), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
+            Text(post.content, style = MaterialTheme.typography.bodyLarge)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = onLike) { Text(if (post.liked) "♡ 已喜欢" else "♡ 喜欢") }
+                TextButton(onClick = { }) { Text("💬 ${postComments.size}") }
+            }
+
+            if (postComments.isNotEmpty()) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        postComments.forEach { comment ->
+                            val commentName = if (comment.author == "assistant") partnerName else userName
+                            Text(
+                                text = "$commentName：${comment.content}",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = commentDraft,
+                    onValueChange = { commentDraft = it },
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text(if (post.author == "assistant") "评论 $partnerName…" else "留言…") },
+                    singleLine = true,
+                )
+                TextButton(
+                    enabled = commentDraft.isNotBlank(),
+                    onClick = {
+                        onComment(commentDraft.trim())
+                        commentDraft = ""
+                    },
+                ) { Text("发送") }
+            }
+        }
+    }
 }
 
 @Composable
@@ -159,7 +378,7 @@ private fun <T> EntryListPage(
         title = { Text(action) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(first, { first = it }, label = { Text(if (title == "朋友圈") "内容" else "标题") })
+                OutlinedTextField(first, { first = it }, label = { Text("标题") })
                 if (title == "日记") OutlinedTextField(second, { second = it }, label = { Text("正文") }, minLines = 4)
                 if (chooseDate) TextButton(onClick = { showDateChooser = true }) {
                     Text("日期：${formatDate(selectedDate)}")
@@ -200,3 +419,4 @@ private fun DateChooserDialog(
 }
 
 private fun formatDate(value: Long): String = DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(value))
+private fun formatDateTime(value: Long): String = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(value))
