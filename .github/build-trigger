@@ -1,0 +1,3 @@
+build: 2026-08-10T18:24+08:00
+source: latest master
+purpose: package all recent Tumin feature updates into release APK
