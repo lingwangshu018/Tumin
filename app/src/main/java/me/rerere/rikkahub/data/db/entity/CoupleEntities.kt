@@ -11,6 +11,8 @@ data class CoupleRelationshipEntity(
     @ColumnInfo("assistant_id") val assistantId: String,
     @ColumnInfo("started_at") val startedAt: Long,
     @ColumnInfo(name = "journal_cover", defaultValue = "rose_velvet") val journalCover: String = "rose_velvet",
+    @ColumnInfo("journal_cover_title") val journalCoverTitle: String? = null,
+    @ColumnInfo("journal_cover_date") val journalCoverDate: String? = null,
     @ColumnInfo("created_at") val createdAt: Long,
 )
 
@@ -50,6 +52,7 @@ data class CoupleDiaryEntity(
     val paper: String? = null,
     val reply: String? = null,
     @ColumnInfo("reply_at") val replyAt: Long? = null,
+    @ColumnInfo("reply_paper") val replyPaper: String? = null,
     @ColumnInfo("created_at") val createdAt: Long,
 )
 
