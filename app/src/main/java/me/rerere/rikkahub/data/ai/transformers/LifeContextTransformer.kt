@@ -29,7 +29,10 @@ object LifeContextTransformer : InputMessageTransformer {
             }.trim()
         }.getOrDefault("")
 
-        val stickerContext = StickerAiSupport.buildPrompt(ctx.context)
+        val stickerContext = StickerAiSupport.buildPrompt(
+            context = ctx.context,
+            assistantId = ctx.assistant.id.toString(),
+        )
         if (lifeContext.isBlank() && stickerContext.isBlank()) return messages
 
         val injected = buildString {
