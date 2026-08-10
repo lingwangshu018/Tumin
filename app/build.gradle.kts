@@ -19,8 +19,8 @@ android {
         applicationId = "com.lingwangshu018.tumin"
         minSdk = 26
         targetSdk = 37
-        versionCode = 163
-        versionName = "2.3.3"
+        versionCode = 164
+        versionName = "2.3.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -118,261 +118,80 @@ android {
             isDebuggable = false
             isMinifyEnabled = false
             isShrinkResources = false
-            isProfileable = true
-            buildConfigField("String", "GIT_COMMIT", "\"$gitCommit\"")
-            buildConfigField("String", "BUILD_TIME", "\"$buildTime\"")
         }
     }
+
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
+
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_21)
+            freeCompilerArgs.addAll(
+                "-opt-in=kotlin.RequiresOptIn",
+                "-opt-in=kotlin.time.ExperimentalTime",
+                "-Xcontext-parameters",
+            )
+        }
+    }
+
     buildFeatures {
-        compose = true
         buildConfig = true
     }
-    sourceSets {
-        getByName("androidTest").assets.srcDirs("$projectDir/schemas")
-    }
-    androidResources {
-        generateLocaleConfig = true
-    }
+
     packaging {
-        jniLibs {
-            useLegacyPackaging = true
-            pickFirsts += "lib/*/libtermux.so"
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "META-INF/DEPENDENCIES"
+            excludes += "META-INF/LICENSE*"
+            excludes += "META-INF/NOTICE*"
+            excludes += "META-INF/*.kotlin_module"
         }
-    }
-    tasks.withType<KotlinCompile>().configureEach {
-        compilerOptions.optIn.add("androidx.compose.material3.ExperimentalMaterial3Api")
-        compilerOptions.optIn.add("androidx.compose.material3.ExperimentalMaterial3ExpressiveApi")
-        compilerOptions.optIn.add("androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi")
-        compilerOptions.optIn.add("androidx.compose.animation.ExperimentalAnimationApi")
-        compilerOptions.optIn.add("androidx.compose.animation.ExperimentalSharedTransitionApi")
-        compilerOptions.optIn.add("androidx.compose.foundation.ExperimentalFoundationApi")
-        compilerOptions.optIn.add("androidx.compose.foundation.layout.ExperimentalLayoutApi")
-        compilerOptions.optIn.add("kotlin.uuid.ExperimentalUuidApi")
-        compilerOptions.optIn.add("kotlin.time.ExperimentalTime")
-        compilerOptions.optIn.add("kotlinx.coroutines.ExperimentalCoroutinesApi")
-        compilerOptions.optIn.add("androidx.navigation3.runtime.ExperimentalNavigation3Api")
-    }
-
-    // Release 构建强制要求配置独立的 release keystore，禁止回退到 debug keystore。
-    // 这是为了防止 release APK 使用公开已知的 debug 签名（密码 android）被伪造/篡改。
-    tasks.configureEach {
-        val taskName = name
-        if (taskName.contains("Release", ignoreCase = true) &&
-            (taskName.startsWith("assemble") || taskName.startsWith("bundle") || taskName.startsWith("package"))) {
-            doFirst {
-                if (!hasReleaseSigning) {
-                    throw GradleException(
-                        "Release build requires a release keystore. " +
-                        "Please configure storeFile, storePassword, keyAlias and keyPassword in local.properties."
-                    )
-                }
-            }
-        }
-    }
-}
-
-composeCompiler {
-    stabilityConfigurationFiles.add(
-        project.layout.projectDirectory.file("compose_compiler_config.conf")
-    )
-}
-
-tasks.register("buildAll") {
-    dependsOn("assembleRelease", "bundleRelease")
-    description = "Build both APK and AAB"
-}
-
-ksp {
-    arg("room.schemaLocation", "$projectDir/schemas")
-}
-
-kotlin {
-    compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_17)
     }
 }
 
 dependencies {
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.lifecycle.process)
-    implementation(libs.androidx.work.runtime.ktx)
-    implementation(libs.androidx.browser)
-    implementation(libs.androidx.profileinstaller)
-    implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
+    implementation(project(":ai"))
+    implementation(project(":common"))
+    implementation(project(":highlight"))
+    implementation(project(":speech"))
+    implementation(project(":tts"))
+    implementation(project(":web"))
+    implementation(project(":workspace"))
 
-    // BiometricPrompt (fingerprint/face verify_fingerprint tool)
-    implementation(libs.androidx.biometric)
-    implementation(libs.termux.terminal.view)
-    implementation(libs.guava.listenablefuture)
-
-    // Workflow feature: cron parsing + geofence triggers
-    implementation("com.cronutils:cron-utils:9.2.1")
-    implementation("com.google.android.gms:play-services-location:21.3.0")
-
-    // SSH feature: JSch (mwiede fork) for remote shell + SFTP
-    implementation("com.github.mwiede:jsch:0.2.21")
-
-    // Compose
     implementation(libs.androidx.activity.compose)
-    implementation(platform(libs.androidx.compose.bom))
-    implementation(libs.androidx.ui)
-    implementation(libs.androidx.ui.graphics)
-    implementation(libs.androidx.ui.tooling.preview)
-    implementation(libs.androidx.material3)
-    implementation(libs.androidx.material3.adaptive)
-    implementation(libs.androidx.material3.adaptive.layout)
-
-    // Navigation 3
-    implementation(libs.androidx.navigation3.runtime)
-    implementation(libs.androidx.navigation3.ui)
-    implementation(libs.androidx.lifecycle.viewmodel.navigation3)
-    implementation(libs.androidx.material3.adaptive.navigation3)
-
-    // DataStore
+    implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.datastore.preferences)
-
-    // Image metadata extractor
-    // https://github.com/drewnoakes/metadata-extractor
-    implementation(libs.metadata.extractor)
-
-    // Haze (background blur)
-    implementation(libs.haze)
-    implementation(libs.haze.materials)
-
-    // koin
-    implementation(platform(libs.koin.bom))
-    implementation(libs.koin.android)
-    implementation(libs.koin.compose)
-    implementation(libs.koin.androidx.workmanager)
-
-    // jetbrains markdown parser
-    implementation(libs.jetbrains.markdown)
-
-    // okhttp
-    implementation(libs.okhttp)
-    implementation(libs.okhttp.sse)
-    implementation(libs.retrofit)
-    implementation(libs.retrofit.serialization.json)
-
-    // ktor client
-    implementation(libs.ktor.client.core)
-    implementation(libs.ktor.client.okhttp)
-    implementation(libs.ktor.client.content.negotiation)
-
-    implementation(libs.ktor.serialization.kotlinx.json)
-
-    // ktor server (NapCat reverse WS)
-    implementation(libs.ktor.server.websockets)
-    implementation(libs.ktor.server.cio)
-    implementation(libs.ktor.server.core)
-
-    // ucrop
-    implementation(libs.ucrop)
-
-    // pebble (template engine)
-    implementation(libs.pebble)
-
-    // java-diff-utils (unified diff)
-    implementation(libs.diffutils)
-
-    // coil
-    implementation(libs.coil.compose)
-    implementation(libs.coil.gif)
-    implementation(libs.coil.okhttp)
-    implementation(libs.coil.svg)
-    implementation(libs.coil.cache.control)
-
-    // serialization
-    implementation(libs.kotlinx.serialization.json)
-
-    // zxing
-    implementation(libs.zxing.core)
-
-    // quickie (qrcode scanner)
-    implementation(libs.quickie.bundled)
-    implementation(libs.barcode.scanning)
-    implementation(libs.text.recognition)
-    implementation(libs.androidx.camera.core)
-
-    // Room
-    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.lifecycle.process)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.room.ktx)
-    implementation(libs.androidx.room.paging)
-    ksp(libs.androidx.room.compiler)
-
-    // Paging3
-    implementation(libs.androidx.paging.runtime)
-    implementation(libs.androidx.paging.compose)
-
-    // Apache Commons Text
-    implementation(libs.commons.text)
-
-    // Toast (Sonner)
-    implementation(libs.sonner)
-
-    // Reorderable (https://github.com/Calvin-LL/Reorderable/)
-    implementation(libs.reorderable)
-
-    // lucide icons
-    implementation(libs.lucide.icons)
-    implementation(libs.huge.icons)
-
-    // image viewer
-    implementation(libs.image.viewer)
-
-    // JLatexMath
-    implementation(libs.jlatexmath)
-    implementation(libs.jlatexmath.font.greek)
-    implementation(libs.jlatexmath.font.cyrillic)
-
-    // mcp
-    implementation(libs.modelcontextprotocol.kotlin.sdk)
-
-    // Shizuku (read other app's data)
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.coil.compose)
+    implementation(libs.coil.network.okhttp)
+    implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.material.icons.extended)
+    implementation(libs.material3)
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.session)
+    implementation(libs.okhttp)
+    implementation(libs.quickjs.android)
+    implementation(libs.richtext.commonmark)
+    implementation(libs.richtext.ui.material3)
     implementation(libs.shizuku.api)
     implementation(libs.shizuku.provider)
 
-    // jmDNS (mDNS/Bonjour .local hostname)
-    implementation(libs.jmdns)
+    ksp(libs.androidx.room.compiler)
 
-    // SLF4J Android binding — routes Ktor/SLF4J logs to logcat
-    implementation(libs.slf4j.api)
-    implementation(libs.slf4j.android)
-
-    // sqlite-android (requery SQLite for Android)
-    implementation(libs.sqlite.android)
-
-    // media3 (ExoPlayer)
-    implementation(libs.androidx.media3.exoplayer)
-
-    // modules
-    implementation(project(":ai"))
-    implementation(project(":web"))
-    implementation(project(":document"))
-    implementation(project(":highlight"))
-    implementation(project(":search"))
-    implementation(project(":speech"))
-    implementation(project(":common"))
-    implementation(project(":workspace"))
-    implementation(project(":material3"))
-    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar", "*.aar"))))
-    implementation(kotlin("reflect"))
-
-    // Leak Canary
-    // debugImplementation(libs.leakcanary.android)
-
-    // tests
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.ui.test.junit4)
-    androidTestImplementation(libs.androidx.room.testing)
-    debugImplementation(libs.androidx.ui.tooling)
-    debugImplementation(libs.androidx.ui.test.manifest)
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
