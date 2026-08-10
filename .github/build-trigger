@@ -1,4 +1,4 @@
-build: 2026-08-10T21:48+08:00
+build: 2026-08-10T21:53+08:00
 source: latest master
-revision: a826519
-purpose: rebuild v2.3.3 with diary anniversary memo calendar reading music AI tools
+revision: 187580f
+purpose: rebuild v2.3.3 after full AI read-write channel repairs and generation handler routing
