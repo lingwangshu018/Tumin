@@ -15,6 +15,7 @@ import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.files.SkillManager
+import me.rerere.rikkahub.data.repository.CoupleRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.plugin.provider.PluginToolProvider
@@ -40,6 +41,7 @@ class ToolSurfaceBuilder(
     private val workspaceRepository: WorkspaceRepository,
     private val json: Json,
     private val memoryRepository: MemoryRepository,
+    private val coupleRepository: CoupleRepository,
 ) {
     suspend fun build(
         assistant: me.rerere.rikkahub.data.model.Assistant,
@@ -70,6 +72,15 @@ class ToolSurfaceBuilder(
         if (systemToolsOptions.isNotEmpty()) {
             addAll(SystemTools(context, settings).getTools(systemToolsOptions, recentMessages, filesManager))
         }
+
+        // Couple-space / QQ-space tools are always visible to chat assistants, but every execution
+        // verifies invocationContext.callerAssistantId against the relationship's bound assistant.
+        // This gives the bound partner real read/post/comment abilities without allowing one role
+        // to operate another role's couple space.
+        add(readCoupleSpaceTool(coupleRepository, invocationContext))
+        add(postCoupleSpaceTool(coupleRepository, invocationContext))
+        add(commentCoupleSpaceTool(coupleRepository, invocationContext))
+
         addAll(createWorkspaceTools(assistant.workspaceId?.toString(), workspaceRepository, workspaceCwd))
         if (assistant.enabledSkills.isNotEmpty()) {
             addAll(createSkillTools(assistant.enabledSkills, skillManager.listSkills(), skillManager))
