@@ -16,8 +16,18 @@ class CoupleRepository(private val dao: CoupleDAO) {
 
     suspend fun bind(assistantId: String, startedAt: Long) {
         dao.clearRelationship()
-        dao.saveRelationship(CoupleRelationshipEntity(UUID.randomUUID().toString(), assistantId, startedAt, System.currentTimeMillis()))
+        dao.saveRelationship(
+            CoupleRelationshipEntity(
+                id = UUID.randomUUID().toString(),
+                assistantId = assistantId,
+                startedAt = startedAt,
+                createdAt = System.currentTimeMillis(),
+            )
+        )
     }
+
+    suspend fun updateJournalCover(relationship: CoupleRelationshipEntity, cover: String) =
+        dao.saveRelationship(relationship.copy(journalCover = cover))
 
     suspend fun addPost(
         relationshipId: String,
