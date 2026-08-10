@@ -1,4 +1,4 @@
-build: 2026-08-10T22:47+08:00
+build: 2026-08-11T00:42+08:00
 source: latest master
-revision: 4f9c8c1
-purpose: rebuild v2.3.4 after fixing suspend anniversary query in AI tools
+revision: 7ae75ed
+purpose: build v2.3.5 with companion intent routing and strengthened couple-space tool selection
