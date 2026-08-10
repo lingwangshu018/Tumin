@@ -38,6 +38,10 @@ class CoupleAiService : KoinComponent {
     private val filesManager: FilesManager by inject()
     private val genMediaRepository: GenMediaRepository by inject()
 
+    @Volatile
+    var lastErrorMessage: String? = null
+        private set
+
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
@@ -56,7 +60,7 @@ class CoupleAiService : KoinComponent {
         return generate(
             assistantId = assistantId,
             task = """
-                你正在情侣空间的 QQ 空间动态里看到恋人刚发的内容：
+                你正在“兔眠空间”里看到恋人刚发的动态：
                 「${postContent.ifBlank { "（没有配文字）" }}」
 
                 $photoInstruction
@@ -77,7 +81,7 @@ class CoupleAiService : KoinComponent {
     ): String? = generate(
         assistantId = assistantId,
         task = """
-            这是你自己在情侣空间发的一条 QQ 空间动态：
+            这是你自己在“兔眠空间”发的一条动态：
             「${postContent.ifBlank { "（没有配文字）" }}」
             ${if (imageUris.isNotEmpty()) "这条动态还附带了 ${imageUris.size} 张照片，请结合你实际看到的照片内容理解上下文。" else ""}
 
@@ -86,7 +90,7 @@ class CoupleAiService : KoinComponent {
 
             请以你自己的性格直接回复恋人的这条评论。
             只输出回复正文，不要解释，不要写“回复：”。
-            像真实 QQ 空间留言互动，通常 1～3 句即可。
+            像真实空间留言互动，通常 1～3 句即可。
         """.trimIndent(),
         imageUris = imageUris,
     )
@@ -124,7 +128,7 @@ class CoupleAiService : KoinComponent {
                 这是一封只会留在这篇日记下面、写给恋人的私人回信。保持你原本的性格、称呼习惯和你们的关系状态。
                 如果旧日记里出现与现在明显呼应的事情，可以像真实恋人一样自然说“我还记得……”或用更符合你性格的方式提起，但不要编造没有提供过的回忆。
                 不要修改或复述原文，不要写“AI回复”“分析”“以下是回信”等说明。
-                直接输出完整回信正文，可以比 QQ 空间评论更长、更完整、更像一封真正的信。
+                直接输出完整回信正文，可以比空间评论更长、更完整、更像一封真正的信。
             """.trimIndent(),
         )
     }
@@ -133,15 +137,15 @@ class CoupleAiService : KoinComponent {
         val raw = generate(
             assistantId = assistantId,
             task = """
-                你现在可以主动在你和恋人的情侣空间里发一条 QQ 空间动态。
+                你现在可以主动在你和恋人的“兔眠空间”里发一条动态。
                 最近的空间动态摘要如下：
                 $recentContext
 
-                请像真实的人使用 QQ 空间一样决定此刻你自己想发什么，可以是生活碎片、心情、想到恋人的瞬间、吐槽、分享、风景、食物、天气、房间、穿搭或一句很短的话。
+                请像真实的人使用私人空间一样决定此刻你自己想发什么，可以是生活碎片、心情、想到恋人的瞬间、吐槽、分享、风景、食物、天气、房间、穿搭或一句很短的话。
 
                 同时决定这条动态是否适合配图。不要每条都强行带图，大约一半左右的日常动态适合带图；纯情绪或很短的一句话可以不配图。
                 如果配图，图片必须与动态正文在时间、地点、情绪和内容上相互一致，不要出现正文说在家却配海边、正文低落却配明显欢庆画面的冲突。
-                配图提示词需要描述画面本身，不要在图里生成 QQ 空间界面、动态文字、水印或截图边框。
+                配图提示词需要描述画面本身，不要在图里生成兔眠空间界面、动态文字、水印或截图边框。
 
                 只输出一个 JSON 对象，不要 Markdown 代码块、不要解释、不要额外文字：
                 {"content":"最终动态正文","needImage":true,"imagePrompt":"详细且自然的配图提示词","imageCount":1}
@@ -186,11 +190,11 @@ class CoupleAiService : KoinComponent {
 
         val settings = settingsStore.settingsFlow.first()
         val model = settings.findModelById(settings.imageGenerationModelId)
-            ?: return emptyList()
+            ?: run { lastErrorMessage = "没有配置可用的图片生成模型"; return emptyList() }
         val provider = model.findProvider(settings.providers)
-            ?: return emptyList()
+            ?: run { lastErrorMessage = "图片生成模型没有可用提供商"; return emptyList() }
         val providerSetting = settings.providers.find { it.id == provider.id }
-            ?: return emptyList()
+            ?: run { lastErrorMessage = "图片生成提供商配置不存在"; return emptyList() }
 
         val safeCount = count.coerceIn(1, 4)
         val params = ImageGenerationParams(
@@ -223,19 +227,29 @@ class CoupleAiService : KoinComponent {
             )
             createdFile.toURI().toString()
         }
-    }.getOrElse { emptyList() }
+    }.getOrElse {
+        lastErrorMessage = it.message?.takeIf(String::isNotBlank) ?: it::class.simpleName ?: "图片生成失败"
+        emptyList()
+    }
 
     private suspend fun generate(
         assistantId: String,
         task: String,
         imageUris: List<String> = emptyList(),
     ): String? {
-        val multimodal = runCatching {
+        lastErrorMessage = null
+        val multimodal = try {
             generateOnce(assistantId, task, imageUris.take(9))
-        }.getOrNull()
+        } catch (error: Throwable) {
+            lastErrorMessage = error.message?.takeIf(String::isNotBlank) ?: error::class.simpleName ?: "模型调用失败"
+            null
+        }
         if (!multimodal.isNullOrBlank()) return multimodal
 
-        if (imageUris.isEmpty()) return null
+        if (imageUris.isEmpty()) {
+            if (lastErrorMessage == null) lastErrorMessage = "模型没有返回可显示内容"
+            return null
+        }
 
         val fallbackTask = """
             $task
@@ -243,7 +257,14 @@ class CoupleAiService : KoinComponent {
             注意：当前模型或接口没有成功读取这些照片，因此这次不要描述、猜测任何图片细节。
             只根据动态文字和关系上下文自然回应；如果动态只有图片没有文字，可以只做简短、不涉及具体画面内容的回应。
         """.trimIndent()
-        return runCatching { generateOnce(assistantId, fallbackTask, emptyList()) }.getOrNull()
+        return try {
+            generateOnce(assistantId, fallbackTask, emptyList()).also {
+                if (it.isNullOrBlank() && lastErrorMessage == null) lastErrorMessage = "模型没有返回可显示内容"
+            }
+        } catch (error: Throwable) {
+            lastErrorMessage = error.message?.takeIf(String::isNotBlank) ?: error::class.simpleName ?: "模型调用失败"
+            null
+        }
     }
 
     private suspend fun generateOnce(
@@ -253,13 +274,13 @@ class CoupleAiService : KoinComponent {
     ): String? {
         val settings = settingsStore.settingsFlow.first()
         val assistant = settings.assistants.firstOrNull { it.id.toString() == assistantId }
-            ?: return null
+            ?: run { lastErrorMessage = "没有找到兔眠空间绑定的角色"; return null }
         val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId)
-            ?: return null
+            ?: run { lastErrorMessage = "当前角色没有可用聊天模型"; return null }
 
         val systemPrompt = buildString {
-            appendLine("## 情侣空间互动")
-            appendLine("你正在以自己的身份和恋人共同使用情侣空间，其中包括 QQ 空间动态与“我们的日记 / THE PRIVATE JOURNAL”。")
+            appendLine("## 兔眠空间互动")
+            appendLine("你正在以自己的身份和恋人共同使用兔眠空间，其中包括动态与“我们的日记 / THE PRIVATE JOURNAL”。")
             appendLine("保持角色原本的性格、称呼习惯和关系状态，不要突然变成客服、旁白或无关助手。")
             appendLine("你可以使用系统明确提供的旧日记记忆建立连续感，但绝不能编造未提供的共同经历。")
             appendLine("如果收到照片输入，你必须基于实际可见内容回应；看不清的地方不要编造。")
@@ -301,5 +322,8 @@ class CoupleAiService : KoinComponent {
             ?.joinToString("\n") { it.text }
             ?.trim()
             ?.takeIf { it.isNotBlank() }
+            .also {
+                if (it == null && lastErrorMessage == null) lastErrorMessage = "模型没有返回可显示内容"
+            }
     }
 }
