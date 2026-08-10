@@ -2,6 +2,11 @@ name: Release Build
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/build-trigger'
 
 permissions:
   contents: write
