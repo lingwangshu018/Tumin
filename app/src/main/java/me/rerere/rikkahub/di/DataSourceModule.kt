@@ -43,6 +43,13 @@ import me.rerere.rikkahub.data.db.migrations.Migration_23_24
 import me.rerere.rikkahub.data.db.migrations.Migration_24_25
 import me.rerere.rikkahub.data.db.migrations.Migration_25_26
 import me.rerere.rikkahub.data.db.migrations.Migration_29_30
+import me.rerere.rikkahub.data.db.migrations.Migration_30_37
+import me.rerere.rikkahub.data.db.migrations.Migration_31_37
+import me.rerere.rikkahub.data.db.migrations.Migration_32_37
+import me.rerere.rikkahub.data.db.migrations.Migration_33_37
+import me.rerere.rikkahub.data.db.migrations.Migration_34_37
+import me.rerere.rikkahub.data.db.migrations.Migration_35_37
+import me.rerere.rikkahub.data.db.migrations.Migration_36_37
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.service.MemoryBankService
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
@@ -67,7 +74,27 @@ val dataSourceModule = module {
         val context: Context = get()
         Room.databaseBuilder(context, AppDatabase::class.java, "rikka_hub")
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-            .addMigrations(Migration_6_7, Migration_11_12, Migration_13_14, Migration_14_15, Migration_15_16, Migration_19_20, Migration_20_21, Migration_21_22, Migration_23_24, Migration_24_25, Migration_25_26, Migration_29_30)
+            .addMigrations(
+                Migration_6_7,
+                Migration_11_12,
+                Migration_13_14,
+                Migration_14_15,
+                Migration_15_16,
+                Migration_19_20,
+                Migration_20_21,
+                Migration_21_22,
+                Migration_23_24,
+                Migration_24_25,
+                Migration_25_26,
+                Migration_29_30,
+                Migration_30_37,
+                Migration_31_37,
+                Migration_32_37,
+                Migration_33_37,
+                Migration_34_37,
+                Migration_35_37,
+                Migration_36_37,
+            )
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {
                     val dictDir = SimpleDictManager.extractDict(context)
@@ -102,16 +129,18 @@ val dataSourceModule = module {
             .openHelperFactory(
                 RequerySQLiteOpenHelperFactory(
                     listOf(
-                RequerySQLiteOpenHelperFactory.ConfigurationOptions { options ->
-                    options.customExtensions.add(
-                        SQLiteCustomExtension(
-                            context.applicationInfo.nativeLibraryDir + "/libsimple",
-                            null
-                        )
+                        RequerySQLiteOpenHelperFactory.ConfigurationOptions { options ->
+                            options.customExtensions.add(
+                                SQLiteCustomExtension(
+                                    context.applicationInfo.nativeLibraryDir + "/libsimple",
+                                    null
+                                )
+                            )
+                            options
+                        }
                     )
-                    options
-                }
-            )))
+                )
+            )
             .build()
     }
 
