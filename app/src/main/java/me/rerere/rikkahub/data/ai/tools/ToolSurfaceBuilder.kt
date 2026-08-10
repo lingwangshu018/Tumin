@@ -36,7 +36,7 @@ private fun detectCompanionIntent(text: String): CompanionIntent? {
     if (text.isBlank()) return null
     val t = text.lowercase()
     return when {
-        listOf("兔眠空间", "兔眠动态", "qq空间", "qq 空间", "情侣空间", "空间动态", "发动态", "评论空间", "看空间", "朋友圈").any(t::contains) -> CompanionIntent.COUPLE_SPACE
+        listOf("兔眠空间", "兔眠动态", "qq空间", "qq 空间", "情侣空间", "空间动态", "发动态", "删动态", "删除动态", "评论空间", "看空间", "朋友圈").any(t::contains) -> CompanionIntent.COUPLE_SPACE
         listOf("日记", "回信", "journal").any(t::contains) -> CompanionIntent.DIARY
         listOf("纪念日", "纪念册", "anniversary").any(t::contains) -> CompanionIntent.ANNIVERSARY
         listOf("备忘录", "备忘", "memo", "记一下", "记住这件事").any(t::contains) -> CompanionIntent.MEMO
@@ -117,6 +117,7 @@ class ToolSurfaceBuilder(
                     add(readCoupleSpaceTool(coupleRepository, invocationContext))
                     add(postCoupleSpaceTool(coupleRepository, invocationContext))
                     add(commentCoupleSpaceTool(coupleRepository, invocationContext))
+                    add(deleteCoupleSpacePostTool(coupleRepository, invocationContext))
                 }
                 CompanionIntent.DIARY -> add(sharedDiaryTool(coupleRepository, invocationContext))
                 CompanionIntent.ANNIVERSARY -> add(anniversaryBookTool(coupleRepository, invocationContext))
@@ -128,6 +129,7 @@ class ToolSurfaceBuilder(
                     add(readCoupleSpaceTool(coupleRepository, invocationContext))
                     add(postCoupleSpaceTool(coupleRepository, invocationContext))
                     add(commentCoupleSpaceTool(coupleRepository, invocationContext))
+                    add(deleteCoupleSpacePostTool(coupleRepository, invocationContext))
                     add(sharedDiaryTool(coupleRepository, invocationContext))
                     add(anniversaryBookTool(coupleRepository, invocationContext))
                     add(lifeMemoTool(context, invocationContext))
