@@ -27,6 +27,9 @@ interface CoupleDAO {
 
     @Delete suspend fun deletePost(value: CouplePostEntity)
 
+    @Query("DELETE FROM couple_comment WHERE post_id = :postId")
+    suspend fun deleteCommentsForPost(postId: String)
+
     @Query("SELECT * FROM couple_comment WHERE relationship_id = :id ORDER BY created_at ASC")
     fun comments(id: String): Flow<List<CoupleCommentEntity>>
 
