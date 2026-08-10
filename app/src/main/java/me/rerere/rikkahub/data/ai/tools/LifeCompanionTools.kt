@@ -110,11 +110,13 @@ fun anniversaryBookTool(repository: CoupleRepository, invocationContext: ToolInv
         val relationship = runCatching { requireBoundRelationship(repository, invocationContext) }
             .getOrElse { return@Tool lifeToolError(it.message ?: "无法访问纪念册") }
         when (input.jsonObject["action"]?.jsonPrimitive?.contentOrNull) {
-            "list" -> lifeToolOk {
+            "list" -> {
                 val values = repository.anniversaries(relationship.id).first()
-                put("entries", buildJsonArray { values.forEach { e -> add(buildJsonObject {
-                    put("id", e.id); put("title", e.title); put("event_at", e.eventDate); put("yearly", e.yearly); put("category", e.category); put("favorite", e.favorite); e.note?.let { put("note", it) }
-                }) } })
+                lifeToolOk {
+                    put("entries", buildJsonArray { values.forEach { e -> add(buildJsonObject {
+                        put("id", e.id); put("title", e.title); put("event_at", e.eventDate); put("yearly", e.yearly); put("category", e.category); put("favorite", e.favorite); e.note?.let { put("note", it) }
+                    }) } })
+                }
             }
             "add" -> {
                 val title = input.jsonObject["title"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
