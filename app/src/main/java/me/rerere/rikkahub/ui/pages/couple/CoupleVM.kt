@@ -135,13 +135,8 @@ class CoupleVM(
         viewModelScope.launch {
             val otherEntries = diaries.value.filter { it.id != entry.id }
             val memoryEntries = buildList {
-                otherEntries
-                    .filter { it.bookmarked }
-                    .sortedByDescending { it.entryDate }
-                    .take(3)
-                    .forEach { add(it) }
-                otherEntries
-                    .filterNot { candidate -> any { it.id == candidate.id } }
+                otherEntries.filter { it.bookmarked }.sortedByDescending { it.entryDate }.take(3).forEach { add(it) }
+                otherEntries.filterNot { candidate -> any { it.id == candidate.id } }
                     .sortedByDescending { it.entryDate }
                     .take((5 - size).coerceAtLeast(0))
                     .forEach { add(it) }
@@ -168,8 +163,35 @@ class CoupleVM(
         repository.updateReplyPaper(entry, replyPaper)
     }
 
-    fun addAnniversary(title: String, date: Long = System.currentTimeMillis(), yearly: Boolean = true) = relationship.value?.let { value ->
-        viewModelScope.launch { repository.addAnniversary(value.id, title, date, yearly) }
+    fun addAnniversary(
+        title: String,
+        date: Long = System.currentTimeMillis(),
+        yearly: Boolean = true,
+        category: String = "love",
+        note: String? = null,
+    ) = relationship.value?.let { value ->
+        viewModelScope.launch {
+            repository.addAnniversary(value.id, title.trim(), date, yearly, category, note)
+        }
+    }
+
+    fun updateAnniversary(
+        entry: CoupleAnniversaryEntity,
+        title: String,
+        date: Long,
+        yearly: Boolean,
+        category: String,
+        note: String?,
+    ) = viewModelScope.launch {
+        repository.updateAnniversary(entry, title.trim(), date, yearly, category, note)
+    }
+
+    fun toggleAnniversaryFavorite(entry: CoupleAnniversaryEntity) = viewModelScope.launch {
+        repository.toggleAnniversaryFavorite(entry)
+    }
+
+    fun deleteAnniversary(entry: CoupleAnniversaryEntity) = viewModelScope.launch {
+        repository.deleteAnniversary(entry)
     }
 
     private fun decodeImageUris(raw: String?): List<String> {
