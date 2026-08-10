@@ -22,15 +22,7 @@ import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.plugin.provider.PluginToolProvider
 
-private enum class CompanionIntent {
-    COUPLE_SPACE,
-    DIARY,
-    ANNIVERSARY,
-    MEMO,
-    CALENDAR,
-    READING,
-    MUSIC,
-}
+private enum class CompanionIntent { COUPLE_SPACE, DIARY, ANNIVERSARY, MEMO, CALENDAR, READING, MUSIC }
 
 private fun detectCompanionIntent(text: String): CompanionIntent? {
     if (text.isBlank()) return null
@@ -47,17 +39,6 @@ private fun detectCompanionIntent(text: String): CompanionIntent? {
     }
 }
 
-/**
- * Builds the full tool surface for an assistant: search + local + system + workspace + skill
- * + MCP + plugin tools. This is the single source of truth shared by [me.rerere.rikkahub.service.ChatService]
- * (interactive) and [me.rerere.rikkahub.workflow.execution.WorkflowEngine] (headless fire), so a
- * workflow action can reference any tool the assistant actually has registered - not just the
- * local-tool subset. Without this, workflow_create would reject system/MCP/plugin tool names as
- * "unknown_tool" and the engine couldn't execute them at fire time.
- *
- * Headless callers (workflow fire) pass an empty [recentMessages] list and a null/assistant-default
- * [workspaceCwd]; the read-only context tools that consult recent messages simply see no history.
- */
 class ToolSurfaceBuilder(
     private val context: Context,
     private val localTools: LocalTools,
@@ -79,19 +60,35 @@ class ToolSurfaceBuilder(
     ): List<Tool> {
         val latestUserText = recentMessages.asReversed()
             .firstOrNull { it.role == MessageRole.USER }
-            ?.parts
-            ?.filterIsInstance<UIMessagePart.Text>()
-            ?.joinToString("\n") { it.text }
-            .orEmpty()
+            ?.parts?.filterIsInstance<UIMessagePart.Text>()
+            ?.joinToString("\n") { it.text }.orEmpty()
         val companionIntent = detectCompanionIntent(latestUserText)
+
+        // HARD ROUTE: once a companion intent is detected, expose ONLY that surface's tools.
+        // Do not expose memory/web/local/system/workspace/skill/MCP/plugin tools in the same turn.
+        // This deliberately removes tool-choice competition (e.g. HTMLCSStoImage stealing a
+        // Rabbit Space request) and makes the model choose among only the actions that can
+        // actually complete the requested in-app operation.
+        if (companionIntent != null) {
+            return when (companionIntent) {
+                CompanionIntent.COUPLE_SPACE -> listOf(
+                    readCoupleSpaceTool(coupleRepository, invocationContext),
+                    postCoupleSpaceTool(coupleRepository, invocationContext),
+                    commentCoupleSpaceTool(coupleRepository, invocationContext),
+                    deleteCoupleSpacePostTool(coupleRepository, invocationContext),
+                )
+                CompanionIntent.DIARY -> listOf(sharedDiaryTool(coupleRepository, invocationContext))
+                CompanionIntent.ANNIVERSARY -> listOf(anniversaryBookTool(coupleRepository, invocationContext))
+                CompanionIntent.MEMO -> listOf(lifeMemoTool(context, invocationContext))
+                CompanionIntent.CALENDAR -> listOf(lifeCalendarTool(context, invocationContext))
+                CompanionIntent.READING -> listOf(sharedReadingTool(context, invocationContext))
+                CompanionIntent.MUSIC -> listOf(sharedMusicTool(context, invocationContext))
+            }
+        }
 
         return buildList {
             if (assistant.enableMemory) {
-                val memoryAssistantId = if (assistant.useGlobalMemory) {
-                    MemoryRepository.GLOBAL_MEMORY_ID
-                } else {
-                    assistant.id.toString()
-                }
+                val memoryAssistantId = if (assistant.useGlobalMemory) MemoryRepository.GLOBAL_MEMORY_ID else assistant.id.toString()
                 addAll(buildMemoryTools(
                     json = json,
                     onCreation = { content -> memoryRepository.addMemory(memoryAssistantId, content) },
@@ -99,70 +96,36 @@ class ToolSurfaceBuilder(
                     onDelete = { id -> memoryRepository.deleteMemory(id) },
                 ))
             }
-            if (settings.enableWebSearch) {
-                addAll(createSearchTools(settings))
-            }
+            if (settings.enableWebSearch) addAll(createSearchTools(settings))
             addAll(localTools.getTools(assistant.localTools, invocationContext))
             val systemToolsOptions = settings.systemToolsSetting.getEnabledOptions()
-            if (systemToolsOptions.isNotEmpty()) {
-                addAll(SystemTools(context, settings).getTools(systemToolsOptions, recentMessages, filesManager))
-            }
+            if (systemToolsOptions.isNotEmpty()) addAll(SystemTools(context, settings).getTools(systemToolsOptions, recentMessages, filesManager))
 
-            // When the latest user request clearly targets a companion surface, expose the exact
-            // matching tool(s) first and keep unrelated plugin/MCP/workspace tools out of the tool
-            // surface for this turn. This prevents requests such as “更新兔眠空间” from being
-            // misrouted to unrelated image/HTML plugins.
-            when (companionIntent) {
-                CompanionIntent.COUPLE_SPACE -> {
-                    add(readCoupleSpaceTool(coupleRepository, invocationContext))
-                    add(postCoupleSpaceTool(coupleRepository, invocationContext))
-                    add(commentCoupleSpaceTool(coupleRepository, invocationContext))
-                    add(deleteCoupleSpacePostTool(coupleRepository, invocationContext))
-                    add(deleteCoupleSpacePostTool(coupleRepository, invocationContext))
-                }
-                CompanionIntent.DIARY -> add(sharedDiaryTool(coupleRepository, invocationContext))
-                CompanionIntent.ANNIVERSARY -> add(anniversaryBookTool(coupleRepository, invocationContext))
-                CompanionIntent.MEMO -> add(lifeMemoTool(context, invocationContext))
-                CompanionIntent.CALENDAR -> add(lifeCalendarTool(context, invocationContext))
-                CompanionIntent.READING -> add(sharedReadingTool(context, invocationContext))
-                CompanionIntent.MUSIC -> add(sharedMusicTool(context, invocationContext))
-                null -> {
-                    add(readCoupleSpaceTool(coupleRepository, invocationContext))
-                    add(postCoupleSpaceTool(coupleRepository, invocationContext))
-                    add(commentCoupleSpaceTool(coupleRepository, invocationContext))
-                    add(deleteCoupleSpacePostTool(coupleRepository, invocationContext))
-                    add(deleteCoupleSpacePostTool(coupleRepository, invocationContext))
-                    add(sharedDiaryTool(coupleRepository, invocationContext))
-                    add(anniversaryBookTool(coupleRepository, invocationContext))
-                    add(lifeMemoTool(context, invocationContext))
-                    add(lifeCalendarTool(context, invocationContext))
-                    add(sharedReadingTool(context, invocationContext))
-                    add(sharedMusicTool(context, invocationContext))
-                }
-            }
+            // Ordinary chat keeps companion tools available, but they no longer compete with
+            // unrelated tools on an explicitly detected companion-operation turn.
+            add(readCoupleSpaceTool(coupleRepository, invocationContext))
+            add(postCoupleSpaceTool(coupleRepository, invocationContext))
+            add(commentCoupleSpaceTool(coupleRepository, invocationContext))
+            add(deleteCoupleSpacePostTool(coupleRepository, invocationContext))
+            add(sharedDiaryTool(coupleRepository, invocationContext))
+            add(anniversaryBookTool(coupleRepository, invocationContext))
+            add(lifeMemoTool(context, invocationContext))
+            add(lifeCalendarTool(context, invocationContext))
+            add(sharedReadingTool(context, invocationContext))
+            add(sharedMusicTool(context, invocationContext))
 
-            // Companion-specific turns intentionally avoid unrelated external tool surfaces. For
-            // ordinary chat, preserve the full workspace/skill/MCP/plugin tool surface.
-            if (companionIntent == null) {
-                addAll(createWorkspaceTools(assistant.workspaceId?.toString(), workspaceRepository, workspaceCwd))
-                if (assistant.enabledSkills.isNotEmpty()) {
-                    addAll(createSkillTools(assistant.enabledSkills, skillManager.listSkills(), skillManager))
-                }
-                mcpManager.getAllAvailableTools().forEach { (serverId, tool) ->
-                    add(
-                        Tool(
-                            name = ToolNaming.buildMcpToolName(serverId, tool.name),
-                            description = tool.description ?: "",
-                            parameters = { tool.inputSchema },
-                            needsApproval = tool.needsApproval,
-                            execute = {
-                                mcpManager.callTool(serverId, tool.name, it.jsonObject)
-                            },
-                        )
-                    )
-                }
-                addAll(pluginToolProvider.getTools())
+            addAll(createWorkspaceTools(assistant.workspaceId?.toString(), workspaceRepository, workspaceCwd))
+            if (assistant.enabledSkills.isNotEmpty()) addAll(createSkillTools(assistant.enabledSkills, skillManager.listSkills(), skillManager))
+            mcpManager.getAllAvailableTools().forEach { (serverId, tool) ->
+                add(Tool(
+                    name = ToolNaming.buildMcpToolName(serverId, tool.name),
+                    description = tool.description ?: "",
+                    parameters = { tool.inputSchema },
+                    needsApproval = tool.needsApproval,
+                    execute = { mcpManager.callTool(serverId, tool.name, it.jsonObject) },
+                ))
             }
+            addAll(pluginToolProvider.getTools())
         }
     }
 }
