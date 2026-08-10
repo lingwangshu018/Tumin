@@ -32,11 +32,16 @@ class CoupleVM(
         repository.bind(assistantId, startedAt)
     }
 
-    fun addPost(content: String) {
+    fun addPost(content: String, imageUris: List<String> = emptyList()) {
         val relation = relationship.value ?: return
+        if (content.isBlank() && imageUris.isEmpty()) return
         viewModelScope.launch {
-            val post = repository.addPost(relation.id, "user", content)
-            coupleAi.commentOnUserPost(relation.assistantId, content)?.let { reply ->
+            val post = repository.addPost(relation.id, "user", content.trim(), imageUris)
+            coupleAi.commentOnUserPost(
+                assistantId = relation.assistantId,
+                postContent = content.trim(),
+                imageCount = imageUris.size,
+            )?.let { reply ->
                 repository.addComment(relation.id, post.id, "assistant", reply)
             }
         }
@@ -71,7 +76,8 @@ class CoupleVM(
                 .reversed()
                 .joinToString("\n") { post ->
                     val who = if (post.author == "assistant") "你" else "恋人"
-                    "$who：${post.content}"
+                    val photoHint = if (!post.imageUri.isNullOrBlank()) "（带照片）" else ""
+                    "$who$photoHint：${post.content}"
                 }
                 .ifBlank { "这里还没有动态，你可以发第一条。" }
 
