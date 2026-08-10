@@ -29,6 +29,17 @@ class CoupleRepository(private val dao: CoupleDAO) {
     suspend fun updateJournalCover(relationship: CoupleRelationshipEntity, cover: String) =
         dao.saveRelationship(relationship.copy(journalCover = cover))
 
+    suspend fun updateJournalInscription(
+        relationship: CoupleRelationshipEntity,
+        title: String?,
+        date: String?,
+    ) = dao.saveRelationship(
+        relationship.copy(
+            journalCoverTitle = title?.trim()?.takeIf { it.isNotBlank() },
+            journalCoverDate = date?.trim()?.takeIf { it.isNotBlank() },
+        )
+    )
+
     suspend fun addPost(
         relationshipId: String,
         author: String,
@@ -109,9 +120,20 @@ class CoupleRepository(private val dao: CoupleDAO) {
         )
     )
 
-    suspend fun saveDiaryReply(entry: CoupleDiaryEntity, reply: String) = dao.saveDiary(
-        entry.copy(reply = reply, replyAt = System.currentTimeMillis())
+    suspend fun saveDiaryReply(
+        entry: CoupleDiaryEntity,
+        reply: String,
+        replyPaper: String = entry.replyPaper ?: "cream_letter",
+    ) = dao.saveDiary(
+        entry.copy(
+            reply = reply,
+            replyAt = System.currentTimeMillis(),
+            replyPaper = replyPaper,
+        )
     )
+
+    suspend fun updateReplyPaper(entry: CoupleDiaryEntity, replyPaper: String) =
+        dao.saveDiary(entry.copy(replyPaper = replyPaper))
 
     suspend fun deleteDiary(entry: CoupleDiaryEntity) = dao.deleteDiary(entry)
 
