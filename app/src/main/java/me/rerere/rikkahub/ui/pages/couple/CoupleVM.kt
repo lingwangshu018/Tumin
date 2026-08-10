@@ -2,6 +2,9 @@ package me.rerere.rikkahub.ui.pages.couple
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -106,6 +109,10 @@ class CoupleVM(
         repository.updateDiary(entry, title.trim(), content.trim(), folder.ifBlank { "全部心事" }, paper.ifBlank { "ivory" })
     }
 
+    fun toggleDiaryBookmark(entry: CoupleDiaryEntity) = viewModelScope.launch {
+        repository.toggleDiaryBookmark(entry)
+    }
+
     fun addDiaryFolder(name: String) {
         val relation = relationship.value ?: return
         val clean = name.trim()
@@ -126,7 +133,32 @@ class CoupleVM(
     fun requestDiaryReply(entry: CoupleDiaryEntity) {
         val relation = relationship.value ?: return
         viewModelScope.launch {
-            coupleAi.replyToDiary(relation.assistantId, entry.title, entry.content)?.let { reply ->
+            val otherEntries = diaries.value.filter { it.id != entry.id }
+            val memoryEntries = buildList {
+                otherEntries
+                    .filter { it.bookmarked }
+                    .sortedByDescending { it.entryDate }
+                    .take(3)
+                    .forEach { add(it) }
+                otherEntries
+                    .filterNot { candidate -> any { it.id == candidate.id } }
+                    .sortedByDescending { it.entryDate }
+                    .take((5 - size).coerceAtLeast(0))
+                    .forEach { add(it) }
+            }
+            val memoryContext = memoryEntries.joinToString("\n\n") { old ->
+                val date = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(old.entryDate))
+                val mark = if (old.bookmarked) "【书签】" else "【旧日记】"
+                val excerpt = old.content.replace("\n", " ").take(260)
+                "$mark $date《${old.title}》\n$excerpt"
+            }
+
+            coupleAi.replyToDiary(
+                assistantId = relation.assistantId,
+                title = entry.title,
+                content = entry.content,
+                memoryContext = memoryContext,
+            )?.let { reply ->
                 repository.saveDiaryReply(entry, reply, entry.replyPaper ?: "cream_letter")
             }
         }
