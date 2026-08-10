@@ -25,6 +25,8 @@ class CoupleVM(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val diaries = relationship.flatMapLatest { it?.let { repository.diaries(it.id) } ?: flowOf(emptyList()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val diaryFolders = relationship.flatMapLatest { it?.let { repository.diaryFolders(it.id) } ?: flowOf(emptyList()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val anniversaries = relationship.flatMapLatest { it?.let { repository.anniversaries(it.id) } ?: flowOf(emptyList()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
@@ -38,11 +40,7 @@ class CoupleVM(
         viewModelScope.launch {
             val persistedImages = imageUris.take(9)
             val post = repository.addPost(relation.id, "user", content.trim(), persistedImages)
-            coupleAi.commentOnUserPost(
-                assistantId = relation.assistantId,
-                postContent = content.trim(),
-                imageUris = persistedImages,
-            )?.let { reply ->
+            coupleAi.commentOnUserPost(relation.assistantId, content.trim(), persistedImages)?.let { reply ->
                 repository.addComment(relation.id, post.id, "assistant", reply)
             }
         }
@@ -53,12 +51,7 @@ class CoupleVM(
         viewModelScope.launch {
             repository.addComment(relation.id, post.id, "user", content)
             if (post.author == "assistant") {
-                coupleAi.replyToUserComment(
-                    assistantId = relation.assistantId,
-                    postContent = post.content,
-                    userComment = content,
-                    imageUris = decodeImageUris(post.imageUri),
-                )?.let { reply ->
+                coupleAi.replyToUserComment(relation.assistantId, post.content, content, decodeImageUris(post.imageUri))?.let { reply ->
                     repository.addComment(relation.id, post.id, "assistant", reply)
                 }
             }
@@ -73,74 +66,57 @@ class CoupleVM(
         if (!force && latestAiPost != null && System.currentTimeMillis() - latestAiPost.createdAt < cooldownMs) return
 
         viewModelScope.launch {
-            val recentContext = existingPosts
-                .take(8)
-                .reversed()
-                .joinToString("\n") { post ->
-                    val who = if (post.author == "assistant") "你" else "恋人"
-                    val count = decodeImageUris(post.imageUri).size
-                    val photoHint = when {
-                        count > 1 -> "（带${count}张照片）"
-                        count == 1 -> "（带1张照片）"
-                        else -> ""
-                    }
-                    "$who$photoHint：${post.content}"
-                }
-                .ifBlank { "这里还没有动态，你可以发第一条。" }
+            val recentContext = existingPosts.take(8).reversed().joinToString("\n") { post ->
+                val who = if (post.author == "assistant") "你" else "恋人"
+                val count = decodeImageUris(post.imageUri).size
+                val photoHint = when { count > 1 -> "（带${count}张照片）"; count == 1 -> "（带1张照片）"; else -> "" }
+                "$who$photoHint：${post.content}"
+            }.ifBlank { "这里还没有动态，你可以发第一条。" }
 
-            val draft = coupleAi.createPostDraft(relation.assistantId, recentContext)
-                ?: return@launch
+            val draft = coupleAi.createPostDraft(relation.assistantId, recentContext) ?: return@launch
             if (draft.content.isBlank() && !draft.needImage) return@launch
-
             val generatedImages = if (draft.needImage && draft.imagePrompt.isNotBlank()) {
-                coupleAi.generatePostImages(
-                    prompt = draft.imagePrompt,
-                    count = draft.imageCount,
-                )
-            } else {
-                emptyList()
-            }
-
+                coupleAi.generatePostImages(draft.imagePrompt, draft.imageCount)
+            } else emptyList()
             if (draft.content.isNotBlank() || generatedImages.isNotEmpty()) {
-                repository.addPost(
-                    relationshipId = relation.id,
-                    author = "assistant",
-                    content = draft.content.trim(),
-                    imageUris = generatedImages,
-                )
+                repository.addPost(relation.id, "assistant", draft.content.trim(), generatedImages)
             }
         }
     }
 
     fun toggleLike(post: CouplePostEntity) = viewModelScope.launch { repository.toggleLike(post) }
 
-    fun addDiary(
-        title: String,
-        content: String,
-        folder: String = "全部心事",
-        paper: String = "ivory",
-    ) = relationship.value?.let { value ->
+    fun addDiary(title: String, content: String, folder: String = "全部心事", paper: String = "ivory") = relationship.value?.let { value ->
         viewModelScope.launch {
-            repository.addDiary(
-                relationshipId = value.id,
-                author = "user",
-                title = title.trim(),
-                content = content.trim(),
-                date = System.currentTimeMillis(),
-                folder = folder.ifBlank { "全部心事" },
-                paper = paper.ifBlank { "ivory" },
-            )
+            repository.addDiary(value.id, "user", title.trim(), content.trim(), System.currentTimeMillis(), folder.ifBlank { "全部心事" }, paper.ifBlank { "ivory" })
         }
     }
+
+    fun updateDiary(entry: CoupleDiaryEntity, title: String, content: String, folder: String, paper: String) = viewModelScope.launch {
+        repository.updateDiary(entry, title.trim(), content.trim(), folder.ifBlank { "全部心事" }, paper.ifBlank { "ivory" })
+    }
+
+    fun addDiaryFolder(name: String) {
+        val relation = relationship.value ?: return
+        val clean = name.trim()
+        if (clean.isBlank() || clean == "全部心事") return
+        if (diaryFolders.value.any { it.name.equals(clean, true) }) return
+        viewModelScope.launch { repository.addDiaryFolder(relation.id, clean, diaryFolders.value.size) }
+    }
+
+    fun renameDiaryFolder(folder: CoupleDiaryFolderEntity, newName: String) {
+        val clean = newName.trim()
+        if (clean.isBlank() || clean == "全部心事" || clean == folder.name) return
+        if (diaryFolders.value.any { it.id != folder.id && it.name.equals(clean, true) }) return
+        viewModelScope.launch { repository.renameDiaryFolder(folder, clean) }
+    }
+
+    fun deleteDiaryFolder(folder: CoupleDiaryFolderEntity) = viewModelScope.launch { repository.deleteDiaryFolder(folder) }
 
     fun requestDiaryReply(entry: CoupleDiaryEntity) {
         val relation = relationship.value ?: return
         viewModelScope.launch {
-            coupleAi.replyToDiary(
-                assistantId = relation.assistantId,
-                title = entry.title,
-                content = entry.content,
-            )?.let { reply ->
+            coupleAi.replyToDiary(relation.assistantId, entry.title, entry.content)?.let { reply ->
                 repository.saveDiaryReply(entry, reply)
             }
         }
@@ -155,8 +131,6 @@ class CoupleVM(
         return runCatching {
             val array = org.json.JSONArray(raw)
             List(array.length()) { index -> array.getString(index) }
-        }.getOrElse {
-            listOf(raw)
-        }.filter { it.isNotBlank() }.take(9)
+        }.getOrElse { listOf(raw) }.filter { it.isNotBlank() }.take(9)
     }
 }
