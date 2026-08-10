@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.pages.couple
 import java.io.File
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.ImageGenerationParams
