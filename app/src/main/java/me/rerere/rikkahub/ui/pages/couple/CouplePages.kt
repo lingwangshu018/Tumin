@@ -60,7 +60,7 @@ fun CoupleSpacePage(vm: CoupleVM = koinViewModel()) {
         if (relationship == null || partner == null) {
             LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 item { Text("选择你的恋人", style = MaterialTheme.typography.headlineSmall) }
-                item { Text("绑定后，QQ空间、我们的日记和纪念日都会属于你们两个人。") }
+                item { Text("绑定后，兔眠空间、我们的日记和纪念日都会属于你们两个人。") }
                 items(settings.assistants) { assistant ->
                     Card(onClick = { pendingPartnerId = assistant.id.toString() }, modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp)) {
@@ -100,7 +100,7 @@ private fun CoupleHome(relationship: CoupleRelationshipEntity, partnerName: Stri
                 }
             }
         }
-        item { FeatureCard("⭐", "QQ空间", "逛逛你和 $partnerName 各自的动态、照片与留言") { nav.navigate(Screen.CoupleMoments) } }
+        item { FeatureCard("🌙", "兔眠空间", "逛逛你和 $partnerName 各自的动态、照片与留言") { nav.navigate(Screen.CoupleMoments) } }
         item { FeatureCard("📖", "我们的日记", "THE PRIVATE JOURNAL · 写下心事，也等一封 $partnerName 的回信") { nav.navigate(Screen.CoupleDiary) } }
         item { FeatureCard("🎂", "纪念日", "收藏每一个值得记住的日子") { nav.navigate(Screen.CoupleAnniversaries) } }
     }
@@ -124,6 +124,7 @@ fun CoupleMomentsPage(vm: CoupleVM = koinViewModel()) {
     val comments by vm.comments.collectAsStateWithLifecycle()
     val relationship by vm.relationship.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
+    val rabbitSpaceUiState by vm.rabbitSpaceUiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     val partner = settings.assistants.firstOrNull { it.id.toString() == relationship?.assistantId }
@@ -159,7 +160,7 @@ fun CoupleMomentsPage(vm: CoupleVM = koinViewModel()) {
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("我们的空间") }, navigationIcon = { BackButton() }) },
+        topBar = { TopAppBar(title = { Text("兔眠空间") }, navigationIcon = { BackButton() }) },
         floatingActionButton = { FloatingActionButton(onClick = { showAdd = true }) { Text("＋") } },
     ) { padding ->
         LazyColumn(
@@ -170,12 +171,39 @@ fun CoupleMomentsPage(vm: CoupleVM = koinViewModel()) {
             item {
                 Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primaryContainer) {
                     Column(Modifier.padding(20.dp, 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Text("⭐ 我们的 QQ 空间", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text("🌙 兔眠空间", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                         Text("$userName × $partnerName", style = MaterialTheme.typography.titleMedium)
                         Text("文字、照片和评论都会留在这里。你们都会发动态，也会真的在评论区说话。", color = MaterialTheme.colorScheme.onPrimaryContainer)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilledTonalButton(onClick = { showAdd = true }) { Text("我发动态") }
-                            OutlinedButton(onClick = { vm.maybeCreateAiPost(force = true) }) { Text("让 $partnerName 发一条") }
+                            OutlinedButton(
+                                enabled = !rabbitSpaceUiState.generatingPost,
+                                onClick = { vm.maybeCreateAiPost(force = true) },
+                            ) {
+                                Text(if (rabbitSpaceUiState.generatingPost) "$partnerName 正在想……" else "让 $partnerName 发一条")
+                            }
+                        }
+                    }
+                }
+            }
+            if (rabbitSpaceUiState.notice != null || rabbitSpaceUiState.error != null) {
+                item {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (rabbitSpaceUiState.error != null) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                rabbitSpaceUiState.error ?: rabbitSpaceUiState.notice.orEmpty(),
+                                modifier = Modifier.weight(1f),
+                                color = if (rabbitSpaceUiState.error != null) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer,
+                            )
+                            TextButton(onClick = vm::clearRabbitSpaceFeedback) { Text("知道了") }
                         }
                     }
                 }
@@ -198,6 +226,7 @@ fun CoupleMomentsPage(vm: CoupleVM = koinViewModel()) {
                     partnerName = partnerName,
                     onLike = { vm.toggleLike(post) },
                     onComment = { vm.addUserComment(post, it) },
+                    onDelete = { vm.deletePost(post) },
                 )
             }
         }
@@ -252,11 +281,13 @@ private fun MomentCard(
     partnerName: String,
     onLike: () -> Unit,
     onComment: (String) -> Unit,
+    onDelete: () -> Unit,
 ) {
     val authorName = if (post.author == "assistant") partnerName else userName
     val avatarText = authorName.take(1).ifBlank { if (post.author == "assistant") "A" else "我" }
     val images = remember(post.imageUri) { decodePostImages(post.imageUri) }
     var commentDraft by remember(post.id) { mutableStateOf("") }
+    var confirmDelete by remember(post.id) { mutableStateOf(false) }
 
     Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -272,6 +303,7 @@ private fun MomentCard(
             if (post.content.isNotBlank()) Text(post.content, style = MaterialTheme.typography.bodyLarge)
             if (images.isNotEmpty()) PostImageGrid(images)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { confirmDelete = true }) { Text("删除") }
                 TextButton(onClick = onLike) { Text(if (post.liked) "♡ 已喜欢" else "♡ 喜欢") }
                 TextButton(onClick = { }) { Text("💬 ${postComments.size}") }
             }
@@ -290,6 +322,21 @@ private fun MomentCard(
                 TextButton(enabled = commentDraft.isNotBlank(), onClick = { onComment(commentDraft.trim()); commentDraft = "" }) { Text("发送") }
             }
         }
+    }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("删除这条动态？") },
+            text = { Text("动态和它下面的评论都会一起删除，这个操作不能撤销。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDelete = false
+                    onDelete()
+                }) { Text("删除") }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("取消") } },
+        )
     }
 }
 

@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -118,6 +118,7 @@ class ToolSurfaceBuilder(
                     add(postCoupleSpaceTool(coupleRepository, invocationContext))
                     add(commentCoupleSpaceTool(coupleRepository, invocationContext))
                     add(deleteCoupleSpacePostTool(coupleRepository, invocationContext))
+                    add(deleteCoupleSpacePostTool(coupleRepository, invocationContext))
                 }
                 CompanionIntent.DIARY -> add(sharedDiaryTool(coupleRepository, invocationContext))
                 CompanionIntent.ANNIVERSARY -> add(anniversaryBookTool(coupleRepository, invocationContext))
@@ -129,6 +130,7 @@ class ToolSurfaceBuilder(
                     add(readCoupleSpaceTool(coupleRepository, invocationContext))
                     add(postCoupleSpaceTool(coupleRepository, invocationContext))
                     add(commentCoupleSpaceTool(coupleRepository, invocationContext))
+                    add(deleteCoupleSpacePostTool(coupleRepository, invocationContext))
                     add(deleteCoupleSpacePostTool(coupleRepository, invocationContext))
                     add(sharedDiaryTool(coupleRepository, invocationContext))
                     add(anniversaryBookTool(coupleRepository, invocationContext))
