@@ -1,16 +1,24 @@
 package me.rerere.rikkahub.ui.pages.couple
 
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.compose.AsyncImage
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -23,6 +31,7 @@ import me.rerere.rikkahub.data.db.entity.CouplePostEntity
 import me.rerere.rikkahub.data.db.entity.CoupleRelationshipEntity
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalNavController
+import org.json.JSONArray
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
@@ -75,7 +84,7 @@ private fun CoupleHome(relationship: CoupleRelationshipEntity, partnerName: Stri
                 }
             }
         }
-        item { FeatureCard("⭐", "QQ空间", "逛逛你和 $partnerName 各自的动态与留言") { nav.navigate(Screen.CoupleMoments) } }
+        item { FeatureCard("⭐", "QQ空间", "逛逛你和 $partnerName 各自的动态、照片与留言") { nav.navigate(Screen.CoupleMoments) } }
         item { FeatureCard("📖", "日记", "写下个人与共同回忆") { nav.navigate(Screen.CoupleDiary) } }
         item { FeatureCard("🎂", "纪念日", "收藏每一个值得记住的日子") { nav.navigate(Screen.CoupleAnniversaries) } }
     }
@@ -99,6 +108,7 @@ fun CoupleMomentsPage(vm: CoupleVM = koinViewModel()) {
     val comments by vm.comments.collectAsStateWithLifecycle()
     val relationship by vm.relationship.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     val partner = settings.assistants.firstOrNull { it.id.toString() == relationship?.assistantId }
     val userName = settings.displaySetting.userNickname.ifBlank { "我" }
@@ -107,6 +117,17 @@ fun CoupleMomentsPage(vm: CoupleVM = koinViewModel()) {
     var filter by remember { mutableStateOf(SpaceFilter.ALL) }
     var showAdd by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf("") }
+    var selectedImageUris by remember { mutableStateOf<List<String>>(emptyList()) }
+
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        val accepted = uris.take((9 - selectedImageUris.size).coerceAtLeast(0))
+        accepted.forEach { uri ->
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+        }
+        selectedImageUris = (selectedImageUris + accepted.map { it.toString() }).distinct().take(9)
+    }
 
     LaunchedEffect(relationship?.id) {
         if (relationship != null) {
@@ -148,7 +169,7 @@ fun CoupleMomentsPage(vm: CoupleVM = koinViewModel()) {
                     ) {
                         Text("⭐ 我们的 QQ 空间", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                         Text("$userName × $partnerName", style = MaterialTheme.typography.titleMedium)
-                        Text("这里不是单向记录：你们都会发动态，也会真的在评论区说话。", color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Text("文字、照片和评论都会留在这里。你们都会发动态，也会真的在评论区说话。", color = MaterialTheme.colorScheme.onPrimaryContainer)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilledTonalButton(onClick = { showAdd = true }) { Text("我发动态") }
                             OutlinedButton(onClick = { vm.maybeCreateAiPost(force = true) }) { Text("让 $partnerName 发一条") }
@@ -162,21 +183,9 @@ fun CoupleMomentsPage(vm: CoupleVM = koinViewModel()) {
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    FilterChip(
-                        selected = filter == SpaceFilter.ALL,
-                        onClick = { filter = SpaceFilter.ALL },
-                        label = { Text("全部") },
-                    )
-                    FilterChip(
-                        selected = filter == SpaceFilter.USER,
-                        onClick = { filter = SpaceFilter.USER },
-                        label = { Text("$userName 的空间") },
-                    )
-                    FilterChip(
-                        selected = filter == SpaceFilter.AI,
-                        onClick = { filter = SpaceFilter.AI },
-                        label = { Text("$partnerName 的空间") },
-                    )
+                    FilterChip(selected = filter == SpaceFilter.ALL, onClick = { filter = SpaceFilter.ALL }, label = { Text("全部") })
+                    FilterChip(selected = filter == SpaceFilter.USER, onClick = { filter = SpaceFilter.USER }, label = { Text("$userName 的空间") })
+                    FilterChip(selected = filter == SpaceFilter.AI, onClick = { filter = SpaceFilter.AI }, label = { Text("$partnerName 的空间") })
                 }
             }
 
@@ -208,20 +217,56 @@ fun CoupleMomentsPage(vm: CoupleVM = koinViewModel()) {
             onDismissRequest = { showAdd = false },
             title = { Text("发表说说") },
             text = {
-                OutlinedTextField(
-                    value = draft,
-                    onValueChange = { draft = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("这一刻想说什么？") },
-                    minLines = 4,
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = draft,
+                        onValueChange = { draft = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("这一刻想说什么？") },
+                        minLines = 3,
+                    )
+
+                    if (selectedImageUris.isNotEmpty()) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            selectedImageUris.take(3).forEach { uri ->
+                                AsyncImage(
+                                    model = uri,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(68.dp).clip(RoundedCornerShape(10.dp)),
+                                    contentScale = ContentScale.Crop,
+                                )
+                            }
+                            if (selectedImageUris.size > 3) {
+                                Surface(
+                                    modifier = Modifier.size(68.dp),
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) { Text("+${selectedImageUris.size - 3}") }
+                                }
+                            }
+                        }
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedButton(
+                            enabled = selectedImageUris.size < 9,
+                            onClick = { imagePicker.launch(arrayOf("image/*")) },
+                        ) { Text(if (selectedImageUris.isEmpty()) "📷 添加照片" else "📷 再选照片") }
+                        if (selectedImageUris.isNotEmpty()) {
+                            TextButton(onClick = { selectedImageUris = emptyList() }) { Text("清空") }
+                        }
+                    }
+                    Text("最多 9 张照片 · 当前 ${selectedImageUris.size}/9", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             },
             confirmButton = {
                 TextButton(
-                    enabled = draft.isNotBlank(),
+                    enabled = draft.isNotBlank() || selectedImageUris.isNotEmpty(),
                     onClick = {
-                        vm.addPost(draft.trim())
+                        vm.addPost(draft.trim(), selectedImageUris)
                         draft = ""
+                        selectedImageUris = emptyList()
                         showAdd = false
                     },
                 ) { Text("发表") }
@@ -242,11 +287,10 @@ private fun MomentCard(
 ) {
     val authorName = if (post.author == "assistant") partnerName else userName
     val avatarText = authorName.take(1).ifBlank { if (post.author == "assistant") "A" else "我" }
+    val images = remember(post.imageUri) { decodePostImages(post.imageUri) }
     var commentDraft by remember(post.id) { mutableStateOf("") }
 
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-    ) {
+    Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
         Column(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -263,7 +307,13 @@ private fun MomentCard(
                 }
             }
 
-            Text(post.content, style = MaterialTheme.typography.bodyLarge)
+            if (post.content.isNotBlank()) {
+                Text(post.content, style = MaterialTheme.typography.bodyLarge)
+            }
+
+            if (images.isNotEmpty()) {
+                PostImageGrid(images)
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -283,10 +333,7 @@ private fun MomentCard(
                     Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         postComments.forEach { comment ->
                             val commentName = if (comment.author == "assistant") partnerName else userName
-                            Text(
-                                text = "$commentName：${comment.content}",
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
+                            Text(text = "$commentName：${comment.content}", style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 }
@@ -314,6 +361,42 @@ private fun MomentCard(
             }
         }
     }
+}
+
+@Composable
+private fun PostImageGrid(images: List<String>) {
+    val rows = images.take(9).chunked(3)
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        rows.forEach { rowImages ->
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                rowImages.forEach { uri ->
+                    AsyncImage(
+                        model = uri,
+                        contentDescription = "空间照片",
+                        modifier = Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Crop,
+                    )
+                }
+                repeat(3 - rowImages.size) { Spacer(Modifier.weight(1f).aspectRatio(1f)) }
+            }
+        }
+    }
+}
+
+private fun decodePostImages(raw: String?): List<String> {
+    if (raw.isNullOrBlank()) return emptyList()
+    return runCatching {
+        if (raw.trimStart().startsWith("[")) {
+            val array = JSONArray(raw)
+            buildList {
+                for (index in 0 until array.length()) {
+                    array.optString(index).takeIf { it.isNotBlank() }?.let(::add)
+                }
+            }
+        } else {
+            listOf(raw)
+        }
+    }.getOrElse { listOf(raw) }
 }
 
 @Composable
