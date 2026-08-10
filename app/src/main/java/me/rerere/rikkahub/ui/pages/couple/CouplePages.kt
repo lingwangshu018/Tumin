@@ -457,6 +457,8 @@ private fun Modifier.replyPaperTexture(paper: ReplyPaperPreset): Modifier = draw
     }
 }
 
+private enum class JournalViewMode { PAGES, TIMELINE, BOOKMARKS }
+
 @Composable
 fun CoupleDiaryPage(vm: CoupleVM = koinViewModel()) {
     val entries by vm.diaries.collectAsStateWithLifecycle()
@@ -470,6 +472,7 @@ fun CoupleDiaryPage(vm: CoupleVM = koinViewModel()) {
 
     var query by remember { mutableStateOf("") }
     var selectedFolder by remember { mutableStateOf("全部心事") }
+    var viewMode by remember { mutableStateOf(JournalViewMode.PAGES) }
     var showAdd by remember { mutableStateOf(false) }
     var showFolderManager by remember { mutableStateOf(false) }
     var showCoverPicker by remember { mutableStateOf(false) }
@@ -493,11 +496,17 @@ fun CoupleDiaryPage(vm: CoupleVM = koinViewModel()) {
     }
     if (selectedFolder !in folders) selectedFolder = "全部心事"
 
-    val visibleEntries = entries.filter { entry ->
+    val filteredEntries = entries.filter { entry ->
         val folderMatch = selectedFolder == "全部心事" || entry.folder == selectedFolder
         val queryMatch = query.isBlank() || entry.title.contains(query, true) || entry.content.contains(query, true)
-        folderMatch && queryMatch
+        val modeMatch = viewMode != JournalViewMode.BOOKMARKS || entry.bookmarked
+        folderMatch && queryMatch && modeMatch
     }
+    val timelineGroups = remember(filteredEntries) {
+        val formatter = SimpleDateFormat("yyyy年MM月", Locale.getDefault())
+        filteredEntries.groupBy { formatter.format(Date(it.entryDate)) }
+    }
+    val bookmarkedCount = entries.count { it.bookmarked }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("我们的日记") }, navigationIcon = { BackButton() }) },
@@ -512,12 +521,20 @@ fun CoupleDiaryPage(vm: CoupleVM = koinViewModel()) {
                     userName = userName,
                     partnerName = partnerName,
                     entryCount = entries.size,
+                    bookmarkedCount = bookmarkedCount,
                     onChangeCover = { showCoverPicker = true },
                     onEditInscription = { showInscriptionEditor = true },
                 )
             }
             item {
                 OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp), placeholder = { Text("搜索心事……") }, singleLine = true)
+            }
+            item {
+                LazyRow(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item { FilterChip(selected = viewMode == JournalViewMode.PAGES, onClick = { viewMode = JournalViewMode.PAGES }, label = { Text("全部页面") }) }
+                    item { FilterChip(selected = viewMode == JournalViewMode.TIMELINE, onClick = { viewMode = JournalViewMode.TIMELINE }, label = { Text("时间轴") }) }
+                    item { FilterChip(selected = viewMode == JournalViewMode.BOOKMARKS, onClick = { viewMode = JournalViewMode.BOOKMARKS }, label = { Text("🔖 书签 $bookmarkedCount") }) }
+                }
             }
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -531,11 +548,52 @@ fun CoupleDiaryPage(vm: CoupleVM = koinViewModel()) {
                     }
                 }
             }
-            if (visibleEntries.isEmpty()) {
-                item { Text(if (query.isBlank()) "这里还没有写下心事。" else "没有找到这篇心事。", modifier = Modifier.padding(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            }
-            items(visibleEntries, key = { it.id }) { entry ->
-                JournalCard(entry = entry, partnerName = partnerName, onClick = { selectedDiaryId = entry.id })
+            if (filteredEntries.isEmpty()) {
+                item {
+                    Text(
+                        when {
+                            viewMode == JournalViewMode.BOOKMARKS -> "还没有收藏的日记。遇到特别想留下的一页，就给它夹一枚书签吧。"
+                            query.isNotBlank() -> "没有找到这篇心事。"
+                            else -> "这里还没有写下心事。"
+                        },
+                        modifier = Modifier.padding(20.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            } else if (viewMode == JournalViewMode.TIMELINE) {
+                timelineGroups.forEach { (month, monthEntries) ->
+                    item(key = "month-$month") {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
+                                Box(Modifier.size(12.dp))
+                            }
+                            Text(month, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            HorizontalDivider(modifier = Modifier.weight(1f))
+                        }
+                    }
+                    items(monthEntries, key = { "timeline-${it.id}" }) { entry ->
+                        JournalCard(
+                            entry = entry,
+                            partnerName = partnerName,
+                            onClick = { selectedDiaryId = entry.id },
+                            onBookmark = { vm.toggleDiaryBookmark(entry) },
+                            timeline = true,
+                        )
+                    }
+                }
+            } else {
+                items(filteredEntries, key = { it.id }) { entry ->
+                    JournalCard(
+                        entry = entry,
+                        partnerName = partnerName,
+                        onClick = { selectedDiaryId = entry.id },
+                        onBookmark = { vm.toggleDiaryBookmark(entry) },
+                    )
+                }
             }
         }
     }
@@ -619,6 +677,7 @@ fun CoupleDiaryPage(vm: CoupleVM = koinViewModel()) {
                     selectedDiaryId = null
                     editingDiaryId = current.id
                 },
+                onBookmark = { vm.toggleDiaryBookmark(current) },
                 onRequestReply = {
                     requestedReplyId = current.id
                     vm.requestDiaryReply(current)
@@ -637,6 +696,7 @@ private fun JournalCoverCard(
     userName: String,
     partnerName: String,
     entryCount: Int,
+    bookmarkedCount: Int,
     onChangeCover: () -> Unit,
     onEditInscription: () -> Unit,
 ) {
@@ -664,7 +724,10 @@ private fun JournalCoverCard(
             HorizontalDivider(color = cover.accent.copy(alpha = 0.3f))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("$userName × $partnerName", color = cover.text, style = MaterialTheme.typography.titleMedium)
-                Text("$entryCount 篇", color = cover.accent, style = MaterialTheme.typography.labelLarge)
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("$entryCount 篇", color = cover.accent, style = MaterialTheme.typography.labelLarge)
+                    if (bookmarkedCount > 0) Text("🔖 $bookmarkedCount 页珍藏", color = cover.text.copy(alpha = 0.68f), style = MaterialTheme.typography.labelSmall)
+                }
             }
         }
     }
@@ -731,19 +794,44 @@ private fun JournalCoverPickerDialog(
 }
 
 @Composable
-private fun JournalCard(entry: CoupleDiaryEntity, partnerName: String, onClick: () -> Unit) {
+private fun JournalCard(
+    entry: CoupleDiaryEntity,
+    partnerName: String,
+    onClick: () -> Unit,
+    onBookmark: () -> Unit,
+    timeline: Boolean = false,
+) {
     val paper = paperPreset(entry.paper)
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp), colors = CardDefaults.cardColors(containerColor = paper.background)) {
-        Column(Modifier.fillMaxWidth().journalPaperTexture(paper).padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(entry.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), color = paper.text)
-                Text(formatDate(entry.entryDate), style = MaterialTheme.typography.bodySmall, color = paper.text.copy(alpha = 0.68f))
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = if (timeline) 18.dp else 0.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        if (timeline) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(24.dp)) {
+                Surface(shape = CircleShape, color = paper.accent) { Box(Modifier.size(9.dp)) }
+                Box(Modifier.width(1.dp).height(118.dp).drawBehind { drawRect(paper.accent.copy(alpha = 0.24f)) })
             }
-            Text(entry.content.replace("\n", " ").take(120) + if (entry.content.length > 120) "…" else "", style = MaterialTheme.typography.bodyMedium, color = paper.text.copy(alpha = 0.78f))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("${paper.ornament} ${entry.folder ?: "全部心事"}", style = MaterialTheme.typography.labelMedium, color = paper.accent)
-                if (!entry.reply.isNullOrBlank()) Text("✉ 已收到 $partnerName 的回信", style = MaterialTheme.typography.labelMedium, color = paper.accent)
-                else Text("还没有回信", style = MaterialTheme.typography.labelMedium, color = paper.text.copy(alpha = 0.58f))
+        }
+        Card(
+            onClick = onClick,
+            modifier = Modifier.weight(1f).padding(horizontal = 14.dp),
+            colors = CardDefaults.cardColors(containerColor = paper.background),
+        ) {
+            Column(Modifier.fillMaxWidth().journalPaperTexture(paper).padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text(entry.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), color = paper.text)
+                    TextButton(onClick = onBookmark, colors = ButtonDefaults.textButtonColors(contentColor = paper.accent)) {
+                        Text(if (entry.bookmarked) "🔖" else "♡")
+                    }
+                }
+                Text(formatDate(entry.entryDate), style = MaterialTheme.typography.bodySmall, color = paper.text.copy(alpha = 0.68f))
+                Text(entry.content.replace("\n", " ").take(120) + if (entry.content.length > 120) "…" else "", style = MaterialTheme.typography.bodyMedium, color = paper.text.copy(alpha = 0.78f))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("${paper.ornament} ${entry.folder ?: "全部心事"}", style = MaterialTheme.typography.labelMedium, color = paper.accent)
+                    if (entry.bookmarked) Text("珍藏页", style = MaterialTheme.typography.labelMedium, color = paper.accent)
+                    if (!entry.reply.isNullOrBlank()) Text("✉ 已收到 $partnerName 的回信", style = MaterialTheme.typography.labelMedium, color = paper.accent)
+                    else Text("还没有回信", style = MaterialTheme.typography.labelMedium, color = paper.text.copy(alpha = 0.58f))
+                }
             }
         }
     }
@@ -864,6 +952,7 @@ private fun JournalReaderDialog(
     waitingForReply: Boolean,
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
+    onBookmark: () -> Unit,
     onRequestReply: () -> Unit,
     onReplyPaperChange: (String) -> Unit,
 ) {
@@ -906,7 +995,9 @@ private fun JournalReaderDialog(
                         ) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                 Text("THE PRIVATE JOURNAL", style = MaterialTheme.typography.labelMedium, color = paper.accent)
-                                Text(paper.ornament, style = MaterialTheme.typography.titleLarge, color = paper.accent)
+                                TextButton(onClick = onBookmark, colors = ButtonDefaults.textButtonColors(contentColor = paper.accent)) {
+                                    Text(if (entry.bookmarked) "🔖 已珍藏" else "♡ 加书签")
+                                }
                             }
                             Text(entry.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = paper.text)
                             Text("${formatDate(entry.entryDate)} · ${entry.folder ?: "全部心事"} · ${paper.name}", style = MaterialTheme.typography.bodySmall, color = paper.text.copy(alpha = 0.62f))
