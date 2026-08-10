@@ -7,8 +7,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.lazy.items as listItems
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -54,7 +54,7 @@ fun StickerUrlPicker(
     val client: OkHttpClient = koinInject()
     val scope = rememberCoroutineScope()
     var packs by remember { mutableStateOf(loadStickerPacks(context)) }
-    var selectedPackId by remember(packs) { mutableStateOf(packs.firstOrNull()?.id) }
+    var selectedPackId by remember { mutableStateOf(packs.firstOrNull()?.id) }
     var showImport by remember { mutableStateOf(false) }
     var managing by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
@@ -102,7 +102,7 @@ fun StickerUrlPicker(
                 }
             } else {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(packs, key = { it.id }) { pack ->
+                    listItems(packs, key = { it.id }) { pack ->
                         FilterChip(
                             selected = selectedPackId == pack.id,
                             onClick = { selectedPackId = pack.id },
@@ -114,7 +114,7 @@ fun StickerUrlPicker(
                 val selected = packs.firstOrNull { it.id == selectedPackId } ?: packs.first()
                 if (managing) {
                     LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(packs, key = { it.id }) { pack ->
+                        listItems(packs, key = { it.id }) { pack ->
                             Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
                                 Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Column(Modifier.weight(1f)) {
@@ -148,7 +148,7 @@ fun StickerUrlPicker(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        items(selected.stickers, key = { it.url }) { sticker ->
+                        gridItems(selected.stickers, key = { it.url }) { sticker ->
                             Surface(
                                 onClick = { onStickerSelected(sticker.url) },
                                 modifier = Modifier.aspectRatio(1f),
@@ -233,7 +233,7 @@ private fun ImportStickerPackDialog(
         },
         confirmButton = {
             FilledTonalButton(
-                enabled = url.trim().startsWith("http") && !loading,
+                enabled = (url.trim().startsWith("http://") || url.trim().startsWith("https://")) && !loading,
                 onClick = { onImport(name.trim(), url.trim()) },
             ) { Text("导入") }
         },
@@ -241,28 +241,36 @@ private fun ImportStickerPackDialog(
     )
 }
 
-private suspend fun fetchStickerPack(client: OkHttpClient, sourceUrl: String, requestedName: String): StickerPack = withContext(Dispatchers.IO) {
-    if (looksLikeImageUrl(sourceUrl)) {
+private suspend fun fetchStickerPack(
+    client: OkHttpClient,
+    sourceUrl: String,
+    requestedName: String,
+): StickerPack = withContext(Dispatchers.IO) {
+    val request = Request.Builder().url(sourceUrl).get().build()
+    client.newCall(request).execute().use { response ->
+        if (!response.isSuccessful) error("下载失败：HTTP ${response.code}")
+
+        val contentType = response.body.contentType()?.toString().orEmpty()
+        if (contentType.startsWith("image/", ignoreCase = true)) {
+            return@withContext StickerPack(
+                id = UUID.randomUUID().toString(),
+                name = requestedName.ifBlank { "我的表情" },
+                sourceUrl = sourceUrl,
+                stickers = listOf(StickerItem(requestedName.ifBlank { "表情" }, sourceUrl)),
+            )
+        }
+
+        val body = response.body.string()
+        val parsed = parseStickerSource(body)
+        val stickers = parsed.stickers.distinctBy { it.url }
+        if (stickers.isEmpty()) error("没有在这个 URL 里找到图片链接")
         return@withContext StickerPack(
             id = UUID.randomUUID().toString(),
-            name = requestedName.ifBlank { "我的表情" },
+            name = requestedName.ifBlank { parsed.name.ifBlank { "我的表情包" } },
             sourceUrl = sourceUrl,
-            stickers = listOf(StickerItem(requestedName.ifBlank { "表情" }, sourceUrl)),
+            stickers = stickers,
         )
     }
-
-    val request = Request.Builder().url(sourceUrl).get().build()
-    val body = client.newCall(request).execute().use { response ->
-        if (!response.isSuccessful) error("下载失败：HTTP ${response.code}")
-        response.body.string()
-    }
-    val parsed = parseStickerSource(body)
-    if (parsed.stickers.isEmpty()) error("没有在这个 URL 里找到图片链接")
-    parsed.copy(
-        id = UUID.randomUUID().toString(),
-        name = requestedName.ifBlank { parsed.name.ifBlank { "我的表情包" } },
-        sourceUrl = sourceUrl,
-    )
 }
 
 private data class ParsedStickerSource(val name: String = "", val stickers: List<StickerItem>)
@@ -270,7 +278,7 @@ private data class ParsedStickerSource(val name: String = "", val stickers: List
 private fun parseStickerSource(raw: String): ParsedStickerSource {
     val text = raw.trim()
     if (text.startsWith("[")) {
-        return ParsedStickerSource(stickers = parseStickerArray(JSONArray(text)))
+        return ParsedStickerSource(stickers = parseStickerArray(JSONArray(text)).distinctBy { it.url })
     }
     if (text.startsWith("{")) {
         val obj = JSONObject(text)
@@ -281,7 +289,7 @@ private fun parseStickerSource(raw: String): ParsedStickerSource {
             obj.has("images") -> obj.optJSONArray("images")
             else -> null
         }
-        if (array != null) return ParsedStickerSource(name, parseStickerArray(array))
+        if (array != null) return ParsedStickerSource(name, parseStickerArray(array).distinctBy { it.url })
         val singleUrl = obj.optString("url").ifBlank { obj.optString("image") }
         if (singleUrl.startsWith("http")) return ParsedStickerSource(name, listOf(StickerItem(name.ifBlank { "表情" }, singleUrl)))
     }
@@ -310,12 +318,7 @@ private fun parseStickerArray(array: JSONArray): List<StickerItem> = buildList {
             }
         }
     }
-}
-
-private fun looksLikeImageUrl(url: String): Boolean {
-    val clean = url.substringBefore('?').lowercase()
-    return clean.endsWith(".png") || clean.endsWith(".jpg") || clean.endsWith(".jpeg") || clean.endsWith(".webp") || clean.endsWith(".gif") || clean.endsWith(".avif")
-}
+}.distinctBy { it.url }
 
 private fun loadStickerPacks(context: Context): List<StickerPack> = runCatching {
     val raw = context.getSharedPreferences(STICKER_PREFS, Context.MODE_PRIVATE).getString(STICKER_PACKS_KEY, "[]") ?: "[]"
@@ -330,7 +333,7 @@ private fun loadStickerPacks(context: Context): List<StickerPack> = runCatching 
                     val url = sticker.optString("url")
                     if (url.isNotBlank()) add(StickerItem(sticker.optString("name"), url))
                 }
-            }
+            }.distinctBy { it.url }
             add(StickerPack(obj.getString("id"), obj.optString("name", "我的表情包"), obj.optString("sourceUrl"), stickers))
         }
     }
@@ -344,7 +347,7 @@ private fun saveStickerPacks(context: Context, packs: List<StickerPack>) {
             put("name", pack.name)
             put("sourceUrl", pack.sourceUrl)
             put("stickers", JSONArray().apply {
-                pack.stickers.forEach { sticker ->
+                pack.stickers.distinctBy { it.url }.forEach { sticker ->
                     put(JSONObject().apply {
                         put("name", sticker.name)
                         put("url", sticker.url)
