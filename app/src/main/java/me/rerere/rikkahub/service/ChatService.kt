@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -70,6 +70,8 @@ import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.tools.LocalTools
+import me.rerere.rikkahub.data.ai.tools.ToolSurfaceBuilder
+import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 import me.rerere.rikkahub.data.ai.tools.SystemTools
 import me.rerere.rikkahub.data.ai.tools.ToolNaming
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
@@ -162,6 +164,7 @@ class ChatService(
     private val templateTransformer: TemplateTransformer,
     private val providerManager: ProviderManager,
     private val localTools: LocalTools,
+    private val toolSurfaceBuilder: ToolSurfaceBuilder,
     val mcpManager: McpManager,
     private val filesManager: FilesManager,
     private val skillManager: SkillManager,
@@ -878,50 +881,16 @@ class ChatService(
                     add(workspaceReminderTransformer)
                 },
                 outputTransformers = outputTransformers,
-                tools = buildList {
-                    if (settings.enableWebSearch) {
-                        addAll(createSearchTools(settings))
-                    }
-addAll(localTools.getTools(assistant.localTools, me.rerere.rikkahub.data.ai.tools.ToolInvocationContext(
-    callerAssistantId = assistant.id.toString(),
-    callerConversationId = conversationId.toString(),
-)))
-                    // System tools (location, notifications, calendar, alarm, camera)
-                    val systemToolsOptions = settings.systemToolsSetting.getEnabledOptions().toMutableSet()
-                    // 如果存在启用的外置记忆库，始终启用 supabase_query 工具
-                    if (settings.externalMemories.any { it.enabled }) {
-                        systemToolsOptions.add(me.rerere.rikkahub.data.ai.tools.SystemToolOption.SupabaseQuery)
-                    }
-                    if (systemToolsOptions.isNotEmpty()) {
-                        val systemTools = SystemTools(context, settings)
-                        addAll(systemTools.getTools(systemToolsOptions, conversation.currentMessages, filesManager))
-                    }
-                    addAll(createWorkspaceToolsIfReady(assistant.workspaceId?.toString(), conversation.workspaceCwd))
-                    if (assistant.enabledSkills.isNotEmpty()) {
-                        addAll(
-                            createSkillTools(
-                                enabledSkills = assistant.enabledSkills,
-                                allSkills = skillManager.listSkills(),
-                                skillManager = skillManager,
-                            )
-                        )
-                    }
-                    mcpManager.getAllAvailableTools().forEach { (serverId, tool) ->
-                        add(
-                            Tool(
-                                name = ToolNaming.buildMcpToolName(serverId, tool.name),
-                                description = tool.description ?: "",
-                                parameters = { tool.inputSchema },
-                                needsApproval = tool.needsApproval,
-                                execute = {
-                                    mcpManager.callTool(serverId, tool.name, it.jsonObject)
-                                },
-                            )
-                        )
-                    }
-                    // Plugin tools
-                    addAll(pluginToolProvider.getTools())
-                },
+                tools = toolSurfaceBuilder.build(
+                    assistant = assistant,
+                    settings = settings,
+                    invocationContext = ToolInvocationContext(
+                        callerAssistantId = assistant.id.toString(),
+                        callerConversationId = conversationId.toString(),
+                    ),
+                    recentMessages = conversation.currentMessages,
+                    workspaceCwd = conversation.workspaceCwd,
+                ),
                 pluginPromptInjections = pluginToolProvider.getPluginPromptInjections(),
                 conversationId = conversationId.toString(),
             ).onCompletion {
