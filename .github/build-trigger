@@ -1,4 +1,4 @@
-build: 2026-08-10T22:30+08:00
+build: 2026-08-10T22:47+08:00
 source: latest master
-revision: 817e268
-purpose: rebuild v2.3.4 after restoring known-good Android Gradle configuration
+revision: 4f9c8c1
+purpose: rebuild v2.3.4 after fixing suspend anniversary query in AI tools
