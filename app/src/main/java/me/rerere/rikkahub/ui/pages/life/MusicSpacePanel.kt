@@ -22,10 +22,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
-import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -51,6 +47,7 @@ private data class MusicTrack(
     val sourceUrl: String,
     val playableUrl: String = "",
     val neteaseId: String = "",
+    val lyricsLrc: String = "",
     val createdAt: Long = System.currentTimeMillis(),
 )
 
@@ -59,32 +56,14 @@ fun MusicSpacePanel() {
     val context = LocalContext.current
     val client: OkHttpClient = koinInject()
     val scope = rememberCoroutineScope()
+    val playback by MusicPlaybackSession.state.collectAsState()
     var tracks by remember { mutableStateOf(loadMusicTracks(context)) }
     var showImportMenu by remember { mutableStateOf(false) }
     var showNeteaseImport by remember { mutableStateOf(false) }
     var showDirectUrlImport by remember { mutableStateOf(false) }
-    var selectedTrack by remember { mutableStateOf<MusicTrack?>(null) }
-    var togetherMode by remember { mutableStateOf(false) }
+    var togetherMode by remember { mutableStateOf(playback.togetherMode) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-
-    val player = remember {
-        ExoPlayer.Builder(context).build()
-    }
-    var isPlaying by remember { mutableStateOf(false) }
-
-    DisposableEffect(player) {
-        val listener = object : Player.Listener {
-            override fun onIsPlayingChanged(value: Boolean) {
-                isPlaying = value
-            }
-        }
-        player.addListener(listener)
-        onDispose {
-            player.removeListener(listener)
-            player.release()
-        }
-    }
 
     fun persist(updated: List<MusicTrack>) {
         tracks = updated
@@ -96,10 +75,16 @@ fun MusicSpacePanel() {
             openMusicSource(context, track)
             return
         }
-        selectedTrack = track
-        player.setMediaItem(MediaItem.fromUri(track.playableUrl.toUri()))
-        player.prepare()
-        player.play()
+        MusicPlaybackSession.play(
+            context = context,
+            trackId = track.id,
+            title = track.title,
+            artist = track.artist,
+            coverUrl = track.coverUrl,
+            playableUrl = track.playableUrl,
+            togetherMode = togetherMode,
+            lyrics = MusicPlaybackSession.parseLrc(track.lyricsLrc),
+        )
     }
 
     val localImporter = rememberLauncherForActivityResult(
@@ -120,14 +105,13 @@ fun MusicSpacePanel() {
                 playableUrl = uri.toString(),
             )
             persist(tracks + track)
-            selectedTrack = track
         }
     }
 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp, 18.dp, 16.dp, if (selectedTrack != null) 116.dp else 88.dp),
+            contentPadding = PaddingValues(16.dp, 18.dp, 16.dp, if (playback.active) 116.dp else 88.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item {
@@ -163,7 +147,10 @@ fun MusicSpacePanel() {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text("歌曲 ${tracks.size}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.weight(1f))
-                        TextButton(onClick = { togetherMode = !togetherMode }) {
+                        TextButton(onClick = {
+                            togetherMode = !togetherMode
+                            MusicPlaybackSession.setTogetherMode(togetherMode)
+                        }) {
                             Text(if (togetherMode) "💕 双人听" else "🎧 单人听")
                         }
                     }
@@ -172,12 +159,11 @@ fun MusicSpacePanel() {
                     MusicTrackRow(
                         index = index + 1,
                         track = track,
-                        selected = selectedTrack?.id == track.id,
+                        selected = playback.trackId == track.id,
                         onClick = { play(track) },
                         onDelete = {
-                            if (selectedTrack?.id == track.id) {
-                                player.stop()
-                                selectedTrack = null
+                            if (playback.trackId == track.id) {
+                                MusicPlaybackSession.stop()
                             }
                             persist(tracks.filterNot { it.id == track.id })
                         },
@@ -186,13 +172,14 @@ fun MusicSpacePanel() {
             }
         }
 
-        selectedTrack?.let { track ->
+        val activeTrack = tracks.firstOrNull { it.id == playback.trackId }
+        if (playback.active && activeTrack != null) {
             MusicMiniPlayer(
-                track = track,
-                isPlaying = isPlaying,
-                togetherMode = togetherMode,
+                track = activeTrack,
+                isPlaying = playback.isPlaying,
+                togetherMode = playback.togetherMode,
                 modifier = Modifier.align(Alignment.BottomCenter),
-                onPlayPause = { if (player.isPlaying) player.pause() else player.play() },
+                onPlayPause = { MusicPlaybackSession.togglePlayPause() },
                 onOpen = { },
             )
         }
@@ -236,7 +223,7 @@ fun MusicSpacePanel() {
     if (showNeteaseImport) {
         MusicTextImportDialog(
             title = "从网易云音乐导入",
-            hint = "粘贴网易云分享文案或链接。支持歌曲 / 歌单链接；第一版先导入公开信息和来源。",
+            hint = "粘贴网易云分享文案或链接。歌曲会尽量同时导入公开歌词；暂时没有可播放音源的歌曲仍保留网易云来源。",
             label = "网易云分享链接或分享文案",
             loading = loading,
             error = error,
@@ -265,7 +252,7 @@ fun MusicSpacePanel() {
     if (showDirectUrlImport) {
         MusicDirectUrlDialog(
             onDismiss = { showDirectUrlImport = false },
-            onSave = { title, artist, url ->
+            onSave = { title, artist, url, lyrics ->
                 persist(
                     tracks + MusicTrack(
                         title = title,
@@ -273,6 +260,7 @@ fun MusicSpacePanel() {
                         source = MusicSource.DIRECT_URL,
                         sourceUrl = url,
                         playableUrl = url,
+                        lyricsLrc = lyrics,
                     )
                 )
                 showDirectUrlImport = false
@@ -369,6 +357,7 @@ private fun MusicTrackRow(
                                 MusicSource.NETEASE -> "网易云"
                             }
                         )
+                        if (track.lyricsLrc.isNotBlank()) append(" · 有歌词")
                     },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -462,24 +451,33 @@ private fun MusicTextImportDialog(
 }
 
 @Composable
-private fun MusicDirectUrlDialog(onDismiss: () -> Unit, onSave: (String, String, String) -> Unit) {
+private fun MusicDirectUrlDialog(onDismiss: () -> Unit, onSave: (String, String, String, String) -> Unit) {
     var title by remember { mutableStateOf("") }
     var artist by remember { mutableStateOf("") }
     var url by remember { mutableStateOf("") }
+    var lyrics by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("导入音频 URL") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.heightIn(max = 560.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(title, { title = it }, label = { Text("歌名") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(artist, { artist = it }, label = { Text("歌手（可选）") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(url, { url = it }, label = { Text("可播放的音频 URL") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    lyrics,
+                    { lyrics = it },
+                    label = { Text("LRC 歌词（可选）") },
+                    placeholder = { Text("[00:12.50]第一句歌词") },
+                    minLines = 3,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         },
         confirmButton = {
             TextButton(
                 enabled = title.isNotBlank() && (url.startsWith("http://") || url.startsWith("https://")),
-                onClick = { onSave(title.trim(), artist.trim(), url.trim()) },
+                onClick = { onSave(title.trim(), artist.trim(), url.trim(), lyrics.trim()) },
             ) { Text("保存") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
@@ -508,6 +506,7 @@ private suspend fun importNeteaseTrack(client: OkHttpClient, rawInput: String): 
         val description = extractMeta(html, "og:description")
         val artist = description.substringBefore("。").substringBefore("-").trim().ifBlank { "网易云音乐" }
         val cover = extractMeta(html, "og:image")
+        val lyric = if (type == "song" && id.isNotBlank()) fetchNeteaseLyric(client, id) else ""
         MusicTrack(
             title = title.cleanNeteaseTitle(),
             artist = if (type == "playlist") "网易云歌单" else artist,
@@ -516,9 +515,23 @@ private suspend fun importNeteaseTrack(client: OkHttpClient, rawInput: String): 
             sourceUrl = finalUrl,
             playableUrl = "",
             neteaseId = id,
+            lyricsLrc = lyric,
         )
     }
 }
+
+private fun fetchNeteaseLyric(client: OkHttpClient, id: String): String = runCatching {
+    val request = Request.Builder()
+        .url("https://music.163.com/api/song/lyric?id=$id&lv=1&kv=-1&tv=-1")
+        .header("Referer", "https://music.163.com/")
+        .get()
+        .build()
+    client.newCall(request).execute().use { response ->
+        if (!response.isSuccessful) return@runCatching ""
+        val body = response.body.string()
+        JSONObject(body).optJSONObject("lrc")?.optString("lyric").orEmpty()
+    }
+}.getOrDefault("")
 
 private fun extractFirstUrl(text: String): String? =
     Regex("https?://[^\\s]+", RegexOption.IGNORE_CASE)
@@ -583,6 +596,7 @@ private fun loadMusicTracks(context: Context): List<MusicTrack> = runCatching {
                     sourceUrl = item.optString("sourceUrl"),
                     playableUrl = item.optString("playableUrl"),
                     neteaseId = item.optString("neteaseId"),
+                    lyricsLrc = item.optString("lyricsLrc"),
                     createdAt = item.optLong("createdAt", System.currentTimeMillis()),
                 )
             )
@@ -602,6 +616,7 @@ private fun saveMusicTracks(context: Context, tracks: List<MusicTrack>) {
             put("sourceUrl", track.sourceUrl)
             put("playableUrl", track.playableUrl)
             put("neteaseId", track.neteaseId)
+            put("lyricsLrc", track.lyricsLrc)
             put("createdAt", track.createdAt)
         })
     }
