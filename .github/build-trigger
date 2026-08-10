@@ -1,4 +1,4 @@
-build: 2026-08-10T21:22+08:00
+build: 2026-08-10T21:31+08:00
 source: latest master
-revision: de61be9
-purpose: rebuild v2.3.3 with callable couple-space read/post/comment tools
+revision: 71f6630
+purpose: rebuild v2.3.3 with adaptive 30-day cycle and 7-day period prediction
