@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.repository
 import java.util.UUID
 import me.rerere.rikkahub.data.db.dao.CoupleDAO
 import me.rerere.rikkahub.data.db.entity.*
+import org.json.JSONArray
 
 class CoupleRepository(private val dao: CoupleDAO) {
     val relationship = dao.relationship()
@@ -17,12 +18,18 @@ class CoupleRepository(private val dao: CoupleDAO) {
         dao.saveRelationship(CoupleRelationshipEntity(UUID.randomUUID().toString(), assistantId, startedAt, System.currentTimeMillis()))
     }
 
-    suspend fun addPost(relationshipId: String, author: String, content: String): CouplePostEntity {
+    suspend fun addPost(
+        relationshipId: String,
+        author: String,
+        content: String,
+        imageUris: List<String> = emptyList(),
+    ): CouplePostEntity {
         val post = CouplePostEntity(
             id = UUID.randomUUID().toString(),
             relationshipId = relationshipId,
             author = author,
             content = content,
+            imageUri = imageUris.take(9).takeIf { it.isNotEmpty() }?.let { JSONArray(it).toString() },
             createdAt = System.currentTimeMillis(),
         )
         dao.savePost(post)
