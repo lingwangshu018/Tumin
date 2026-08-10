@@ -89,6 +89,7 @@ val appModule = module {
             workspaceRepository = get(),
             json = get(),
             memoryRepository = get(),
+            coupleRepository = get(),
         )
     }
 
