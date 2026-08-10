@@ -34,6 +34,11 @@ class CoupleVM(
         repository.bind(assistantId, startedAt)
     }
 
+    fun setJournalCover(cover: String) {
+        val relation = relationship.value ?: return
+        viewModelScope.launch { repository.updateJournalCover(relation, cover) }
+    }
+
     fun addPost(content: String, imageUris: List<String> = emptyList()) {
         val relation = relationship.value ?: return
         if (content.isBlank() && imageUris.isEmpty()) return
