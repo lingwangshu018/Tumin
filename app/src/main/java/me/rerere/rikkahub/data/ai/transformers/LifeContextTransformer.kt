@@ -7,6 +7,7 @@ import me.rerere.rikkahub.utils.StickerAiSupport
 import org.json.JSONArray
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
+import kotlin.math.roundToInt
 
 /** Makes recent life-space, health-cycle, music, shared-reading, and allowed sticker context available to conversations. */
 object LifeContextTransformer : InputMessageTransformer {
@@ -19,7 +20,6 @@ object LifeContextTransformer : InputMessageTransformer {
             buildString {
                 for (index in start until array.length()) {
                     val item = array.getJSONObject(index)
-                    // STATUS 已升级为独立周期模块，旧记录仍保留，但不重复注入。
                     if (item.optString("section") == "STATUS") continue
                     append("- [")
                     append(item.optString("section"))
@@ -118,21 +118,46 @@ object LifeContextTransformer : InputMessageTransformer {
                     periods.getJSONObject(i).optString("start").takeIf { it.isNotBlank() }?.let { add(LocalDate.parse(it)) }
                 }
             }.sorted()
-            val defaultCycle = prefs.getInt("cycle_length", 28)
-            val intervals = starts.zipWithNext { a, b -> ChronoUnit.DAYS.between(a, b).toInt() }.filter { it in 15..60 }.takeLast(6)
-            val cycle = intervals.takeIf { it.isNotEmpty() }?.average()?.toInt()?.coerceIn(20, 45) ?: defaultCycle
+
+            val defaultCycle = prefs.getInt("cycle_length", 30)
+            val defaultPeriod = prefs.getInt("period_length", 7)
+            val intervals = starts.zipWithNext { a, b -> ChronoUnit.DAYS.between(a, b).toInt() }
+                .filter { it in 15..60 }
+                .takeLast(6)
+            val learnedCycle = if (intervals.size >= 2) {
+                intervals.average().roundToInt().coerceIn(20, 45)
+            } else null
+            val cycle = learnedCycle ?: defaultCycle
+
+            val completedLengths = buildList {
+                for (i in 0 until periods.length()) {
+                    val item = periods.getJSONObject(i)
+                    val start = item.optString("start").takeIf { it.isNotBlank() }?.let(LocalDate::parse) ?: continue
+                    val end = item.optString("end").takeIf { it.isNotBlank() }?.let(LocalDate::parse) ?: continue
+                    val length = ChronoUnit.DAYS.between(start, end).toInt() + 1
+                    if (length in 1..12) add(length)
+                }
+            }.takeLast(6)
+            val learnedPeriod = if (completedLengths.size >= 2) {
+                completedLengths.average().roundToInt().coerceIn(2, 10)
+            } else null
+            val periodLength = learnedPeriod ?: defaultPeriod
+
             val lastStart = starts.lastOrNull()
             val today = LocalDate.now()
             val predicted = lastStart?.plusDays(cycle.toLong())
             val daysUntil = predicted?.let { ChronoUnit.DAYS.between(today, it).toInt() }
 
             var currentPeriodDay: Int? = null
+            var currentPeriodIsPredictedEnd = false
             for (i in 0 until periods.length()) {
                 val item = periods.getJSONObject(i)
                 val start = item.optString("start").takeIf { it.isNotBlank() }?.let(LocalDate::parse) ?: continue
-                val end = item.optString("end").takeIf { it.isNotBlank() }?.let(LocalDate::parse)
-                if (!today.isBefore(start) && (end == null || !today.isAfter(end))) {
+                val recordedEnd = item.optString("end").takeIf { it.isNotBlank() }?.let(LocalDate::parse)
+                val displayEnd = recordedEnd ?: start.plusDays((periodLength - 1).coerceAtLeast(0).toLong())
+                if (!today.isBefore(start) && !today.isAfter(displayEnd)) {
                     currentPeriodDay = ChronoUnit.DAYS.between(start, today).toInt() + 1
+                    currentPeriodIsPredictedEnd = recordedEnd == null
                 }
             }
 
@@ -147,9 +172,13 @@ object LifeContextTransformer : InputMessageTransformer {
             buildString {
                 appendLine("<body_cycle_context>")
                 when {
+                    currentPeriodDay != null && currentPeriodIsPredictedEnd -> appendLine("用户记录了本轮经期开始，目前是第 ${currentPeriodDay} 天；结束日尚未手动确认，暂按约 $periodLength 天经期长度预测。")
                     currentPeriodDay != null -> appendLine("用户当前记录为经期第 ${currentPeriodDay} 天。")
-                    daysUntil != null && daysUntil >= 0 -> appendLine("按用户自己的历史记录简单估算，距离下一次经期约 $daysUntil 天。")
-                    predicted != null -> appendLine("按历史记录估算的经期日期已经经过，实际情况可能与预测不同。")
+                    daysUntil != null && daysUntil >= 0 -> {
+                        if (learnedCycle != null) appendLine("根据用户最近的实际周期记录估算，距离下一次经期约 $daysUntil 天。")
+                        else appendLine("历史记录还少，当前先按约 $cycle 天周期估算，距离下一次经期约 $daysUntil 天。")
+                    }
+                    predicted != null -> appendLine("当前预测的经期开始日期已经经过，实际情况可能与预测不同。")
                 }
                 if (recentLogs.isNotEmpty()) {
                     appendLine("最近身体记录：")
@@ -166,7 +195,7 @@ object LifeContextTransformer : InputMessageTransformer {
                         if (parts.isNotEmpty()) appendLine("- ${item.optString("date")}: ${parts.joinToString("；")}")
                     }
                 }
-                appendLine("请把这些信息当作用户主动允许你知道的生活状态，自然关心即可；不要把周期预测说成医学结论，也不要反复复述敏感数据。")
+                appendLine("请把这些信息当作用户主动允许你知道的生活状态，自然关心即可；所有日期都是记录或估算，不要把周期预测说成医学结论，也不要反复复述敏感数据。")
                 append("</body_cycle_context>")
             }.trim()
         }.getOrDefault("")
