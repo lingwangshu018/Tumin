@@ -8,11 +8,12 @@ import kotlinx.serialization.json.Json
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.ImageGenerationParams
 import me.rerere.ai.provider.ProviderManager
-import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.ImageAspectRatio
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.ai.ui.handleMessageChunk
+import me.rerere.rikkahub.data.ai.GenerationChunk
+import me.rerere.rikkahub.data.ai.GenerationHandler
+import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
@@ -33,6 +34,7 @@ data class CoupleAiPostDraft(
 class CoupleAiService : KoinComponent {
     private val settingsStore: SettingsStore by inject()
     private val providerManager: ProviderManager by inject()
+    private val generationHandler: GenerationHandler by inject()
     private val filesManager: FilesManager by inject()
     private val genMediaRepository: GenMediaRepository by inject()
 
@@ -254,16 +256,8 @@ class CoupleAiService : KoinComponent {
             ?: return null
         val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId)
             ?: return null
-        val providerSetting = model.findProvider(settings.providers)
-            ?: return null
-        val provider = providerManager.getProviderByType(providerSetting)
 
         val systemPrompt = buildString {
-            if (assistant.systemPrompt.isNotBlank()) {
-                append(assistant.systemPrompt)
-                appendLine()
-                appendLine()
-            }
             appendLine("## 情侣空间互动")
             appendLine("你正在以自己的身份和恋人共同使用情侣空间，其中包括 QQ 空间动态与“我们的日记 / THE PRIVATE JOURNAL”。")
             appendLine("保持角色原本的性格、称呼习惯和关系状态，不要突然变成客服、旁白或无关助手。")
@@ -289,31 +283,19 @@ class CoupleAiService : KoinComponent {
             ),
         )
 
-        val params = TextGenerationParams(
+        var generated = messages
+        generationHandler.generateText(
+            settings = settings,
             model = model,
-            temperature = assistant.temperature,
-            topP = assistant.topP,
-            maxTokens = assistant.maxTokens,
-            customHeaders = buildList {
-                addAll(assistant.customHeaders)
-                addAll(model.customHeaders)
-            },
-            customBody = buildList {
-                addAll(assistant.customBodies)
-                addAll(model.customBodies)
-            },
-        )
-
-        var streamed = messages
-        provider.streamText(
-            providerSetting = providerSetting,
             messages = messages,
-            params = params,
+            outputTransformers = listOf(ThinkTagTransformer),
+            assistant = assistant,
+            maxSteps = 1,
         ).collect { chunk ->
-            streamed = streamed.handleMessageChunk(chunk = chunk, model = model)
+            if (chunk is GenerationChunk.Messages) generated = chunk.messages
         }
 
-        return streamed.lastOrNull { it.role == MessageRole.ASSISTANT }
+        return generated.lastOrNull { it.role == MessageRole.ASSISTANT }
             ?.parts
             ?.filterIsInstance<UIMessagePart.Text>()
             ?.joinToString("\n") { it.text }
