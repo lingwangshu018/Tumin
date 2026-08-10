@@ -24,6 +24,19 @@ data class CouplePostEntity(
     @ColumnInfo("created_at") val createdAt: Long,
 )
 
+@Entity(
+    tableName = "couple_comment",
+    indices = [Index("relationship_id"), Index("post_id"), Index("created_at")],
+)
+data class CoupleCommentEntity(
+    @PrimaryKey val id: String,
+    @ColumnInfo("relationship_id") val relationshipId: String,
+    @ColumnInfo("post_id") val postId: String,
+    val author: String,
+    val content: String,
+    @ColumnInfo("created_at") val createdAt: Long,
+)
+
 @Entity(tableName = "couple_diary", indices = [Index("relationship_id"), Index("entry_date")])
 data class CoupleDiaryEntity(
     @PrimaryKey val id: String,
