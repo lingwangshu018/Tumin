@@ -120,6 +120,9 @@ class CoupleRepository(private val dao: CoupleDAO) {
         )
     )
 
+    suspend fun toggleDiaryBookmark(entry: CoupleDiaryEntity) =
+        dao.saveDiary(entry.copy(bookmarked = !entry.bookmarked))
+
     suspend fun saveDiaryReply(
         entry: CoupleDiaryEntity,
         reply: String,
