@@ -101,7 +101,7 @@ fun LifeHubPage() {
     Scaffold(
         topBar = { TopAppBar(title = { Text("生活空间") }, navigationIcon = { BackButton() }) },
         floatingActionButton = {
-            if (section != LifeSection.HOME && section != LifeSection.CALENDAR) {
+            if (section != LifeSection.HOME && section != LifeSection.CALENDAR && section != LifeSection.READING) {
                 FloatingActionButton(onClick = { showAdd = true }) {
                     Text(if (section == LifeSection.MEMO) "✎" else "＋", style = MaterialTheme.typography.titleLarge)
                 }
@@ -131,6 +131,8 @@ fun LifeHubPage() {
                 )
             } else if (section == LifeSection.CALENDAR) {
                 LifeCalendarPanel()
+            } else if (section == LifeSection.READING) {
+                ReadingSpacePanel()
             } else {
                 val filtered = entries.filter { it.section == section }.sortedByDescending { it.createdAt }
                 LazyColumn(
