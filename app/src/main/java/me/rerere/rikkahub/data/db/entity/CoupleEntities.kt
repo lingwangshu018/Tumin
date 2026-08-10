@@ -45,6 +45,10 @@ data class CoupleDiaryEntity(
     val title: String,
     val content: String,
     @ColumnInfo("entry_date") val entryDate: Long,
+    val folder: String? = null,
+    val paper: String? = null,
+    val reply: String? = null,
+    @ColumnInfo("reply_at") val replyAt: Long? = null,
     @ColumnInfo("created_at") val createdAt: Long,
 )
 
