@@ -59,11 +59,13 @@ fun CoupleAnniversaryBookPage(vm: CoupleVM = koinViewModel()) {
     var viewingId by remember { mutableStateOf<String?>(null) }
 
     val now = System.currentTimeMillis()
-    val nextEntry = entries.minByOrNull { nextOccurrence(it, now) }
+    val nextEntry = entries
+        .filter { daysUntil(it, now) >= 0L }
+        .minByOrNull { nextOccurrence(it, now) }
     val visible = when (filter) {
         AnniversaryFilter.ALL -> entries.sortedBy { nextOccurrence(it, now) }
         AnniversaryFilter.FAVORITE -> entries.filter { it.favorite }.sortedBy { nextOccurrence(it, now) }
-        AnniversaryFilter.UPCOMING -> entries.filter { daysUntil(it, now) in 0..30 }.sortedBy { nextOccurrence(it, now) }
+        AnniversaryFilter.UPCOMING -> entries.filter { daysUntil(it, now) in 0L..30L }.sortedBy { nextOccurrence(it, now) }
     }
 
     Scaffold(
