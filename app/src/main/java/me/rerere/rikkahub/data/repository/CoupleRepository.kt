@@ -11,6 +11,7 @@ class CoupleRepository(private val dao: CoupleDAO) {
     fun posts(id: String) = dao.posts(id)
     fun comments(id: String) = dao.comments(id)
     fun diaries(id: String) = dao.diaries(id)
+    fun diaryFolders(id: String) = dao.diaryFolders(id)
     fun anniversaries(id: String) = dao.anniversaries(id)
 
     suspend fun bind(assistantId: String, startedAt: Long) {
@@ -83,11 +84,48 @@ class CoupleRepository(private val dao: CoupleDAO) {
         return entry
     }
 
+    suspend fun updateDiary(
+        entry: CoupleDiaryEntity,
+        title: String,
+        content: String,
+        folder: String,
+        paper: String,
+    ) = dao.saveDiary(
+        entry.copy(
+            title = title,
+            content = content,
+            folder = folder,
+            paper = paper,
+        )
+    )
+
     suspend fun saveDiaryReply(entry: CoupleDiaryEntity, reply: String) = dao.saveDiary(
         entry.copy(reply = reply, replyAt = System.currentTimeMillis())
     )
 
     suspend fun deleteDiary(entry: CoupleDiaryEntity) = dao.deleteDiary(entry)
+
+    suspend fun addDiaryFolder(relationshipId: String, name: String, sortOrder: Int = 0): CoupleDiaryFolderEntity {
+        val folder = CoupleDiaryFolderEntity(
+            id = UUID.randomUUID().toString(),
+            relationshipId = relationshipId,
+            name = name,
+            sortOrder = sortOrder,
+            createdAt = System.currentTimeMillis(),
+        )
+        dao.saveDiaryFolder(folder)
+        return folder
+    }
+
+    suspend fun renameDiaryFolder(folder: CoupleDiaryFolderEntity, newName: String) {
+        dao.renameDiaryFolderOnEntries(folder.relationshipId, folder.name, newName)
+        dao.saveDiaryFolder(folder.copy(name = newName))
+    }
+
+    suspend fun deleteDiaryFolder(folder: CoupleDiaryFolderEntity) {
+        dao.clearDiaryFolderOnEntries(folder.relationshipId, folder.name)
+        dao.deleteDiaryFolder(folder)
+    }
 
     suspend fun addAnniversary(relationshipId: String, title: String, date: Long, yearly: Boolean) = dao.saveAnniversary(
         CoupleAnniversaryEntity(UUID.randomUUID().toString(), relationshipId, title, date, yearly, System.currentTimeMillis())
