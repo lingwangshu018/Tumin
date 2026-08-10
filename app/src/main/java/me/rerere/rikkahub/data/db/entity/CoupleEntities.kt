@@ -76,5 +76,8 @@ data class CoupleAnniversaryEntity(
     val title: String,
     @ColumnInfo("event_date") val eventDate: Long,
     val yearly: Boolean = true,
+    @ColumnInfo(name = "category", defaultValue = "love") val category: String = "love",
+    @ColumnInfo("note") val note: String? = null,
+    @ColumnInfo(name = "favorite", defaultValue = "0") val favorite: Boolean = false,
     @ColumnInfo("created_at") val createdAt: Long,
 )
