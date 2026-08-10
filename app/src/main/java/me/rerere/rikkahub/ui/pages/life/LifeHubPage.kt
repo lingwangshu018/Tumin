@@ -34,7 +34,7 @@ private enum class LifeSection(val title: String, val emoji: String, val hint: S
     STATUS("周期与身体", "🌸", "记录经期、周期、身体状态、心情与精力"),
     MEMO("备忘录", "📝", "把想法、待办和两个人的小计划好好收起来"),
     CALENDAR("日历提醒", "📅", "把计划和纪念日加入系统日历"),
-    MUSIC("音乐记忆", "🎵", "收藏一起听过的歌和当时的心情"),
+    MUSIC("一起听", "🎵", "导入歌曲、一起听歌并留下共同音乐记忆"),
     READING("共读书架", "📖", "记录书籍、进度、书签和共同想法"),
 }
 
@@ -101,7 +101,12 @@ fun LifeHubPage() {
     Scaffold(
         topBar = { TopAppBar(title = { Text("生活空间") }, navigationIcon = { BackButton() }) },
         floatingActionButton = {
-            if (section != LifeSection.HOME && section != LifeSection.STATUS && section != LifeSection.CALENDAR && section != LifeSection.READING) {
+            if (section != LifeSection.HOME &&
+                section != LifeSection.STATUS &&
+                section != LifeSection.CALENDAR &&
+                section != LifeSection.MUSIC &&
+                section != LifeSection.READING
+            ) {
                 FloatingActionButton(onClick = { showAdd = true }) {
                     Text(if (section == LifeSection.MEMO) "✎" else "＋", style = MaterialTheme.typography.titleLarge)
                 }
@@ -133,6 +138,8 @@ fun LifeHubPage() {
                 )
             } else if (section == LifeSection.CALENDAR) {
                 LifeCalendarPanel()
+            } else if (section == LifeSection.MUSIC) {
+                MusicSpacePanel()
             } else if (section == LifeSection.READING) {
                 ReadingSpacePanel()
             } else {
@@ -176,9 +183,6 @@ fun LifeHubPage() {
                                     if (entry.tag.isNotBlank()) Text(entry.tag, color = MaterialTheme.colorScheme.primary)
                                 }
                                 if (entry.detail.isNotBlank()) Text(entry.detail)
-                                if (entry.section == LifeSection.MUSIC) TextButton(onClick = { openMusic(context, entry.title) }) {
-                                    Text("一起听这首歌")
-                                }
                                 TextButton(onClick = { saveAll(entries.filterNot { it.id == entry.id }) }) { Text("删除") }
                             }
                         }
@@ -780,13 +784,6 @@ private fun openMemoCalendar(context: Context, entry: LifeEntry) {
         putExtra(CalendarContract.EXTRA_EVENT_END_TIME, start + 60 * 60 * 1000)
     }
     context.startActivity(intent)
-}
-
-private fun openMusic(context: Context, title: String) {
-    val query = Uri.encode(title)
-    val appIntent = Intent(Intent.ACTION_VIEW, Uri.parse("orpheus://search?keyword=$query"))
-    val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://music.163.com/#/search/m/?s=$query"))
-    runCatching { context.startActivity(appIntent) }.getOrElse { context.startActivity(webIntent) }
 }
 
 private fun formatMemoDate(value: Long): String = DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(value))
