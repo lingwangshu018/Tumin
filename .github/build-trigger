@@ -1,4 +1,4 @@
-build: 2026-08-11T01:25+08:00
+build: 2026-08-11T01:32+08:00
 source: latest master
-revision: ec4f16f
-purpose: build v2.3.5 with hard-isolated Rabbit Space tool routing
+revision: 7d1f76e
+purpose: build v2.3.5 with real ChatService Rabbit Space hard route
