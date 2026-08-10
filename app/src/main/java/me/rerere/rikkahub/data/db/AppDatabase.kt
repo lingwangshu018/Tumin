@@ -84,7 +84,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun workspaceDao(): WorkspaceDAO
     abstract fun folderDao(): FolderDAO
     abstract fun workflowDao(): WorkflowDao
-    abstract fun workflowRunDao(): WorkflowRunDAO
+    abstract fun workflowRunDao(): WorkflowRunDao
     abstract fun sshHostDao(): SshHostDao
     abstract fun securityAuditDao(): SecurityAuditDao
     abstract fun coupleDao(): CoupleDAO
