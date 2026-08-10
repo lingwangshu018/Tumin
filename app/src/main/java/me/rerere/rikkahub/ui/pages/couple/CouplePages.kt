@@ -18,6 +18,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -333,6 +335,82 @@ private val journalPaperPresets = listOf(
 
 private fun paperPreset(id: String?): JournalPaperPreset = journalPaperPresets.firstOrNull { it.id == id } ?: journalPaperPresets.first()
 
+private data class JournalCoverPreset(
+    val id: String,
+    val name: String,
+    val background: Color,
+    val accent: Color,
+    val text: Color,
+    val ornament: String,
+    val subtitle: String,
+)
+
+private val journalCoverPresets = listOf(
+    JournalCoverPreset("rose_velvet", "玫瑰绒面", Color(0xFF7D4051), Color(0xFFE8B8C4), Color(0xFFFFF5F7), "❦", "A BOOK OF US"),
+    JournalCoverPreset("midnight", "午夜蓝", Color(0xFF222D49), Color(0xFFB9C8EF), Color(0xFFF5F7FF), "☾", "UNDER THE SAME MOON"),
+    JournalCoverPreset("forest", "森林绿", Color(0xFF3D564A), Color(0xFFC8D6B9), Color(0xFFF5F7EF), "❧", "OUR QUIET GARDEN"),
+    JournalCoverPreset("cream", "奶油古典", Color(0xFFE9DDC5), Color(0xFF9C7650), Color(0xFF4C3B2C), "✦", "THE PRIVATE JOURNAL"),
+    JournalCoverPreset("lavender_cover", "暮紫丝绒", Color(0xFF554565), Color(0xFFD9C4ED), Color(0xFFFBF7FF), "✧", "LETTERS & MEMORIES"),
+)
+
+private fun coverPreset(id: String?): JournalCoverPreset = journalCoverPresets.firstOrNull { it.id == id } ?: journalCoverPresets.first()
+
+private fun Modifier.journalPaperTexture(paper: JournalPaperPreset): Modifier = drawBehind {
+    val faint = paper.accent.copy(alpha = if (paper.id == "night") 0.12f else 0.09f)
+    when (paper.id) {
+        "ivory", "rose", "sage" -> {
+            var y = 36f
+            while (y < size.height) {
+                drawLine(faint, Offset(0f, y), Offset(size.width, y), strokeWidth = 1f)
+                y += 34f
+            }
+            if (paper.id == "sage") {
+                var x = 28f
+                while (x < size.width) {
+                    drawCircle(faint, radius = 2.2f, center = Offset(x, 20f + (x % 48f)))
+                    x += 44f
+                }
+            }
+        }
+        "mist" -> {
+            var y = 22f
+            while (y < size.height) {
+                var x = 18f
+                while (x < size.width) {
+                    drawCircle(faint, radius = 1.5f, center = Offset(x, y))
+                    x += 26f
+                }
+                y += 26f
+            }
+        }
+        "lavender" -> {
+            var y = 26f
+            while (y < size.height) {
+                var x = 24f
+                while (x < size.width) {
+                    drawLine(faint, Offset(x - 3f, y), Offset(x + 3f, y), strokeWidth = 1f)
+                    drawLine(faint, Offset(x, y - 3f), Offset(x, y + 3f), strokeWidth = 1f)
+                    x += 42f
+                }
+                y += 42f
+            }
+        }
+        "night" -> {
+            var y = 24f
+            var row = 0
+            while (y < size.height) {
+                var x = if (row % 2 == 0) 22f else 42f
+                while (x < size.width) {
+                    drawCircle(faint, radius = if (((x + y).toInt() / 20) % 3 == 0) 2.2f else 1.2f, center = Offset(x, y))
+                    x += 54f
+                }
+                row++
+                y += 42f
+            }
+        }
+    }
+}
+
 @Composable
 fun CoupleDiaryPage(vm: CoupleVM = koinViewModel()) {
     val entries by vm.diaries.collectAsStateWithLifecycle()
@@ -340,12 +418,15 @@ fun CoupleDiaryPage(vm: CoupleVM = koinViewModel()) {
     val relationship by vm.relationship.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val partner = settings.assistants.firstOrNull { it.id.toString() == relationship?.assistantId }
+    val userName = settings.displaySetting.userNickname.ifBlank { "我" }
     val partnerName = partner?.name?.ifBlank { "TA" } ?: "TA"
+    val cover = coverPreset(relationship?.journalCover)
 
     var query by remember { mutableStateOf("") }
     var selectedFolder by remember { mutableStateOf("全部心事") }
     var showAdd by remember { mutableStateOf(false) }
     var showFolderManager by remember { mutableStateOf(false) }
+    var showCoverPicker by remember { mutableStateOf(false) }
     var selectedDiaryId by remember { mutableStateOf<String?>(null) }
     var editingDiaryId by remember { mutableStateOf<String?>(null) }
     var requestedReplyId by remember { mutableStateOf<String?>(null) }
@@ -377,13 +458,13 @@ fun CoupleDiaryPage(vm: CoupleVM = koinViewModel()) {
     ) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item {
-                Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.secondaryContainer) {
-                    Column(Modifier.padding(22.dp, 26.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("我们的日记", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                        Text("THE PRIVATE JOURNAL", style = MaterialTheme.typography.labelLarge)
-                        Text("把已经发生的故事写下来。原文永远是你的，$partnerName 的回信会单独留在这一页。", color = MaterialTheme.colorScheme.onSecondaryContainer)
-                    }
-                }
+                JournalCoverCard(
+                    cover = cover,
+                    userName = userName,
+                    partnerName = partnerName,
+                    entryCount = entries.size,
+                    onChangeCover = { showCoverPicker = true },
+                )
             }
             item {
                 OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp), placeholder = { Text("搜索心事……") }, singleLine = true)
@@ -407,6 +488,17 @@ fun CoupleDiaryPage(vm: CoupleVM = koinViewModel()) {
                 JournalCard(entry = entry, partnerName = partnerName, onClick = { selectedDiaryId = entry.id })
             }
         }
+    }
+
+    if (showCoverPicker) {
+        JournalCoverPickerDialog(
+            selected = relationship?.journalCover ?: "rose_velvet",
+            onDismiss = { showCoverPicker = false },
+            onSelect = {
+                vm.setJournalCover(it)
+                showCoverPicker = false
+            },
+        )
     }
 
     if (showAdd) {
@@ -475,10 +567,80 @@ fun CoupleDiaryPage(vm: CoupleVM = koinViewModel()) {
 }
 
 @Composable
+private fun JournalCoverCard(
+    cover: JournalCoverPreset,
+    userName: String,
+    partnerName: String,
+    entryCount: Int,
+    onChangeCover: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(26.dp),
+        color = cover.background,
+        shadowElevation = 5.dp,
+        border = BorderStroke(1.dp, cover.accent.copy(alpha = 0.35f)),
+    ) {
+        Column(Modifier.padding(24.dp, 28.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(cover.ornament, style = MaterialTheme.typography.headlineMedium, color = cover.accent)
+                TextButton(onClick = onChangeCover, colors = ButtonDefaults.textButtonColors(contentColor = cover.accent)) { Text("更换封面") }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text("我们的日记", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = cover.text)
+                Text("THE PRIVATE JOURNAL", style = MaterialTheme.typography.labelLarge, color = cover.accent)
+                Text(cover.subtitle, style = MaterialTheme.typography.labelMedium, color = cover.text.copy(alpha = 0.62f))
+            }
+            HorizontalDivider(color = cover.accent.copy(alpha = 0.3f))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("$userName × $partnerName", color = cover.text, style = MaterialTheme.typography.titleMedium)
+                Text("$entryCount 篇", color = cover.accent, style = MaterialTheme.typography.labelLarge)
+            }
+        }
+    }
+}
+
+@Composable
+private fun JournalCoverPickerDialog(
+    selected: String,
+    onDismiss: () -> Unit,
+    onSelect: (String) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("选择日记封面") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("封面会一直保留，直到你再次更换。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                journalCoverPresets.forEach { cover ->
+                    Surface(
+                        onClick = { onSelect(cover.id) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        color = cover.background,
+                        border = BorderStroke(if (selected == cover.id) 2.dp else 1.dp, if (selected == cover.id) cover.accent else cover.accent.copy(alpha = 0.28f)),
+                    ) {
+                        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text(cover.ornament, color = cover.accent, style = MaterialTheme.typography.titleLarge)
+                            Column(Modifier.weight(1f)) {
+                                Text(cover.name, color = cover.text, fontWeight = FontWeight.SemiBold)
+                                Text(cover.subtitle, color = cover.text.copy(alpha = 0.62f), style = MaterialTheme.typography.bodySmall)
+                            }
+                            if (selected == cover.id) Text("✓", color = cover.accent)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
+}
+
+@Composable
 private fun JournalCard(entry: CoupleDiaryEntity, partnerName: String, onClick: () -> Unit) {
     val paper = paperPreset(entry.paper)
     Card(onClick = onClick, modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp), colors = CardDefaults.cardColors(containerColor = paper.background)) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.fillMaxWidth().journalPaperTexture(paper).padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(entry.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), color = paper.text)
                 Text(formatDate(entry.entryDate), style = MaterialTheme.typography.bodySmall, color = paper.text.copy(alpha = 0.68f))
@@ -545,7 +707,7 @@ private fun PaperSelector(selected: String, onSelect: (String) -> Unit) {
                 color = paper.background,
                 border = BorderStroke(if (selected == paper.id) 2.dp else 1.dp, if (selected == paper.id) paper.accent else paper.accent.copy(alpha = 0.35f)),
             ) {
-                Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.SpaceBetween) {
+                Column(Modifier.fillMaxSize().journalPaperTexture(paper).padding(10.dp), verticalArrangement = Arrangement.SpaceBetween) {
                     Text(paper.ornament, color = paper.accent, style = MaterialTheme.typography.titleMedium)
                     Column {
                         Text(paper.name, color = paper.text, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
@@ -613,7 +775,7 @@ private fun JournalReaderDialog(
     val paper = paperPreset(entry.paper)
     Dialog(onDismissRequest = onDismiss) {
         Surface(modifier = Modifier.fillMaxWidth().heightIn(max = 680.dp), shape = RoundedCornerShape(24.dp), color = paper.background, border = BorderStroke(1.dp, paper.accent.copy(alpha = 0.28f))) {
-            Column(Modifier.padding(22.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(Modifier.fillMaxWidth().journalPaperTexture(paper).padding(22.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text("THE PRIVATE JOURNAL", style = MaterialTheme.typography.labelMedium, color = paper.accent)
                     Text(paper.ornament, style = MaterialTheme.typography.titleLarge, color = paper.accent)
