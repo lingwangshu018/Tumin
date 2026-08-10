@@ -101,7 +101,6 @@ class CoupleVM(
                 emptyList()
             }
 
-            // 生图失败时仍然保留 AI 想发的文字动态；成功时直接作为 QQ 空间图文动态发布。
             if (draft.content.isNotBlank() || generatedImages.isNotEmpty()) {
                 repository.addPost(
                     relationshipId = relation.id,
@@ -115,8 +114,36 @@ class CoupleVM(
 
     fun toggleLike(post: CouplePostEntity) = viewModelScope.launch { repository.toggleLike(post) }
 
-    fun addDiary(title: String, content: String) = relationship.value?.let { value ->
-        viewModelScope.launch { repository.addDiary(value.id, "user", title, content, System.currentTimeMillis()) }
+    fun addDiary(
+        title: String,
+        content: String,
+        folder: String = "全部心事",
+        paper: String = "ivory",
+    ) = relationship.value?.let { value ->
+        viewModelScope.launch {
+            repository.addDiary(
+                relationshipId = value.id,
+                author = "user",
+                title = title.trim(),
+                content = content.trim(),
+                date = System.currentTimeMillis(),
+                folder = folder.ifBlank { "全部心事" },
+                paper = paper.ifBlank { "ivory" },
+            )
+        }
+    }
+
+    fun requestDiaryReply(entry: CoupleDiaryEntity) {
+        val relation = relationship.value ?: return
+        viewModelScope.launch {
+            coupleAi.replyToDiary(
+                assistantId = relation.assistantId,
+                title = entry.title,
+                content = entry.content,
+            )?.let { reply ->
+                repository.saveDiaryReply(entry, reply)
+            }
+        }
     }
 
     fun addAnniversary(title: String, date: Long = System.currentTimeMillis(), yearly: Boolean = true) = relationship.value?.let { value ->
@@ -129,7 +156,6 @@ class CoupleVM(
             val array = org.json.JSONArray(raw)
             List(array.length()) { index -> array.getString(index) }
         }.getOrElse {
-            // 兼容早期仅保存单张 URI 的动态。
             listOf(raw)
         }.filter { it.isNotBlank() }.take(9)
     }
