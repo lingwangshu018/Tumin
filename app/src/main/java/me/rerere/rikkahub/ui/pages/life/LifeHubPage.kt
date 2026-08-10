@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -26,6 +27,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.text.DateFormat
 import java.util.Date
+import java.util.concurrent.TimeUnit
 
 private enum class LifeSection(val title: String, val emoji: String, val hint: String) {
     HOME("今日", "🏡", "今天的状态、安排与共同生活"),
@@ -43,7 +45,7 @@ private data class LifeEntry(
     val detail: String,
     val tag: String,
     val createdAt: Long = System.currentTimeMillis(),
-    val memoCategory: String = "生活",
+    val memoCategory: String = "life",
     val pinned: Boolean = false,
     val completed: Boolean = false,
     val reminderAt: Long? = null,
@@ -55,14 +57,15 @@ private data class MemoCategory(
     val emoji: String,
     val background: Color,
     val accent: Color,
+    val soft: Color,
 )
 
 private val memoCategories = listOf(
-    MemoCategory("life", "生活", "☁", Color(0xFFFFF5E8), Color(0xFFAA7A42)),
-    MemoCategory("todo", "待办", "✓", Color(0xFFEAF4EE), Color(0xFF5D806B)),
-    MemoCategory("idea", "灵感", "✦", Color(0xFFF1EDFA), Color(0xFF7966A1)),
-    MemoCategory("together", "我们的", "♡", Color(0xFFFFEDF3), Color(0xFFB85E7A)),
-    MemoCategory("ai", "TA 的", "✉", Color(0xFFEAF3FA), Color(0xFF5A7F9A)),
+    MemoCategory("life", "生活", "🏡", Color(0xFFFFF8EE), Color(0xFFB98653), Color(0xFFFFEBD4)),
+    MemoCategory("todo", "待办", "⏰", Color(0xFFFFF0E6), Color(0xFFC77B52), Color(0xFFFFDFC9)),
+    MemoCategory("idea", "灵感", "💡", Color(0xFFF4EFFB), Color(0xFF8066A5), Color(0xFFE8DCF8)),
+    MemoCategory("together", "我们的", "💕", Color(0xFFFFEEF4), Color(0xFFC16683), Color(0xFFFFD8E5)),
+    MemoCategory("ai", "TA 的", "🐰", Color(0xFFEDF5FC), Color(0xFF6286A3), Color(0xFFDCECF8)),
 )
 
 private fun memoCategory(id: String): MemoCategory =
@@ -98,7 +101,11 @@ fun LifeHubPage() {
     Scaffold(
         topBar = { TopAppBar(title = { Text("生活空间") }, navigationIcon = { BackButton() }) },
         floatingActionButton = {
-            if (section != LifeSection.HOME) FloatingActionButton(onClick = { showAdd = true }) { Text("＋") }
+            if (section != LifeSection.HOME) {
+                FloatingActionButton(onClick = { showAdd = true }) {
+                    Text(if (section == LifeSection.MEMO) "✎" else "＋", style = MaterialTheme.typography.titleLarge)
+                }
+            }
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
@@ -183,7 +190,7 @@ fun LifeHubPage() {
             MemoEditorDialog(
                 initial = null,
                 onDismiss = { showAdd = false },
-                onSave = { title, detail, category, pinned, reminderAt ->
+                onSave = { title, detail, category, pinned, completed, reminderAt ->
                     saveAll(
                         entries + LifeEntry(
                             section = LifeSection.MEMO,
@@ -192,6 +199,7 @@ fun LifeHubPage() {
                             tag = "",
                             memoCategory = category,
                             pinned = pinned,
+                            completed = completed,
                             reminderAt = reminderAt,
                         )
                     )
@@ -215,13 +223,14 @@ fun LifeHubPage() {
             MemoEditorDialog(
                 initial = entry,
                 onDismiss = { editingMemoId = null },
-                onSave = { title, detail, category, pinned, reminderAt ->
+                onSave = { title, detail, category, pinned, completed, reminderAt ->
                     saveAll(entries.map {
                         if (it.id == entry.id) it.copy(
                             title = title,
                             detail = detail,
                             memoCategory = category,
                             pinned = pinned,
+                            completed = completed,
                             reminderAt = reminderAt,
                         ) else it
                     })
@@ -248,9 +257,7 @@ private fun MemoBoard(
 
     val filtered = entries
         .asSequence()
-        .filter {
-            query.isBlank() || it.title.contains(query, true) || it.detail.contains(query, true)
-        }
+        .filter { query.isBlank() || it.title.contains(query, true) || it.detail.contains(query, true) }
         .filter {
             when (filter) {
                 MemoFilter.ALL -> true
@@ -263,61 +270,70 @@ private fun MemoBoard(
         .sortedWith(compareByDescending<LifeEntry> { it.pinned }.thenBy { it.completed }.thenByDescending { it.createdAt })
         .toList()
 
+    val todoCount = entries.count { !it.completed }
+    val doneCount = entries.count { it.completed }
+    val pinnedCount = entries.count { it.pinned }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(14.dp, 16.dp, 14.dp, 96.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(26.dp),
-                color = Color(0xFF4C536B),
-                shadowElevation = 4.dp,
-            ) {
-                Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("✦  LIFE MEMO", color = Color(0xFFDDE4FF), style = MaterialTheme.typography.labelLarge)
-                    Text("把脑袋里的小事放在这里", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("${entries.count { !it.completed }} 件待处理 · ${entries.count { it.pinned }} 张置顶便签 · ${entries.count { it.completed }} 件已完成", color = Color.White.copy(alpha = 0.72f))
-                    FilledTonalButton(onClick = onAdd) { Text("＋ 写一张新便签") }
-                }
-            }
+            MemoBoardHeader(
+                todoCount = todoCount,
+                doneCount = doneCount,
+                pinnedCount = pinnedCount,
+                onAdd = onAdd,
+            )
         }
         item {
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("搜索标题或内容……") },
+                shape = RoundedCornerShape(20.dp),
+                placeholder = { Text("🔎 搜索一张小便签……") },
                 singleLine = true,
             )
         }
         item {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                item { FilterChip(selected = filter == MemoFilter.ALL, onClick = { filter = MemoFilter.ALL }, label = { Text("全部 ${entries.size}") }) }
-                item { FilterChip(selected = filter == MemoFilter.PINNED, onClick = { filter = MemoFilter.PINNED }, label = { Text("📌 置顶") }) }
-                item { FilterChip(selected = filter == MemoFilter.TODO, onClick = { filter = MemoFilter.TODO }, label = { Text("待办") }) }
-                item { FilterChip(selected = filter == MemoFilter.DONE, onClick = { filter = MemoFilter.DONE }, label = { Text("已完成") }) }
+                item { MemoFilterChip("全部 ${entries.size}", filter == MemoFilter.ALL) { filter = MemoFilter.ALL } }
+                item { MemoFilterChip("📌 置顶", filter == MemoFilter.PINNED) { filter = MemoFilter.PINNED } }
+                item { MemoFilterChip("☐ 待办", filter == MemoFilter.TODO) { filter = MemoFilter.TODO } }
+                item { MemoFilterChip("✓ 完成", filter == MemoFilter.DONE) { filter = MemoFilter.DONE } }
             }
         }
         item {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                item { AssistChip(onClick = { categoryFilter = null }, label = { Text("所有分类") }) }
+                item {
+                    FilterChip(
+                        selected = categoryFilter == null,
+                        onClick = { categoryFilter = null },
+                        label = { Text("🎀 所有分类") },
+                        shape = RoundedCornerShape(18.dp),
+                    )
+                }
                 items(memoCategories) { category ->
                     FilterChip(
                         selected = categoryFilter == category.id,
                         onClick = { categoryFilter = if (categoryFilter == category.id) null else category.id },
                         label = { Text("${category.emoji} ${category.label}") },
+                        shape = RoundedCornerShape(18.dp),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = category.soft,
+                            selectedLabelColor = category.accent,
+                        ),
                     )
                 }
             }
         }
         if (filtered.isEmpty()) {
             item {
-                Text(
-                    if (entries.isEmpty()) "还没有便签。想到什么就先写下来，不用怕忘掉。" else "没有找到符合条件的便签。",
-                    modifier = Modifier.padding(12.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                MemoEmptyState(
+                    completelyEmpty = entries.isEmpty(),
+                    onAdd = onAdd,
                 )
             }
         }
@@ -335,6 +351,118 @@ private fun MemoBoard(
 }
 
 @Composable
+private fun MemoBoardHeader(
+    todoCount: Int,
+    doneCount: Int,
+    pinnedCount: Int,
+    onAdd: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        color = Color(0xFFFFF3F7),
+        border = BorderStroke(1.dp, Color(0xFFF3CDD9)),
+        shadowElevation = 3.dp,
+    ) {
+        Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("୨୧  LIFE MEMO", color = Color(0xFFB45E7A), style = MaterialTheme.typography.labelLarge)
+                    Text("生活备忘板", color = Color(0xFF5A4650), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("把想记住的事情贴在这里。", color = Color(0xFF8A737D), style = MaterialTheme.typography.bodyMedium)
+                }
+                Surface(shape = CircleShape, color = Color(0xFFFFDFE9)) {
+                    Box(Modifier.size(46.dp), contentAlignment = Alignment.Center) {
+                        Text("📝", style = MaterialTheme.typography.titleLarge)
+                    }
+                }
+            }
+
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MemoStatPill("☁", "待处理", todoCount, Color(0xFFFFE4D8), Color(0xFFB96F54), Modifier.weight(1f))
+                MemoStatPill("✓", "完成啦", doneCount, Color(0xFFE4F1E8), Color(0xFF5E826B), Modifier.weight(1f))
+                MemoStatPill("📌", "置顶", pinnedCount, Color(0xFFE9E4F7), Color(0xFF79649C), Modifier.weight(1f))
+            }
+
+            FilledTonalButton(
+                onClick = onAdd,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = Color(0xFFFFDDE8),
+                    contentColor = Color(0xFF9F4F6A),
+                ),
+            ) {
+                Text("＋ 写一张小便签")
+            }
+        }
+    }
+}
+
+@Composable
+private fun MemoStatPill(
+    emoji: String,
+    label: String,
+    count: Int,
+    background: Color,
+    accent: Color,
+    modifier: Modifier = Modifier,
+) {
+    Surface(modifier = modifier, shape = RoundedCornerShape(16.dp), color = background) {
+        Column(Modifier.padding(horizontal = 10.dp, vertical = 9.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("$emoji $count", color = accent, fontWeight = FontWeight.Bold)
+            Text(label, color = accent.copy(alpha = 0.78f), style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}
+
+@Composable
+private fun MemoFilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label) },
+        shape = RoundedCornerShape(18.dp),
+        colors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = Color(0xFFFFE1EB),
+            selectedLabelColor = Color(0xFFA95270),
+        ),
+    )
+}
+
+@Composable
+private fun MemoEmptyState(completelyEmpty: Boolean, onAdd: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = Color(0xFFFFFAF7),
+        border = BorderStroke(1.dp, Color(0xFFF0E2DD)),
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(if (completelyEmpty) "🎀📝" else "☁️", style = MaterialTheme.typography.headlineMedium)
+            Text(
+                if (completelyEmpty) "这里还没有小便签哦" else "没有找到这张小便签",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFF64535A),
+            )
+            Text(
+                if (completelyEmpty) "把想记住的事情贴上来吧。" else "换个关键词或筛选条件试试看～",
+                color = Color(0xFF8C7A82),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (completelyEmpty) {
+                TextButton(onClick = onAdd) { Text("贴第一张便签 ♡") }
+            }
+        }
+    }
+}
+
+@Composable
 private fun MemoCard(
     entry: LifeEntry,
     onEdit: () -> Unit,
@@ -344,50 +472,124 @@ private fun MemoCard(
     onAddCalendar: () -> Unit,
 ) {
     val category = memoCategory(entry.memoCategory)
+    val reminderState = entry.reminderAt?.let { memoReminderState(it) }
+
     Card(
+        onClick = onEdit,
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = category.background),
-        border = if (entry.pinned) BorderStroke(1.5.dp, category.accent.copy(alpha = 0.55f)) else null,
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (entry.completed) category.background.copy(alpha = 0.72f) else category.background,
+        ),
+        border = BorderStroke(
+            if (entry.pinned || reminderState?.urgent == true) 1.5.dp else 1.dp,
+            when {
+                reminderState?.urgent == true -> category.accent.copy(alpha = 0.72f)
+                entry.pinned -> category.accent.copy(alpha = 0.50f)
+                else -> category.accent.copy(alpha = 0.18f)
+            },
+        ),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Surface(shape = CircleShape, color = category.soft) {
+                    Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                        Text(category.emoji)
+                    }
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(category.emoji, color = category.accent)
-                        Text(category.label, style = MaterialTheme.typography.labelLarge, color = category.accent)
-                        if (entry.pinned) Text("📌", style = MaterialTheme.typography.labelMedium)
+                        Text(category.label, style = MaterialTheme.typography.labelMedium, color = category.accent)
+                        if (entry.pinned) Text("📌 置顶", style = MaterialTheme.typography.labelSmall, color = category.accent)
                     }
                     Text(
                         entry.title,
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         textDecoration = if (entry.completed) TextDecoration.LineThrough else TextDecoration.None,
-                        color = if (entry.completed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                        color = Color(0xFF574A50).copy(alpha = if (entry.completed) 0.60f else 1f),
                     )
                 }
-                TextButton(onClick = onPin, colors = ButtonDefaults.textButtonColors(contentColor = category.accent)) {
-                    Text(if (entry.pinned) "取消置顶" else "置顶")
+                TextButton(
+                    onClick = onPin,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    colors = ButtonDefaults.textButtonColors(contentColor = category.accent),
+                ) {
+                    Text(if (entry.pinned) "♡" else "📌")
                 }
             }
+
             if (entry.detail.isNotBlank()) {
-                Text(entry.detail, color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (entry.completed) 0.55f else 0.82f))
+                Text(
+                    entry.detail,
+                    color = Color(0xFF6F6167).copy(alpha = if (entry.completed) 0.52f else 0.88f),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
             }
-            entry.reminderAt?.let {
-                Surface(shape = RoundedCornerShape(10.dp), color = category.accent.copy(alpha = 0.10f)) {
-                    Text("⏰ ${formatMemoDate(it)}", modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), color = category.accent, style = MaterialTheme.typography.bodySmall)
+
+            Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+                Surface(shape = RoundedCornerShape(12.dp), color = category.soft.copy(alpha = 0.78f)) {
+                    Text(
+                        "贴于 ${formatMemoDate(entry.createdAt)}",
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                        color = category.accent,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+                reminderState?.let { state ->
+                    Surface(shape = RoundedCornerShape(12.dp), color = if (state.urgent) category.accent.copy(alpha = 0.14f) else category.soft) {
+                        Text(
+                            "⏰ ${state.label}",
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                            color = category.accent,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (state.urgent) FontWeight.Bold else FontWeight.Normal,
+                        )
+                    }
                 }
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onToggleDone, colors = ButtonDefaults.textButtonColors(contentColor = category.accent)) {
-                    Text(if (entry.completed) "↩ 恢复待办" else "✓ 标记完成")
+
+            if (entry.completed) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    Text("完成啦 ✓", color = category.accent.copy(alpha = 0.72f), style = MaterialTheme.typography.labelMedium)
                 }
-                Row {
-                    if (entry.reminderAt != null) TextButton(onClick = onAddCalendar) { Text("加到日历") }
-                    TextButton(onClick = onEdit) { Text("编辑") }
-                    TextButton(onClick = onDelete) { Text("删除") }
+            }
+
+            HorizontalDivider(color = category.accent.copy(alpha = 0.12f))
+
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                TextButton(
+                    onClick = onToggleDone,
+                    colors = ButtonDefaults.textButtonColors(contentColor = category.accent),
+                ) {
+                    Text(if (entry.completed) "↩ 恢复" else "✓ 完成")
+                }
+                Spacer(Modifier.weight(1f))
+                if (entry.reminderAt != null) {
+                    TextButton(onClick = onAddCalendar) { Text("📅") }
+                }
+                TextButton(onClick = onEdit) { Text("编辑") }
+                TextButton(onClick = onDelete, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)) {
+                    Text("拿下")
                 }
             }
         }
+    }
+}
+
+private data class MemoReminderState(val label: String, val urgent: Boolean)
+
+private fun memoReminderState(value: Long): MemoReminderState {
+    val now = System.currentTimeMillis()
+    val diff = value - now
+    val day = TimeUnit.MILLISECONDS.toDays(diff)
+    return when {
+        diff < -TimeUnit.DAYS.toMillis(1) -> MemoReminderState("已过提醒日", false)
+        diff <= 0L -> MemoReminderState("今天", true)
+        diff < TimeUnit.DAYS.toMillis(1) -> MemoReminderState("今天", true)
+        day == 1L -> MemoReminderState("明天", true)
+        day in 2L..3L -> MemoReminderState("还有 $day 天", true)
+        else -> MemoReminderState(formatMemoDate(value), false)
     }
 }
 
@@ -396,54 +598,117 @@ private fun MemoCard(
 private fun MemoEditorDialog(
     initial: LifeEntry?,
     onDismiss: () -> Unit,
-    onSave: (String, String, String, Boolean, Long?) -> Unit,
+    onSave: (String, String, String, Boolean, Boolean, Long?) -> Unit,
 ) {
     var title by remember(initial?.id) { mutableStateOf(initial?.title.orEmpty()) }
     var detail by remember(initial?.id) { mutableStateOf(initial?.detail.orEmpty()) }
     var category by remember(initial?.id) { mutableStateOf(initial?.memoCategory ?: "life") }
     var pinned by remember(initial?.id) { mutableStateOf(initial?.pinned ?: false) }
+    var completed by remember(initial?.id) { mutableStateOf(initial?.completed ?: false) }
     var reminderAt by remember(initial?.id) { mutableStateOf(initial?.reminderAt) }
     var showDatePicker by remember { mutableStateOf(false) }
+    val currentCategory = memoCategory(category)
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (initial == null) "写一张便签" else "编辑便签") },
+        shape = RoundedCornerShape(26.dp),
+        title = {
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(if (initial == null) "🎀 写一张小便签" else "📝 修改这张便签")
+                Text(
+                    if (initial == null) "想到什么就先贴上来。" else "慢慢改，不着急。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
         text = {
-            Column(Modifier.heightIn(max = 560.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(title, { title = it }, label = { Text("标题") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                OutlinedTextField(detail, { detail = it }, label = { Text("内容 / 想法 / 小计划") }, minLines = 5, modifier = Modifier.fillMaxWidth())
-                Text("放进哪个抽屉？", style = MaterialTheme.typography.labelLarge)
+            Column(Modifier.heightIn(max = 580.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("这张便签想记什么？") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = detail,
+                    onValueChange = { detail = it },
+                    label = { Text("写下一点内容……") },
+                    minLines = 5,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                )
+
+                Text("放进哪个小抽屉？", style = MaterialTheme.typography.labelLarge)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(memoCategories) { item ->
                         FilterChip(
                             selected = category == item.id,
                             onClick = { category = item.id },
                             label = { Text("${item.emoji} ${item.label}") },
+                            shape = RoundedCornerShape(18.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = item.soft,
+                                selectedLabelColor = item.accent,
+                            ),
                         )
                     }
                 }
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("置顶这张便签")
-                        Text("重要的事情会一直排在最前面", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    color = currentCategory.background,
+                    border = BorderStroke(1.dp, currentCategory.accent.copy(alpha = 0.18f)),
+                ) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("📌 贴到最上面", color = currentCategory.accent, fontWeight = FontWeight.SemiBold)
+                                Text("重要的小事会一直排在前面", style = MaterialTheme.typography.bodySmall, color = Color(0xFF75666D))
+                            }
+                            Switch(checked = pinned, onCheckedChange = { pinned = it })
+                        }
+                        if (initial != null) {
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text("✓ 已经完成啦", color = currentCategory.accent, fontWeight = FontWeight.SemiBold)
+                                    Text("完成后便签会轻轻淡下来", style = MaterialTheme.typography.bodySmall, color = Color(0xFF75666D))
+                                }
+                                Switch(checked = completed, onCheckedChange = { completed = it })
+                            }
+                        }
                     }
-                    Switch(checked = pinned, onCheckedChange = { pinned = it })
                 }
+
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedButton(onClick = { showDatePicker = true }) {
-                        Text(reminderAt?.let { "⏰ ${formatMemoDate(it)}" } ?: "＋ 设置提醒日期")
+                    OutlinedButton(
+                        onClick = { showDatePicker = true },
+                        shape = RoundedCornerShape(16.dp),
+                    ) {
+                        Text(reminderAt?.let { "⏰ ${formatMemoDate(it)}" } ?: "⏰ 选择提醒日期")
                     }
                     if (reminderAt != null) TextButton(onClick = { reminderAt = null }) { Text("清除") }
                 }
-                Text("提醒日期会保存在便签里，也可以一键添加到系统日历。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("提醒日期会留在便签上，也可以一键放进系统日历。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
         confirmButton = {
-            TextButton(enabled = title.isNotBlank(), onClick = { onSave(title.trim(), detail.trim(), category, pinned, reminderAt) }) {
-                Text(if (initial == null) "收好便签" else "保存修改")
+            FilledTonalButton(
+                enabled = title.isNotBlank(),
+                onClick = { onSave(title.trim(), detail.trim(), category, pinned, completed, reminderAt) },
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = Color(0xFFFFDDE8),
+                    contentColor = Color(0xFF9F4F6A),
+                ),
+            ) {
+                Text(if (initial == null) "收进备忘板 ♡" else "保存这张便签")
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("先不写") } },
     )
 
     if (showDatePicker) {
@@ -454,7 +719,7 @@ private fun MemoEditorDialog(
                 TextButton(onClick = {
                     reminderAt = state.selectedDateMillis
                     showDatePicker = false
-                }) { Text("确定") }
+                }) { Text("贴上这个日期") }
             },
             dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("取消") } },
         ) { DatePicker(state = state, showModeToggle = false) }
