@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -105,14 +105,12 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null, au
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val softwareKeyboardController = LocalSoftwareKeyboardController.current
 
-    // Handle back press when drawer is open
     BackHandler(enabled = drawerState.isOpen) {
         scope.launch {
             drawerState.close()
         }
     }
 
-    // Hide keyboard when drawer is open
     LaunchedEffect(drawerState.isOpen) {
         if (drawerState.isOpen) {
             softwareKeyboardController?.hide()
@@ -125,7 +123,6 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null, au
 
     val inputState = vm.inputState
 
-    // 初始化输入状态（处理传入的 files 和 text 参数）
     LaunchedEffect(files, text) {
         if (files.isNotEmpty()) {
             val localFiles = filesManager.createChatFilesByContents(files)
@@ -272,36 +269,39 @@ private fun ChatPageContent(
         AssistantBackground(setting = setting)
         Scaffold(
             topBar = {
-                TopBar(
-                    settings = setting,
-                    conversation = conversation,
-                    bigScreen = bigScreen,
-                    drawerState = drawerState,
-                    previewMode = previewMode,
-                    onNewChat = {
-                        navigateToChatPage(navController)
-                    },
-                    onClickMenu = {
-                        previewMode = !previewMode
-                    },
-                    onUpdateTitle = {
-                        vm.updateTitle(it)
-                    },
-                    onVoiceCall = {
-                        val activeId = VoiceCallService.activeConversationId.value
-                        when {
-                            activeId == null -> navController.navigate(
-                                Screen.VoiceCall(conversation.id.toString())
-                            )
-                            activeId == conversation.id.toString() -> navController.navigate(
-                                Screen.VoiceCall(conversation.id.toString())
-                            )
-                            else -> {
-                                toaster.show("当前有通话进行中，请先挂断", type = ToastType.Warning)
+                Column {
+                    TopBar(
+                        settings = setting,
+                        conversation = conversation,
+                        bigScreen = bigScreen,
+                        drawerState = drawerState,
+                        previewMode = previewMode,
+                        onNewChat = {
+                            navigateToChatPage(navController)
+                        },
+                        onClickMenu = {
+                            previewMode = !previewMode
+                        },
+                        onUpdateTitle = {
+                            vm.updateTitle(it)
+                        },
+                        onVoiceCall = {
+                            val activeId = VoiceCallService.activeConversationId.value
+                            when {
+                                activeId == null -> navController.navigate(
+                                    Screen.VoiceCall(conversation.id.toString())
+                                )
+                                activeId == conversation.id.toString() -> navController.navigate(
+                                    Screen.VoiceCall(conversation.id.toString())
+                                )
+                                else -> {
+                                    toaster.show("当前有通话进行中，请先挂断", type = ToastType.Warning)
+                                }
                             }
-                        }
-                    },
-                )
+                        },
+                    )
+                    ChatMusicHeader()
+                }
             },
             bottomBar = {
                 ChatInput(
