@@ -1,4 +1,4 @@
-build: 2026-08-10T18:48+08:00
+build: 2026-08-10T18:58+08:00
 source: latest master
-revision: b1bea2d
-purpose: rebuild full release APK after safe Room v30-v37 migration fix
+revision: 5755131
+purpose: rebuild full release APK after StickerAiPicker Compose compile fix
