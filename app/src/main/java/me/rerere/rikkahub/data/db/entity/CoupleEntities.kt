@@ -10,6 +10,7 @@ data class CoupleRelationshipEntity(
     @PrimaryKey val id: String,
     @ColumnInfo("assistant_id") val assistantId: String,
     @ColumnInfo("started_at") val startedAt: Long,
+    @ColumnInfo(name = "journal_cover", defaultValue = "rose_velvet") val journalCover: String = "rose_velvet",
     @ColumnInfo("created_at") val createdAt: Long,
 )
 
