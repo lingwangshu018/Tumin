@@ -69,14 +69,34 @@ import me.rerere.rikkahub.utils.Emoji
 import me.rerere.rikkahub.utils.EmojiData
 import org.koin.compose.koinInject
 
+private const val STICKER_MARKER = "__TUMIN_STICKER__:"
+
 @Preview
 @Composable
 fun EmojiPicker(
     modifier: Modifier = Modifier,
     onEmojiSelected: (Emoji) -> Unit = {},
     showSearch: Boolean = true,
-    height: Int = 400
+    height: Int = 400,
+    useStickerLibrary: Boolean = true,
 ) {
+    if (useStickerLibrary) {
+        StickerUrlPicker(
+            modifier = modifier,
+            height = height,
+            onStickerSelected = { url ->
+                onEmojiSelected(
+                    Emoji(
+                        name = "自定义表情包",
+                        emoji = STICKER_MARKER + url,
+                        code = emptyList(),
+                    )
+                )
+            },
+        )
+        return
+    }
+
     val emojiData = koinInject<EmojiData>()
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategoryIndex by remember { mutableIntStateOf(0) }
@@ -98,7 +118,6 @@ fun EmojiPicker(
                     )
                     .padding(8.dp)
             ) {
-                // Search bar
                 if (showSearch) {
                     OutlinedTextField(
                         value = searchQuery,
@@ -117,14 +136,13 @@ fun EmojiPicker(
                             imeAction = ImeAction.Search
                         ),
                         keyboardActions = KeyboardActions(
-                            onSearch = { /* Handle search */ }
+                            onSearch = { }
                         ),
                         singleLine = true,
                         shape = RoundedCornerShape(50)
                     )
                 }
 
-                // Category tabs
                 LazyRow(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -178,7 +196,6 @@ fun EmojiPicker(
                     }
                 }
 
-                // Emoji grid
                 val selectedCategory = data.categories[selectedCategoryIndex]
                 val emojiVariants = remember(selectedCategoryIndex, data) {
                     selectedCategory.getEmojiVariants()
@@ -188,7 +205,7 @@ fun EmojiPicker(
                     if (searchQuery.isBlank()) {
                         emojiVariants
                     } else {
-                        emojiVariants.filter { (baseEmoji, variants) ->
+                        emojiVariants.filter { (_, variants) ->
                             variants.any { emoji ->
                                 emoji.name.contains(searchQuery, ignoreCase = true) ||
                                     emoji.emoji.contains(searchQuery)
@@ -224,7 +241,6 @@ fun EmojiPicker(
                 }
             }
 
-            // Modifier picker popup
             if (showModifierPicker && selectedEmojiForModifier != null) {
                 EmojiModifierPicker(
                     variants = modifierVariants,
@@ -361,7 +377,8 @@ fun EmojiPickerPage(
                 onBack()
             },
             showSearch = true,
-            height = Int.MAX_VALUE
+            height = Int.MAX_VALUE,
+            useStickerLibrary = false,
         )
     }
 }
