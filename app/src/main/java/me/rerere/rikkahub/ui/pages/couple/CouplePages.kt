@@ -3,6 +3,10 @@ package me.rerere.rikkahub.ui.pages.couple
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -355,6 +359,24 @@ private val journalCoverPresets = listOf(
 
 private fun coverPreset(id: String?): JournalCoverPreset = journalCoverPresets.firstOrNull { it.id == id } ?: journalCoverPresets.first()
 
+private data class ReplyPaperPreset(
+    val id: String,
+    val name: String,
+    val background: Color,
+    val accent: Color,
+    val text: Color,
+    val ornament: String,
+)
+
+private val replyPaperPresets = listOf(
+    ReplyPaperPreset("cream_letter", "奶油信笺", Color(0xFFFFF8E8), Color(0xFFAD8251), Color(0xFF46372B), "✉"),
+    ReplyPaperPreset("rose_letter", "玫瑰花信", Color(0xFFFFEDF2), Color(0xFFC66B82), Color(0xFF55363E), "❦"),
+    ReplyPaperPreset("airmail", "雾蓝航空信", Color(0xFFEDF6FA), Color(0xFF5E8298), Color(0xFF304650), "⌁"),
+    ReplyPaperPreset("moon_letter", "月光深蓝", Color(0xFF252D43), Color(0xFFBECAF0), Color(0xFFF4F6FF), "☾"),
+)
+
+private fun replyPaperPreset(id: String?): ReplyPaperPreset = replyPaperPresets.firstOrNull { it.id == id } ?: replyPaperPresets.first()
+
 private fun Modifier.journalPaperTexture(paper: JournalPaperPreset): Modifier = drawBehind {
     val faint = paper.accent.copy(alpha = if (paper.id == "night") 0.12f else 0.09f)
     when (paper.id) {
@@ -411,6 +433,30 @@ private fun Modifier.journalPaperTexture(paper: JournalPaperPreset): Modifier = 
     }
 }
 
+private fun Modifier.replyPaperTexture(paper: ReplyPaperPreset): Modifier = drawBehind {
+    val faint = paper.accent.copy(alpha = if (paper.id == "moon_letter") 0.13f else 0.10f)
+    if (paper.id == "airmail") {
+        var y = 34f
+        while (y < size.height) {
+            drawLine(faint, Offset(0f, y), Offset(size.width, y), strokeWidth = 1f)
+            y += 32f
+        }
+        drawLine(paper.accent.copy(alpha = 0.24f), Offset(20f, 0f), Offset(20f, size.height), strokeWidth = 2f)
+    } else {
+        var y = 26f
+        var row = 0
+        while (y < size.height) {
+            var x = if (row % 2 == 0) 24f else 44f
+            while (x < size.width) {
+                drawCircle(faint, radius = if (paper.id == "moon_letter") 1.7f else 1.2f, center = Offset(x, y))
+                x += 52f
+            }
+            row++
+            y += 44f
+        }
+    }
+}
+
 @Composable
 fun CoupleDiaryPage(vm: CoupleVM = koinViewModel()) {
     val entries by vm.diaries.collectAsStateWithLifecycle()
@@ -427,6 +473,7 @@ fun CoupleDiaryPage(vm: CoupleVM = koinViewModel()) {
     var showAdd by remember { mutableStateOf(false) }
     var showFolderManager by remember { mutableStateOf(false) }
     var showCoverPicker by remember { mutableStateOf(false) }
+    var showInscriptionEditor by remember { mutableStateOf(false) }
     var selectedDiaryId by remember { mutableStateOf<String?>(null) }
     var editingDiaryId by remember { mutableStateOf<String?>(null) }
     var requestedReplyId by remember { mutableStateOf<String?>(null) }
@@ -460,10 +507,13 @@ fun CoupleDiaryPage(vm: CoupleVM = koinViewModel()) {
             item {
                 JournalCoverCard(
                     cover = cover,
+                    coverTitle = relationship?.journalCoverTitle ?: "我们的日记",
+                    coverDate = relationship?.journalCoverDate ?: "SINCE ${formatDate(relationship?.startedAt ?: System.currentTimeMillis())}",
                     userName = userName,
                     partnerName = partnerName,
                     entryCount = entries.size,
                     onChangeCover = { showCoverPicker = true },
+                    onEditInscription = { showInscriptionEditor = true },
                 )
             }
             item {
@@ -497,6 +547,18 @@ fun CoupleDiaryPage(vm: CoupleVM = koinViewModel()) {
             onSelect = {
                 vm.setJournalCover(it)
                 showCoverPicker = false
+            },
+        )
+    }
+
+    if (showInscriptionEditor) {
+        JournalInscriptionDialog(
+            initialTitle = relationship?.journalCoverTitle ?: "我们的日记",
+            initialDate = relationship?.journalCoverDate ?: "SINCE ${formatDate(relationship?.startedAt ?: System.currentTimeMillis())}",
+            onDismiss = { showInscriptionEditor = false },
+            onSave = { title, date ->
+                vm.setJournalInscription(title, date)
+                showInscriptionEditor = false
             },
         )
     }
@@ -561,6 +623,7 @@ fun CoupleDiaryPage(vm: CoupleVM = koinViewModel()) {
                     requestedReplyId = current.id
                     vm.requestDiaryReply(current)
                 },
+                onReplyPaperChange = { vm.setDiaryReplyPaper(current, it) },
             )
         }
     }
@@ -569,10 +632,13 @@ fun CoupleDiaryPage(vm: CoupleVM = koinViewModel()) {
 @Composable
 private fun JournalCoverCard(
     cover: JournalCoverPreset,
+    coverTitle: String,
+    coverDate: String,
     userName: String,
     partnerName: String,
     entryCount: Int,
     onChangeCover: () -> Unit,
+    onEditInscription: () -> Unit,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
@@ -584,12 +650,16 @@ private fun JournalCoverCard(
         Column(Modifier.padding(24.dp, 28.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(cover.ornament, style = MaterialTheme.typography.headlineMedium, color = cover.accent)
-                TextButton(onClick = onChangeCover, colors = ButtonDefaults.textButtonColors(contentColor = cover.accent)) { Text("更换封面") }
+                Row {
+                    TextButton(onClick = onEditInscription, colors = ButtonDefaults.textButtonColors(contentColor = cover.accent)) { Text("烫金文字") }
+                    TextButton(onClick = onChangeCover, colors = ButtonDefaults.textButtonColors(contentColor = cover.accent)) { Text("换封面") }
+                }
             }
             Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text("我们的日记", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = cover.text)
+                Text(coverTitle, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = cover.text)
                 Text("THE PRIVATE JOURNAL", style = MaterialTheme.typography.labelLarge, color = cover.accent)
                 Text(cover.subtitle, style = MaterialTheme.typography.labelMedium, color = cover.text.copy(alpha = 0.62f))
+                Text(coverDate, style = MaterialTheme.typography.labelSmall, color = cover.accent)
             }
             HorizontalDivider(color = cover.accent.copy(alpha = 0.3f))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -598,6 +668,30 @@ private fun JournalCoverCard(
             }
         }
     }
+}
+
+@Composable
+private fun JournalInscriptionDialog(
+    initialTitle: String,
+    initialDate: String,
+    onDismiss: () -> Unit,
+    onSave: (String, String) -> Unit,
+) {
+    var title by remember(initialTitle) { mutableStateOf(initialTitle) }
+    var date by remember(initialDate) { mutableStateOf(initialDate) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("定制封面烫金") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("这两行会直接印在日记封面上。可以写名字、短句、日期，留空则恢复默认。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedTextField(value = title, onValueChange = { title = it.take(28) }, modifier = Modifier.fillMaxWidth(), label = { Text("封面标题") }, singleLine = true)
+                OutlinedTextField(value = date, onValueChange = { date = it.take(36) }, modifier = Modifier.fillMaxWidth(), label = { Text("纪念日期 / 小字") }, singleLine = true)
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(title, date) }) { Text("烫印上去") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
 }
 
 @Composable
@@ -771,36 +865,101 @@ private fun JournalReaderDialog(
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onRequestReply: () -> Unit,
+    onReplyPaperChange: (String) -> Unit,
 ) {
     val paper = paperPreset(entry.paper)
+    var page by remember(entry.id) { mutableIntStateOf(0) }
     Dialog(onDismissRequest = onDismiss) {
-        Surface(modifier = Modifier.fillMaxWidth().heightIn(max = 680.dp), shape = RoundedCornerShape(24.dp), color = paper.background, border = BorderStroke(1.dp, paper.accent.copy(alpha = 0.28f))) {
-            Column(Modifier.fillMaxWidth().journalPaperTexture(paper).padding(22.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("THE PRIVATE JOURNAL", style = MaterialTheme.typography.labelMedium, color = paper.accent)
-                    Text(paper.ornament, style = MaterialTheme.typography.titleLarge, color = paper.accent)
-                }
-                Text(entry.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = paper.text)
-                Text("${formatDate(entry.entryDate)} · ${entry.folder ?: "全部心事"} · ${paper.name}", style = MaterialTheme.typography.bodySmall, color = paper.text.copy(alpha = 0.62f))
-                HorizontalDivider(color = paper.accent.copy(alpha = 0.3f))
-                Text(entry.content, style = MaterialTheme.typography.bodyLarge, color = paper.text)
-                Spacer(Modifier.height(8.dp))
-                HorizontalDivider(color = paper.accent.copy(alpha = 0.3f))
-                Text("$partnerName 的回信", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = paper.text)
-                when {
-                    !entry.reply.isNullOrBlank() -> {
-                        Text(entry.reply, style = MaterialTheme.typography.bodyLarge, fontStyle = FontStyle.Italic, color = paper.text)
-                        entry.replyAt?.let { Text("回信于 ${formatDateTime(it)}", style = MaterialTheme.typography.bodySmall, color = paper.text.copy(alpha = 0.62f)) }
+        Surface(
+            modifier = Modifier.fillMaxWidth().heightIn(max = 700.dp),
+            shape = RoundedCornerShape(24.dp),
+            color = if (page == 0) paper.background else replyPaperPreset(entry.replyPaper).background,
+            border = BorderStroke(1.dp, if (page == 0) paper.accent.copy(alpha = 0.28f) else replyPaperPreset(entry.replyPaper).accent.copy(alpha = 0.28f)),
+        ) {
+            Column(Modifier.fillMaxWidth()) {
+                Row(
+                    Modifier.fillMaxWidth().padding(14.dp, 10.dp, 14.dp, 0.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip(selected = page == 0, onClick = { page = 0 }, label = { Text("01 日记") })
+                        FilterChip(selected = page == 1, onClick = { page = 1 }, label = { Text("02 回信") })
                     }
-                    waitingForReply -> Text("信已经送出去了，正在等 $partnerName 写回来……", color = paper.accent)
-                    else -> Text("这一页还没有回信。你可以把它递给 $partnerName。", color = paper.text.copy(alpha = 0.65f))
+                    Text("${page + 1} / 2", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onEdit) { Text("编辑") }
+                AnimatedContent(
+                    targetState = page,
+                    transitionSpec = {
+                        if (targetState > initialState) {
+                            slideInHorizontally { it } togetherWith slideOutHorizontally { -it }
+                        } else {
+                            slideInHorizontally { -it } togetherWith slideOutHorizontally { it }
+                        }
+                    },
+                    label = "journal-page-turn",
+                ) { currentPage ->
+                    if (currentPage == 0) {
+                        Column(
+                            Modifier.fillMaxWidth().journalPaperTexture(paper).padding(22.dp).verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text("THE PRIVATE JOURNAL", style = MaterialTheme.typography.labelMedium, color = paper.accent)
+                                Text(paper.ornament, style = MaterialTheme.typography.titleLarge, color = paper.accent)
+                            }
+                            Text(entry.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = paper.text)
+                            Text("${formatDate(entry.entryDate)} · ${entry.folder ?: "全部心事"} · ${paper.name}", style = MaterialTheme.typography.bodySmall, color = paper.text.copy(alpha = 0.62f))
+                            HorizontalDivider(color = paper.accent.copy(alpha = 0.3f))
+                            Text(entry.content, style = MaterialTheme.typography.bodyLarge, color = paper.text)
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                TextButton(onClick = onEdit) { Text("编辑这页", color = paper.accent) }
+                                FilledTonalButton(onClick = { page = 1 }) { Text("翻到回信 →") }
+                            }
+                        }
+                    } else {
+                        val replyPaper = replyPaperPreset(entry.replyPaper)
+                        Column(
+                            Modifier.fillMaxWidth().replyPaperTexture(replyPaper).padding(22.dp).verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Column {
+                                    Text("A LETTER FROM $partnerName", style = MaterialTheme.typography.labelMedium, color = replyPaper.accent)
+                                    Text("写给这一页日记的回信", style = MaterialTheme.typography.bodySmall, color = replyPaper.text.copy(alpha = 0.62f))
+                                }
+                                Text(replyPaper.ornament, style = MaterialTheme.typography.titleLarge, color = replyPaper.accent)
+                            }
+                            HorizontalDivider(color = replyPaper.accent.copy(alpha = 0.28f))
+                            when {
+                                !entry.reply.isNullOrBlank() -> {
+                                    Text(entry.reply, style = MaterialTheme.typography.bodyLarge, fontStyle = FontStyle.Italic, color = replyPaper.text)
+                                    entry.replyAt?.let { Text("— $partnerName · ${formatDateTime(it)}", style = MaterialTheme.typography.bodySmall, color = replyPaper.text.copy(alpha = 0.62f)) }
+                                    Text("回信信纸", style = MaterialTheme.typography.labelLarge, color = replyPaper.text)
+                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        items(replyPaperPresets, key = { it.id }) { preset ->
+                                            FilterChip(
+                                                selected = replyPaper.id == preset.id,
+                                                onClick = { onReplyPaperChange(preset.id) },
+                                                label = { Text(preset.name) },
+                                            )
+                                        }
+                                    }
+                                }
+                                waitingForReply -> Text("信已经送出去了，正在等 $partnerName 写回来……", color = replyPaper.accent)
+                                else -> Text("这一页还没有回信。把日记递给 $partnerName，等一封只写给你的信。", color = replyPaper.text.copy(alpha = 0.72f))
+                            }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                TextButton(onClick = { page = 0 }) { Text("← 翻回日记", color = replyPaper.accent) }
+                                FilledTonalButton(enabled = !waitingForReply, onClick = onRequestReply) {
+                                    Text(if (entry.reply.isNullOrBlank()) "请 $partnerName 回信" else "请 $partnerName 再写一封")
+                                }
+                            }
+                        }
+                    }
+                }
+                Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = onDismiss) { Text("合上日记") }
-                    FilledTonalButton(enabled = !waitingForReply, onClick = onRequestReply) {
-                        Text(if (entry.reply.isNullOrBlank()) "请 $partnerName 回信" else "请 $partnerName 再写一封")
-                    }
                 }
             }
         }
