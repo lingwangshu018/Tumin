@@ -11,7 +11,7 @@ import org.json.JSONArray
 object StickerAiSupport {
     private const val PREFS = "tumin_sticker_library"
     private const val PACKS_KEY = "packs"
-    private const val AI_ENABLED_PACKS_KEY = "ai_enabled_pack_ids"
+    private const val AI_ENABLED_PACKS_PREFIX = "ai_enabled_pack_ids_"
 
     data class Sticker(
         val packId: String,
@@ -27,8 +27,8 @@ object StickerAiSupport {
         val aiEnabled: Boolean,
     )
 
-    fun getPackSummaries(context: Context): List<PackSummary> {
-        val enabled = getEnabledPackIds(context)
+    fun getPackSummaries(context: Context, assistantId: String): List<PackSummary> {
+        val enabled = getEnabledPackIds(context, assistantId)
         val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(PACKS_KEY, "[]") ?: "[]"
         return runCatching {
@@ -51,15 +51,20 @@ object StickerAiSupport {
         }.getOrDefault(emptyList())
     }
 
-    fun setPackAiEnabled(context: Context, packId: String, enabled: Boolean) {
+    fun setPackAiEnabled(
+        context: Context,
+        assistantId: String,
+        packId: String,
+        enabled: Boolean,
+    ) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val ids = getEnabledPackIds(context).toMutableSet()
+        val ids = getEnabledPackIds(context, assistantId).toMutableSet()
         if (enabled) ids += packId else ids -= packId
-        prefs.edit().putStringSet(AI_ENABLED_PACKS_KEY, ids).apply()
+        prefs.edit().putStringSet(enabledKey(assistantId), ids).apply()
     }
 
-    fun buildPrompt(context: Context): String {
-        val stickers = loadEnabledStickers(context)
+    fun buildPrompt(context: Context, assistantId: String): String {
+        val stickers = loadEnabledStickers(context, assistantId)
         if (stickers.isEmpty()) return ""
         val grouped = stickers.groupBy { it.packName }
         return buildString {
@@ -77,8 +82,12 @@ object StickerAiSupport {
         }.trim()
     }
 
-    fun replaceDirectives(context: Context, messages: List<UIMessage>): List<UIMessage> {
-        val stickers = loadEnabledStickers(context)
+    fun replaceDirectives(
+        context: Context,
+        assistantId: String,
+        messages: List<UIMessage>,
+    ): List<UIMessage> {
+        val stickers = loadEnabledStickers(context, assistantId)
         if (stickers.isEmpty()) return messages
         val byKey = stickers.associateBy { normalizeKey(it.packName, it.name) }
         val regex = Regex("\\[\\[STICKER\\s*:\\s*([^/\\]\\n]+?)\\s*/\\s*([^\\]\\n]+?)\\s*]]")
@@ -122,8 +131,8 @@ object StickerAiSupport {
         }
     }
 
-    private fun loadEnabledStickers(context: Context): List<Sticker> {
-        val enabled = getEnabledPackIds(context)
+    private fun loadEnabledStickers(context: Context, assistantId: String): List<Sticker> {
+        val enabled = getEnabledPackIds(context, assistantId)
         if (enabled.isEmpty()) return emptyList()
         val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(PACKS_KEY, "[]") ?: "[]"
@@ -149,11 +158,13 @@ object StickerAiSupport {
         }.getOrDefault(emptyList())
     }
 
-    private fun getEnabledPackIds(context: Context): Set<String> =
+    private fun getEnabledPackIds(context: Context, assistantId: String): Set<String> =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getStringSet(AI_ENABLED_PACKS_KEY, emptySet())
+            .getStringSet(enabledKey(assistantId), emptySet())
             ?.toSet()
             ?: emptySet()
+
+    private fun enabledKey(assistantId: String) = AI_ENABLED_PACKS_PREFIX + assistantId
 
     private fun normalizeKey(pack: String, name: String): String =
         pack.trim().lowercase() + "\u0000" + name.trim().lowercase()
