@@ -45,6 +45,10 @@ object RegexOutputTransformer : OutputMessageTransformer, KoinComponent {
                 )
             }
         }
-        return StickerAiSupport.replaceDirectives(ctx.context, regexProcessed)
+        return StickerAiSupport.replaceDirectives(
+            context = ctx.context,
+            assistantId = assistant.id.toString(),
+            messages = regexProcessed,
+        )
     }
 }
