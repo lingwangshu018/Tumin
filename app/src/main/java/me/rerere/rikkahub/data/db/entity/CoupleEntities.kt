@@ -53,6 +53,7 @@ data class CoupleDiaryEntity(
     val reply: String? = null,
     @ColumnInfo("reply_at") val replyAt: Long? = null,
     @ColumnInfo("reply_paper") val replyPaper: String? = null,
+    @ColumnInfo(name = "bookmarked", defaultValue = "0") val bookmarked: Boolean = false,
     @ColumnInfo("created_at") val createdAt: Long,
 )
 
