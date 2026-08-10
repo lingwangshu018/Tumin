@@ -12,32 +12,8 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 import me.rerere.ai.core.TokenUsage
-import me.rerere.rikkahub.data.db.dao.ConversationDAO
-import me.rerere.rikkahub.data.db.dao.CoupleDAO
-import me.rerere.rikkahub.data.db.dao.FavoriteDAO
-import me.rerere.rikkahub.data.db.dao.FolderDAO
-import me.rerere.rikkahub.data.db.dao.GenMediaDAO
-import me.rerere.rikkahub.data.db.dao.ManagedFileDAO
-import me.rerere.rikkahub.data.db.dao.MemoryBankDAO
-import me.rerere.rikkahub.data.db.dao.MemoryDAO
-import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
-import me.rerere.rikkahub.data.db.dao.WorkspaceDAO
-import me.rerere.rikkahub.data.db.entity.ConversationEntity
-import me.rerere.rikkahub.data.db.entity.CoupleAnniversaryEntity
-import me.rerere.rikkahub.data.db.entity.CoupleCommentEntity
-import me.rerere.rikkahub.data.db.entity.CoupleDiaryEntity
-import me.rerere.rikkahub.data.db.entity.CouplePostEntity
-import me.rerere.rikkahub.data.db.entity.CoupleRelationshipEntity
-import me.rerere.rikkahub.data.db.entity.FavoriteEntity
-import me.rerere.rikkahub.data.db.entity.FolderEntity
-import me.rerere.rikkahub.data.db.entity.GenMediaEntity
-import me.rerere.rikkahub.data.db.entity.ManagedFileEntity
-import me.rerere.rikkahub.data.db.entity.MemoryBankEntity
-import me.rerere.rikkahub.data.db.entity.MemoryEntity
-import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
-import me.rerere.rikkahub.data.db.entity.SshHostEntity
-import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
-import me.rerere.rikkahub.data.db.dao.SshHostDao
+import me.rerere.rikkahub.data.db.dao.*
+import me.rerere.rikkahub.data.db.entity.*
 import me.rerere.rikkahub.data.security.SecurityAuditDao
 import me.rerere.rikkahub.data.security.SecurityAuditEntity
 import me.rerere.rikkahub.workflow.db.WorkflowDao
@@ -68,9 +44,10 @@ import me.rerere.rikkahub.utils.JsonInstant
         CouplePostEntity::class,
         CoupleCommentEntity::class,
         CoupleDiaryEntity::class,
+        CoupleDiaryFolderEntity::class,
         CoupleAnniversaryEntity::class,
     ],
-    version = 32,
+    version = 33,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -91,47 +68,31 @@ import me.rerere.rikkahub.utils.JsonInstant
         AutoMigration(from = 28, to = 29),
         AutoMigration(from = 30, to = 31),
         AutoMigration(from = 31, to = 32),
+        AutoMigration(from = 32, to = 33),
     ]
 )
 @TypeConverters(TokenUsageConverter::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun conversationDao(): ConversationDAO
-
     abstract fun memoryDao(): MemoryDAO
-
     abstract fun genMediaDao(): GenMediaDAO
-
     abstract fun messageNodeDao(): MessageNodeDAO
-
     abstract fun managedFileDao(): ManagedFileDAO
-
     abstract fun favoriteDao(): FavoriteDAO
-
     abstract fun memoryBankDao(): MemoryBankDAO
-
     abstract fun workspaceDao(): WorkspaceDAO
-
     abstract fun folderDao(): FolderDAO
-
     abstract fun workflowDao(): WorkflowDao
-
     abstract fun workflowRunDao(): WorkflowRunDao
-
     abstract fun sshHostDao(): SshHostDao
-
     abstract fun securityAuditDao(): SecurityAuditDao
-
     abstract fun coupleDao(): CoupleDAO
 }
 
 object TokenUsageConverter {
     @TypeConverter
-    fun fromTokenUsage(usage: TokenUsage?): String {
-        return JsonInstant.encodeToString(usage)
-    }
+    fun fromTokenUsage(usage: TokenUsage?): String = JsonInstant.encodeToString(usage)
 
     @TypeConverter
-    fun toTokenUsage(usage: String): TokenUsage? {
-        return JsonInstant.decodeFromString(usage)
-    }
+    fun toTokenUsage(usage: String): TokenUsage? = JsonInstant.decodeFromString(usage)
 }
