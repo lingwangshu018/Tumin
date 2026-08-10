@@ -2,12 +2,13 @@ package me.rerere.rikkahub.data.ai.transformers
 
 import android.content.Context
 import me.rerere.ai.ui.UIMessage
+import me.rerere.rikkahub.ui.pages.life.MusicPlaybackSession
 import me.rerere.rikkahub.utils.StickerAiSupport
 import org.json.JSONArray
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
-/** Makes recent life-space, health-cycle, shared-reading, and allowed sticker context available to conversations. */
+/** Makes recent life-space, health-cycle, music, shared-reading, and allowed sticker context available to conversations. */
 object LifeContextTransformer : InputMessageTransformer {
     override suspend fun transform(ctx: TransformerContext, messages: List<UIMessage>): List<UIMessage> {
         val prefs = ctx.context.getSharedPreferences("tumin_life_hub", Context.MODE_PRIVATE)
@@ -34,12 +35,19 @@ object LifeContextTransformer : InputMessageTransformer {
         }.getOrDefault("")
 
         val healthContext = buildHealthContext(ctx.context)
+        val musicContext = buildMusicContext()
         val readingContext = buildReadingContext(ctx.context)
         val stickerContext = StickerAiSupport.buildPrompt(
             context = ctx.context,
             assistantId = ctx.assistant.id.toString(),
         )
-        if (lifeContext.isBlank() && healthContext.isBlank() && readingContext.isBlank() && stickerContext.isBlank()) return messages
+        if (
+            lifeContext.isBlank() &&
+            healthContext.isBlank() &&
+            musicContext.isBlank() &&
+            readingContext.isBlank() &&
+            stickerContext.isBlank()
+        ) return messages
 
         val injected = buildString {
             if (lifeContext.isNotBlank()) {
@@ -51,6 +59,10 @@ object LifeContextTransformer : InputMessageTransformer {
                 if (isNotEmpty()) appendLine().appendLine()
                 append(healthContext)
             }
+            if (musicContext.isNotBlank()) {
+                if (isNotEmpty()) appendLine().appendLine()
+                append(musicContext)
+            }
             if (readingContext.isNotBlank()) {
                 if (isNotEmpty()) appendLine().appendLine()
                 append(readingContext)
@@ -61,6 +73,34 @@ object LifeContextTransformer : InputMessageTransformer {
             }
         }
         return listOf(UIMessage.user(injected)) + messages
+    }
+
+    private fun buildMusicContext(): String {
+        MusicPlaybackSession.syncPosition()
+        val playback = MusicPlaybackSession.state.value
+        if (!playback.active) return ""
+        val lyricIndex = playback.lyricIndex()
+        val currentLyric = playback.lyrics.getOrNull(lyricIndex)?.text.orEmpty()
+        val previousLyric = playback.lyrics.getOrNull(lyricIndex - 1)?.text.orEmpty()
+        val nextLyric = playback.lyrics.getOrNull(lyricIndex + 1)?.text.orEmpty()
+        return buildString {
+            appendLine("<shared_music>")
+            appendLine(if (playback.togetherMode) "用户正在和你一起听歌。" else "用户当前正在听歌。")
+            appendLine("歌曲：${playback.title} · ${playback.artist}")
+            appendLine("播放状态：${if (playback.isPlaying) "播放中" else "暂停"}；进度约 ${formatPosition(playback.positionMs)}。")
+            if (currentLyric.isNotBlank()) {
+                appendLine("当前歌词：$currentLyric")
+                if (previousLyric.isNotBlank()) appendLine("上一句：$previousLyric")
+                if (nextLyric.isNotBlank()) appendLine("下一句：$nextLyric")
+            }
+            appendLine("如果用户说“这一句”“这里”“这段”之类的话，可以结合当前歌词自然回应。不要假装知道未提供的歌词或歌曲背景。")
+            append("</shared_music>")
+        }.trim()
+    }
+
+    private fun formatPosition(ms: Long): String {
+        val safe = ms.coerceAtLeast(0L) / 1000L
+        return "%02d:%02d".format(safe / 60L, safe % 60L)
     }
 
     private fun buildHealthContext(context: Context): String {
