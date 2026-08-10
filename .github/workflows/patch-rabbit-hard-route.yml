@@ -1,0 +1,43 @@
+name: Patch Rabbit Space hard route
+on:
+  push:
+    paths:
+      - '.github/rabbit-hard-route-trigger'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch source
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('app/src/main/java/me/rerere/rikkahub/service/ChatService.kt')
+          s=p.read_text(encoding='utf-8-sig')
+          marker='import me.rerere.rikkahub.data.ai.tools.LocalTools\n'
+          assert marker in s
+          s=s.replace(marker, marker+'import me.rerere.rikkahub.data.ai.tools.ToolSurfaceBuilder\nimport me.rerere.rikkahub.data.ai.tools.ToolInvocationContext\n',1)
+          marker='    private val localTools: LocalTools,\n'
+          assert marker in s
+          s=s.replace(marker, marker+'    private val toolSurfaceBuilder: ToolSurfaceBuilder,\n',1)
+          start=s.index('                tools = buildList {')
+          end=s.index('                pluginPromptInjections =', start)
+          new='''                tools = toolSurfaceBuilder.build(\n                    assistant = assistant,\n                    settings = settings,\n                    invocationContext = ToolInvocationContext(\n                        callerAssistantId = assistant.id.toString(),\n                        callerConversationId = conversationId.toString(),\n                    ),\n                    recentMessages = conversation.currentMessages,\n                    workspaceCwd = conversation.workspaceCwd,\n                ),\n'''
+          s=s[:start]+new+s[end:]
+          p.write_text(s, encoding='utf-8')
+          p=Path('app/src/main/java/me/rerere/rikkahub/di/AppModule.kt')
+          s=p.read_text(encoding='utf-8-sig')
+          marker='            localTools = get(),\n            mcpManager = get(),\n'
+          assert marker in s
+          s=s.replace(marker,'            localTools = get(),\n            toolSurfaceBuilder = get(),\n            mcpManager = get(),\n',1)
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add app/src/main/java/me/rerere/rikkahub/service/ChatService.kt app/src/main/java/me/rerere/rikkahub/di/AppModule.kt
+          git commit -m 'fix: enforce Rabbit Space hard route in real chat generation'
+          git push
