@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
@@ -48,7 +49,7 @@ private data class StickerPack(
 fun StickerUrlPicker(
     modifier: Modifier = Modifier,
     height: Int = 320,
-    onStickerSelected: (String) -> Unit,
+    onStickerSelected: (name: String, url: String) -> Unit,
 ) {
     val context = LocalContext.current
     val client: OkHttpClient = koinInject()
@@ -74,7 +75,7 @@ fun StickerUrlPicker(
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("我的表情包", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text("从 URL 导入 · 点一下直接作为图片发送", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("名字 + URL · 点一下直接作为图片发送", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 TextButton(onClick = { managing = !managing }) { Text(if (managing) "完成" else "管理") }
                 FilledTonalButton(onClick = { showImport = true }, shape = RoundedCornerShape(14.dp)) { Text("＋ 导入") }
@@ -95,7 +96,7 @@ fun StickerUrlPicker(
                         Text("🧸", style = MaterialTheme.typography.headlineMedium)
                         Spacer(Modifier.height(6.dp))
                         Text("这里还没有自己的表情包", fontWeight = FontWeight.SemiBold)
-                        Text("贴一个图片直链或表情包 JSON URL 就能导入。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("可以直接粘贴“哭哭: https://…gif”，也可以导入一个远程表情清单 URL。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(10.dp))
                         FilledTonalButton(onClick = { showImport = true }) { Text("导入第一个表情包") }
                     }
@@ -119,23 +120,26 @@ fun StickerUrlPicker(
                                 Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Column(Modifier.weight(1f)) {
                                         Text(pack.name, fontWeight = FontWeight.SemiBold)
-                                        Text("${pack.stickers.size} 张 · ${pack.sourceUrl}", maxLines = 1, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        val sourceLabel = pack.sourceUrl.ifBlank { "手动粘贴清单" }
+                                        Text("${pack.stickers.size} 张 · $sourceLabel", maxLines = 1, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
-                                    TextButton(
-                                        enabled = !loading,
-                                        onClick = {
-                                            loading = true
-                                            error = null
-                                            scope.launch {
-                                                runCatching { fetchStickerPack(client, pack.sourceUrl, pack.name) }
-                                                    .onSuccess { refreshed ->
-                                                        persist(packs.map { if (it.id == pack.id) refreshed.copy(id = pack.id) else it })
-                                                    }
-                                                    .onFailure { error = it.message ?: "刷新失败" }
-                                                loading = false
-                                            }
-                                        },
-                                    ) { Text("刷新") }
+                                    if (pack.sourceUrl.isNotBlank()) {
+                                        TextButton(
+                                            enabled = !loading,
+                                            onClick = {
+                                                loading = true
+                                                error = null
+                                                scope.launch {
+                                                    runCatching { fetchStickerPack(client, pack.sourceUrl, pack.name) }
+                                                        .onSuccess { refreshed ->
+                                                            persist(packs.map { if (it.id == pack.id) refreshed.copy(id = pack.id) else it })
+                                                        }
+                                                        .onFailure { error = it.message ?: "刷新失败" }
+                                                    loading = false
+                                                }
+                                            },
+                                        ) { Text("刷新") }
+                                    }
                                     TextButton(onClick = { persist(packs.filterNot { it.id == pack.id }) }) { Text("删除") }
                                 }
                             }
@@ -143,23 +147,33 @@ fun StickerUrlPicker(
                     }
                 } else {
                     LazyVerticalGrid(
-                        columns = GridCells.Adaptive(72.dp),
+                        columns = GridCells.Adaptive(82.dp),
                         modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         gridItems(selected.stickers, key = { it.url }) { sticker ->
-                            Surface(
-                                onClick = { onStickerSelected(sticker.url) },
-                                modifier = Modifier.aspectRatio(1f),
-                                shape = RoundedCornerShape(14.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainer,
-                            ) {
-                                AsyncImage(
-                                    model = sticker.url,
-                                    contentDescription = sticker.name,
-                                    modifier = Modifier.fillMaxSize().padding(4.dp),
-                                    contentScale = ContentScale.Fit,
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Surface(
+                                    onClick = { onStickerSelected(sticker.name, sticker.url) },
+                                    modifier = Modifier.size(72.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainer,
+                                ) {
+                                    AsyncImage(
+                                        model = sticker.url,
+                                        contentDescription = sticker.name,
+                                        modifier = Modifier.fillMaxSize().padding(4.dp),
+                                        contentScale = ContentScale.Fit,
+                                    )
+                                }
+                                Spacer(Modifier.height(3.dp))
+                                Text(
+                                    sticker.name,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }
@@ -176,11 +190,11 @@ fun StickerUrlPicker(
             loading = loading,
             error = error,
             onDismiss = { if (!loading) { showImport = false; error = null } },
-            onImport = { name, url ->
+            onImport = { name, source ->
                 loading = true
                 error = null
                 scope.launch {
-                    runCatching { fetchStickerPack(client, url, name) }
+                    runCatching { importStickerPack(client, source, name) }
                         .onSuccess { pack ->
                             persist(packs + pack)
                             selectedPackId = pack.id
@@ -188,7 +202,7 @@ fun StickerUrlPicker(
                             showImport = false
                         }
                         .onFailure {
-                            error = it.message ?: "导入失败，请检查 URL"
+                            error = it.message ?: "导入失败，请检查格式"
                             loading = false
                         }
                 }
@@ -205,14 +219,18 @@ private fun ImportStickerPackDialog(
     onImport: (String, String) -> Unit,
 ) {
     var name by remember { mutableStateOf("") }
-    var url by remember { mutableStateOf("") }
+    var source by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(24.dp),
-        title = { Text("导入表情包 URL") },
+        title = { Text("导入我的表情包") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("支持：单张图片直链、JSON 表情包、纯文本 URL 列表。JSON 可以是字符串数组，也可以是带 name/url 的对象数组。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "推荐格式：每行“名字: 图片URL”，例如：\n哭哭: https://img.example.com/cry.gif\n抱抱: https://img.example.com/hug.webp\n\n也支持远程清单 URL、JSON、纯 URL 列表和单张图片直链。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -221,11 +239,11 @@ private fun ImportStickerPackDialog(
                     singleLine = true,
                 )
                 OutlinedTextField(
-                    value = url,
-                    onValueChange = { url = it },
+                    value = source,
+                    onValueChange = { source = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("https://…") },
-                    minLines = 2,
+                    label = { Text("粘贴 URL 或“名字: URL”清单") },
+                    minLines = 5,
                 )
                 if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
@@ -233,12 +251,35 @@ private fun ImportStickerPackDialog(
         },
         confirmButton = {
             FilledTonalButton(
-                enabled = (url.trim().startsWith("http://") || url.trim().startsWith("https://")) && !loading,
-                onClick = { onImport(name.trim(), url.trim()) },
+                enabled = source.isNotBlank() && !loading,
+                onClick = { onImport(name.trim(), source.trim()) },
             ) { Text("导入") }
         },
         dismissButton = { TextButton(enabled = !loading, onClick = onDismiss) { Text("取消") } },
     )
+}
+
+private suspend fun importStickerPack(
+    client: OkHttpClient,
+    source: String,
+    requestedName: String,
+): StickerPack {
+    val trimmed = source.trim()
+    val isSingleRemoteSource = !trimmed.contains('\n') &&
+        (trimmed.startsWith("http://") || trimmed.startsWith("https://"))
+    return if (isSingleRemoteSource) {
+        fetchStickerPack(client, trimmed, requestedName)
+    } else {
+        val parsed = parseStickerSource(trimmed)
+        val stickers = parsed.stickers.distinctBy { it.url }
+        if (stickers.isEmpty()) error("没有找到“名字: 图片URL”或有效图片链接")
+        StickerPack(
+            id = UUID.randomUUID().toString(),
+            name = requestedName.ifBlank { parsed.name.ifBlank { "我的表情包" } },
+            sourceUrl = "",
+            stickers = stickers,
+        )
+    }
 }
 
 private suspend fun fetchStickerPack(
@@ -294,19 +335,37 @@ private fun parseStickerSource(raw: String): ParsedStickerSource {
         if (singleUrl.startsWith("http")) return ParsedStickerSource(name, listOf(StickerItem(name.ifBlank { "表情" }, singleUrl)))
     }
 
-    val urls = text.lineSequence()
+    val stickers = text.lineSequence()
         .map { it.trim() }
-        .filter { it.startsWith("http://") || it.startsWith("https://") }
-        .distinct()
-        .mapIndexed { index, url -> StickerItem("表情 ${index + 1}", url) }
+        .filter { it.isNotBlank() }
+        .mapNotNull { line -> parseNamedStickerLine(line) }
+        .distinctBy { it.url }
         .toList()
-    return ParsedStickerSource(stickers = urls)
+    return ParsedStickerSource(stickers = stickers)
+}
+
+private fun parseNamedStickerLine(line: String): StickerItem? {
+    val httpIndex = listOf(line.indexOf("https://"), line.indexOf("http://"))
+        .filter { it >= 0 }
+        .minOrNull() ?: return null
+    val url = line.substring(httpIndex).trim().removeSurrounding("<", ">")
+    if (!(url.startsWith("http://") || url.startsWith("https://"))) return null
+
+    val rawName = line.substring(0, httpIndex)
+        .trim()
+        .trimEnd(':', '：', '-', '—', '=', '>', '|')
+        .trim()
+    val name = rawName.ifBlank { "表情" }
+    return StickerItem(name = name, url = url)
 }
 
 private fun parseStickerArray(array: JSONArray): List<StickerItem> = buildList {
     for (index in 0 until array.length()) {
         when (val value = array.opt(index)) {
-            is String -> if (value.startsWith("http")) add(StickerItem("表情 ${index + 1}", value))
+            is String -> {
+                parseNamedStickerLine(value)?.let(::add)
+                    ?: if (value.startsWith("http")) add(StickerItem("表情 ${index + 1}", value)) else Unit
+            }
             is JSONObject -> {
                 val url = value.optString("url")
                     .ifBlank { value.optString("src") }
@@ -331,7 +390,7 @@ private fun loadStickerPacks(context: Context): List<StickerPack> = runCatching 
                 for (j in 0 until stickersArray.length()) {
                     val sticker = stickersArray.getJSONObject(j)
                     val url = sticker.optString("url")
-                    if (url.isNotBlank()) add(StickerItem(sticker.optString("name"), url))
+                    if (url.isNotBlank()) add(StickerItem(sticker.optString("name").ifBlank { "表情" }, url))
                 }
             }.distinctBy { it.url }
             add(StickerPack(obj.getString("id"), obj.optString("name", "我的表情包"), obj.optString("sourceUrl"), stickers))
