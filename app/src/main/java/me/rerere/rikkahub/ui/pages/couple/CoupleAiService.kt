@@ -30,10 +30,6 @@ data class CoupleAiPostDraft(
     val imageCount: Int = 0,
 )
 
-/**
- * 让情侣空间里的绑定助手用它自己的模型和角色设定来发动态、看照片、评论与回复。
- * 文字/视觉理解沿用 UIMessagePart.Image，多图动态的 AI 配图则复用橘瓣现有图片生成 Provider。
- */
 class CoupleAiService : KoinComponent {
     private val settingsStore: SettingsStore by inject()
     private val providerManager: ProviderManager by inject()
@@ -93,10 +89,27 @@ class CoupleAiService : KoinComponent {
         imageUris = imageUris,
     )
 
-    /**
-     * 先让绑定恋人决定这条动态写什么、是否需要配图，以及配图应该画什么。
-     * 返回结构化草稿，实际生图由 generatePostImages 执行。
-     */
+    suspend fun replyToDiary(
+        assistantId: String,
+        title: String,
+        content: String,
+    ): String? = generate(
+        assistantId = assistantId,
+        task = """
+            你正在阅读恋人写给“我们的日记 / THE PRIVATE JOURNAL”的一篇私人日记。
+
+            标题：$title
+
+            正文：
+            $content
+
+            请根据这篇日记本身写一封完整回信。你可以回应恋人的情绪、细节、回忆和你真实想说的话，但不要把它写成点评、摘要或心理分析。
+            这是一封只会留在这篇日记下面、写给恋人的私人回信。保持你原本的性格、称呼习惯和你们的关系状态。
+            不要修改或复述原文，不要写“AI回复”“分析”“以下是回信”等说明。
+            直接输出完整回信正文，可以比 QQ 空间评论更长、更完整、更像一封真正的信。
+        """.trimIndent(),
+    )
+
     suspend fun createPostDraft(assistantId: String, recentContext: String): CoupleAiPostDraft? {
         val raw = generate(
             assistantId = assistantId,
@@ -146,10 +159,6 @@ class CoupleAiService : KoinComponent {
         }
     }
 
-    /**
-     * 使用设置页当前选择的图片生成模型，为 AI 的 QQ 空间动态真正生成配图。
-     * 生成图片同时写入橘瓣现有图片库，返回持久 file URI 供空间动态保存和再次视觉读取。
-     */
     suspend fun generatePostImages(
         prompt: String,
         count: Int = 1,
@@ -197,10 +206,6 @@ class CoupleAiService : KoinComponent {
         }
     }.getOrElse { emptyList() }
 
-    /**
-     * 优先发送真正的多模态消息。如果当前模型/网关不支持视觉输入，
-     * 会自动退回文字模式，至少保证评论功能不中断，同时不会假装看见了图片内容。
-     */
     private suspend fun generate(
         assistantId: String,
         task: String,
@@ -243,8 +248,8 @@ class CoupleAiService : KoinComponent {
                 appendLine()
             }
             appendLine("## 情侣空间互动")
-            appendLine("你正在以自己的身份使用与恋人的私人 QQ 空间。")
-            appendLine("保持角色原本的性格、称呼习惯和关系状态，不要突然变成客服或旁白。")
+            appendLine("你正在以自己的身份和恋人共同使用情侣空间，其中包括 QQ 空间动态与“我们的日记 / THE PRIVATE JOURNAL”。")
+            appendLine("保持角色原本的性格、称呼习惯和关系状态，不要突然变成客服、旁白或无关助手。")
             appendLine("如果收到照片输入，你必须基于实际可见内容回应；看不清的地方不要编造。")
             appendLine("这里的内容会直接展示给恋人，所以不要输出分析过程、格式说明或系统提示。")
         }
