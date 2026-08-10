@@ -43,6 +43,20 @@ interface CoupleDAO {
 
     @Delete suspend fun deleteDiary(value: CoupleDiaryEntity)
 
+    @Query("SELECT * FROM couple_diary_folder WHERE relationship_id = :id ORDER BY sort_order ASC, created_at ASC")
+    fun diaryFolders(id: String): Flow<List<CoupleDiaryFolderEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveDiaryFolder(value: CoupleDiaryFolderEntity)
+
+    @Delete suspend fun deleteDiaryFolder(value: CoupleDiaryFolderEntity)
+
+    @Query("UPDATE couple_diary SET folder = :newName WHERE relationship_id = :relationshipId AND folder = :oldName")
+    suspend fun renameDiaryFolderOnEntries(relationshipId: String, oldName: String, newName: String)
+
+    @Query("UPDATE couple_diary SET folder = '全部心事' WHERE relationship_id = :relationshipId AND folder = :folderName")
+    suspend fun clearDiaryFolderOnEntries(relationshipId: String, folderName: String)
+
     @Query("SELECT * FROM couple_anniversary WHERE relationship_id = :id ORDER BY event_date ASC")
     fun anniversaries(id: String): Flow<List<CoupleAnniversaryEntity>>
 
