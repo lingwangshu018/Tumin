@@ -42,6 +42,7 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
 import java.util.concurrent.TimeUnit
+import kotlin.math.roundToInt
 
 private const val HEALTH_PREFS = "tumin_health_cycle"
 private const val PERIODS_KEY = "periods"
@@ -54,6 +55,8 @@ private const val AI_ALLOWED_KEY = "ai_allowed"
 private const val LAST_NOTIFICATION_KEY = "last_period_notification"
 private const val PERIOD_WORK_NAME = "tumin_period_reminder"
 private const val PERIOD_CHANNEL_ID = "tumin_period_cycle"
+private const val DEFAULT_CYCLE_DAYS = 30
+private const val DEFAULT_PERIOD_DAYS = 7
 
 private data class PeriodRecord(val start: LocalDate, val end: LocalDate? = null)
 private data class DailyBodyLog(
@@ -81,8 +84,8 @@ fun HealthCyclePanel() {
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     var showLogEditor by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
-    var cycleLength by remember { mutableIntStateOf(prefs.getInt(CYCLE_LENGTH_KEY, 28)) }
-    var periodLength by remember { mutableIntStateOf(prefs.getInt(PERIOD_LENGTH_KEY, 5)) }
+    var cycleLength by remember { mutableIntStateOf(prefs.getInt(CYCLE_LENGTH_KEY, DEFAULT_CYCLE_DAYS)) }
+    var periodLength by remember { mutableIntStateOf(prefs.getInt(PERIOD_LENGTH_KEY, DEFAULT_PERIOD_DAYS)) }
     var reminderEnabled by remember { mutableStateOf(prefs.getBoolean(REMINDER_ENABLED_KEY, false)) }
     var reminderDays by remember { mutableIntStateOf(prefs.getInt(REMINDER_DAYS_KEY, 3)) }
     var aiAllowed by remember { mutableStateOf(prefs.getBoolean(AI_ALLOWED_KEY, true)) }
@@ -95,14 +98,32 @@ fun HealthCyclePanel() {
         if (reminderEnabled) schedulePeriodReminder(context) else cancelPeriodReminder(context)
     }
 
-    val effectiveCycle = averageCycleLength(periods) ?: cycleLength
-    val effectivePeriod = averagePeriodLength(periods) ?: periodLength
+    val learnedCycle = averageCycleLength(periods)
+    val learnedPeriod = averagePeriodLength(periods)
+    val effectiveCycle = learnedCycle ?: cycleLength
+    val effectivePeriod = learnedPeriod ?: periodLength
     val latestPeriod = periods.maxByOrNull { it.start }
     val predictedStart = latestPeriod?.start?.plusDays(effectiveCycle.toLong())
     val today = LocalDate.now()
-    val activePeriod = periods.firstOrNull { !today.isBefore(it.start) && !today.isAfter(it.end ?: today) }
-    val dayInPeriod = activePeriod?.let { ChronoUnit.DAYS.between(it.start, today).toInt() + 1 }
+    val openPeriod = periods.filter { it.end == null }.maxByOrNull { it.start }
+    val currentPeriod = periods.firstOrNull { record ->
+        val displayEnd = record.end ?: record.start.plusDays((effectivePeriod - 1).coerceAtLeast(0).toLong())
+        !today.isBefore(record.start) && !today.isAfter(displayEnd)
+    }
+    val dayInPeriod = currentPeriod?.let { ChronoUnit.DAYS.between(it.start, today).toInt() + 1 }
     val daysUntil = predictedStart?.let { ChronoUnit.DAYS.between(today, it).toInt() }
+
+    LaunchedEffect(Unit) {
+        // Migrate the short-lived first implementation's untouched defaults to the product defaults.
+        // Custom user values are preserved.
+        if (prefs.getInt(CYCLE_LENGTH_KEY, DEFAULT_CYCLE_DAYS) == 28 &&
+            prefs.getInt(PERIOD_LENGTH_KEY, DEFAULT_PERIOD_DAYS) == 5 &&
+            periods.size < 2
+        ) {
+            cycleLength = DEFAULT_CYCLE_DAYS
+            periodLength = DEFAULT_PERIOD_DAYS
+        }
+    }
 
     LaunchedEffect(reminderEnabled, reminderDays, cycleLength, periodLength, aiAllowed) {
         saveSettings(context, cycleLength, periodLength, reminderEnabled, reminderDays, aiAllowed)
@@ -125,13 +146,15 @@ fun HealthCyclePanel() {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text("🌷 PERIOD & BODY", color = Color(0xFFB85F78), style = MaterialTheme.typography.labelLarge)
-                            Text("周期与身体", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color(0xFF57454B))
+                            Text("生理周期", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color(0xFF57454B))
                             Text(
                                 when {
-                                    dayInPeriod != null -> "经期第 $dayInPeriod 天，今天也要对自己温柔一点。"
+                                    dayInPeriod != null && currentPeriod?.end != null -> "经期第 $dayInPeriod 天，已按实际开始和结束记录。"
+                                    dayInPeriod != null -> "经期第 $dayInPeriod 天，结束日暂按 $effectivePeriod 天经期预测。"
+                                    openPeriod != null -> "这次经期还没有记录结束日，预测区间已结束，可以按实际日期补记。"
                                     daysUntil != null && daysUntil >= 0 -> "预计还有 $daysUntil 天到下次经期。"
-                                    predictedStart != null -> "预计日期已过，可以按实际情况重新记录。"
-                                    else -> "记录第一次经期后，我会帮你估算下一次。"
+                                    predictedStart != null -> "预计日期已过，可以按实际情况记录新的开始日。"
+                                    else -> "记录第一次经期后，先按 30 天周期、7 天经期帮你预测。"
                                 },
                                 color = Color(0xFF806B72),
                             )
@@ -139,34 +162,45 @@ fun HealthCyclePanel() {
                         FilledTonalButton(onClick = { showSettings = true }, shape = RoundedCornerShape(16.dp)) { Text("设置") }
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        HealthStat("周期", "${effectiveCycle}天", Modifier.weight(1f))
-                        HealthStat("经期", "${effectivePeriod}天", Modifier.weight(1f))
+                        HealthStat(if (learnedCycle != null) "平均周期" else "预测周期", "${effectiveCycle}天", Modifier.weight(1f))
+                        HealthStat(if (learnedPeriod != null) "平均经期" else "预测经期", "${effectivePeriod}天", Modifier.weight(1f))
                         HealthStat("记录", "${periods.size}次", Modifier.weight(1f))
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = {
-                                if (activePeriod == null) {
+                                if (openPeriod == null) {
                                     periods = (periods + PeriodRecord(today)).sortedBy { it.start }
                                     savePeriods(context, periods)
                                 }
                             },
                             modifier = Modifier.weight(1f),
-                            enabled = activePeriod == null,
+                            enabled = openPeriod == null,
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC96882)),
                             shape = RoundedCornerShape(18.dp),
-                        ) { Text(if (activePeriod == null) "今天来了" else "经期进行中") }
+                        ) { Text(if (openPeriod == null) "今天来了" else "本轮已开始") }
                         OutlinedButton(
                             onClick = {
-                                activePeriod?.let { active ->
+                                openPeriod?.let { active ->
                                     periods = periods.map { if (it.start == active.start) it.copy(end = today) else it }
                                     savePeriods(context, periods)
                                 }
                             },
                             modifier = Modifier.weight(1f),
-                            enabled = activePeriod != null,
+                            enabled = openPeriod != null,
                             shape = RoundedCornerShape(18.dp),
                         ) { Text("今天结束") }
+                    }
+                    if (periods.isNotEmpty()) {
+                        Text(
+                            when {
+                                learnedCycle == null && learnedPeriod == null -> "数据还少：先用 30 天周期 / 7 天经期预测；记录多起来后会自动学习你的节奏。"
+                                learnedCycle != null && learnedPeriod != null -> "已根据最近记录自动调整周期与经期长度。"
+                                else -> "已经开始学习你的记录；数据再多一些，预测会继续按你的实际周期调整。"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
@@ -290,8 +324,21 @@ private fun HealthMonthCalendar(
         dates.chunked(7).forEach { week ->
             Row(Modifier.fillMaxWidth()) {
                 week.forEach { date ->
-                    val actual = periods.any { !date.isBefore(it.start) && !date.isAfter(it.end ?: it.start.plusDays(6)) }
-                    val predicted = predictedStart?.let { startDate -> !date.isBefore(startDate) && date.isBefore(startDate.plusDays(predictedLength.toLong())) } == true
+                    val actual = periods.any { record ->
+                        if (record.end != null) {
+                            !date.isBefore(record.start) && !date.isAfter(record.end)
+                        } else {
+                            date == record.start
+                        }
+                    }
+                    val predictedCurrent = periods.any { record ->
+                        record.end == null && date.isAfter(record.start) &&
+                            !date.isAfter(record.start.plusDays((predictedLength - 1).coerceAtLeast(0).toLong()))
+                    }
+                    val predictedNext = predictedStart?.let { startDate ->
+                        !date.isBefore(startDate) && date.isBefore(startDate.plusDays(predictedLength.toLong()))
+                    } == true
+                    val predicted = predictedCurrent || predictedNext
                     val hasLog = logs.any { it.date == date }
                     val isToday = date == LocalDate.now()
                     val isSelected = date == selected
@@ -313,7 +360,7 @@ private fun HealthMonthCalendar(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             Text("● 已记录经期", color = Color(0xFFC9637D), style = MaterialTheme.typography.labelSmall)
-            Text("○ 预计经期", color = Color(0xFFD99AAF), style = MaterialTheme.typography.labelSmall)
+            Text("○ 预测经期", color = Color(0xFFD99AAF), style = MaterialTheme.typography.labelSmall)
             Text("• 身体记录", color = Color(0xFF8B75A0), style = MaterialTheme.typography.labelSmall)
         }
     }
@@ -374,9 +421,9 @@ private fun HealthSettingsDialog(
         title = { Text("周期设置") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text("历史记录不足时，会先使用这里的默认值。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("默认周期：$cycle 天"); Slider(cycle.toFloat(), { cycle = it.toInt() }, valueRange = 20f..45f, steps = 24)
-                Text("默认经期：$period 天"); Slider(period.toFloat(), { period = it.toInt() }, valueRange = 2f..10f, steps = 7)
+                Text("历史记录不足时，先按约 30 天周期、7 天经期预测；记录多起来后会自动按你的实际节奏调整。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("初始预测周期：$cycle 天"); Slider(cycle.toFloat(), { cycle = it.toInt() }, valueRange = 20f..45f, steps = 24)
+                Text("初始预测经期：$period 天"); Slider(period.toFloat(), { period = it.toInt() }, valueRange = 2f..10f, steps = 7)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("通知栏提醒", fontWeight = FontWeight.Bold); Text("退出橘瓣后也可以收到", style = MaterialTheme.typography.bodySmall) }; Switch(reminders, { reminders = it }) }
                 if (reminders) { Text("提前 $days 天提醒"); Slider(days.toFloat(), { days = it.toInt() }, valueRange = 1f..7f, steps = 5) }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("允许 AI 读取", fontWeight = FontWeight.Bold); Text("只提供当前状态与最近记录", style = MaterialTheme.typography.bodySmall) }; Switch(ai, { ai = it }) }
@@ -389,14 +436,20 @@ private fun HealthSettingsDialog(
 
 private fun averageCycleLength(periods: List<PeriodRecord>): Int? {
     val starts = periods.map { it.start }.sorted()
-    if (starts.size < 2) return null
-    val intervals = starts.zipWithNext { a, b -> ChronoUnit.DAYS.between(a, b).toInt() }.filter { it in 15..60 }.takeLast(6)
-    return intervals.takeIf { it.isNotEmpty() }?.average()?.toInt()?.coerceIn(20, 45)
+    if (starts.size < 3) return null
+    val intervals = starts.zipWithNext { a, b -> ChronoUnit.DAYS.between(a, b).toInt() }
+        .filter { it in 15..60 }
+        .takeLast(6)
+    if (intervals.size < 2) return null
+    return intervals.average().roundToInt().coerceIn(20, 45)
 }
 
 private fun averagePeriodLength(periods: List<PeriodRecord>): Int? {
-    val lengths = periods.mapNotNull { record -> record.end?.let { ChronoUnit.DAYS.between(record.start, it).toInt() + 1 } }.filter { it in 1..12 }.takeLast(6)
-    return lengths.takeIf { it.isNotEmpty() }?.average()?.toInt()?.coerceIn(2, 10)
+    val lengths = periods.mapNotNull { record ->
+        record.end?.let { ChronoUnit.DAYS.between(record.start, it).toInt() + 1 }
+    }.filter { it in 1..12 }.takeLast(6)
+    if (lengths.size < 2) return null
+    return lengths.average().roundToInt().coerceIn(2, 10)
 }
 
 private fun loadPeriods(context: Context): List<PeriodRecord> = runCatching {
@@ -439,7 +492,7 @@ class PeriodReminderWorker(appContext: Context, params: WorkerParameters) : Work
         if (!prefs.getBoolean(REMINDER_ENABLED_KEY, false)) return Result.success()
         val periods = loadPeriods(applicationContext)
         val last = periods.maxByOrNull { it.start } ?: return Result.success()
-        val cycle = averageCycleLength(periods) ?: prefs.getInt(CYCLE_LENGTH_KEY, 28)
+        val cycle = averageCycleLength(periods) ?: prefs.getInt(CYCLE_LENGTH_KEY, DEFAULT_CYCLE_DAYS)
         val before = prefs.getInt(REMINDER_DAYS_KEY, 3)
         val predicted = last.start.plusDays(cycle.toLong())
         val today = LocalDate.now()
