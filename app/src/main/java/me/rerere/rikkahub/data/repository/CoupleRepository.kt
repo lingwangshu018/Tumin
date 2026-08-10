@@ -162,9 +162,45 @@ class CoupleRepository(private val dao: CoupleDAO) {
         dao.deleteDiaryFolder(folder)
     }
 
-    suspend fun addAnniversary(relationshipId: String, title: String, date: Long, yearly: Boolean) = dao.saveAnniversary(
-        CoupleAnniversaryEntity(UUID.randomUUID().toString(), relationshipId, title, date, yearly, System.currentTimeMillis())
+    suspend fun addAnniversary(
+        relationshipId: String,
+        title: String,
+        date: Long,
+        yearly: Boolean,
+        category: String = "love",
+        note: String? = null,
+    ) = dao.saveAnniversary(
+        CoupleAnniversaryEntity(
+            id = UUID.randomUUID().toString(),
+            relationshipId = relationshipId,
+            title = title,
+            eventDate = date,
+            yearly = yearly,
+            category = category,
+            note = note?.trim()?.takeIf { it.isNotBlank() },
+            createdAt = System.currentTimeMillis(),
+        )
     )
+
+    suspend fun updateAnniversary(
+        entry: CoupleAnniversaryEntity,
+        title: String,
+        date: Long,
+        yearly: Boolean,
+        category: String,
+        note: String?,
+    ) = dao.saveAnniversary(
+        entry.copy(
+            title = title,
+            eventDate = date,
+            yearly = yearly,
+            category = category,
+            note = note?.trim()?.takeIf { it.isNotBlank() },
+        )
+    )
+
+    suspend fun toggleAnniversaryFavorite(entry: CoupleAnniversaryEntity) =
+        dao.saveAnniversary(entry.copy(favorite = !entry.favorite))
 
     suspend fun deleteAnniversary(entry: CoupleAnniversaryEntity) = dao.deleteAnniversary(entry)
 }
