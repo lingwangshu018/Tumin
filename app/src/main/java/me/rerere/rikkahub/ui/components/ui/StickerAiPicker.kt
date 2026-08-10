@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -52,7 +51,7 @@ fun StickerAiPicker(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Column(Modifier.weight(1f)) {
+                Column(Modifier.fillMaxWidth(0.62f)) {
                     Text("TA 的表情权限", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                     Text("${assistant.name} 只会看到你勾选的分类", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -94,8 +93,9 @@ fun StickerAiPicker(
                                 Row(
                                     Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
                                 ) {
-                                    Column(Modifier.weight(1f)) {
+                                    Column(Modifier.fillMaxWidth(0.78f)) {
                                         Text(pack.name, fontWeight = FontWeight.SemiBold)
                                         Text("${pack.stickerCount} 张表情", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
