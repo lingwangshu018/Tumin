@@ -21,11 +21,16 @@ class CoupleAiService : KoinComponent {
     private val settingsStore: SettingsStore by inject()
     private val providerManager: ProviderManager by inject()
 
-    suspend fun commentOnUserPost(assistantId: String, postContent: String): String? = generate(
+    suspend fun commentOnUserPost(
+        assistantId: String,
+        postContent: String,
+        imageCount: Int = 0,
+    ): String? = generate(
         assistantId = assistantId,
         task = """
-            你正在情侣空间的 QQ 空间动态里看到恋人刚发的内容：
-            「$postContent」
+            你正在情侣空间的 QQ 空间动态里看到恋人刚发的内容。
+            文字：${postContent.ifBlank { "（没有配文）" }}
+            ${if (imageCount > 0) "这条动态还附带了 $imageCount 张照片。你目前只知道有照片，不要假装看见照片里不存在的具体细节。可以自然地回应恋人分享照片这件事，并结合配文评论。" else "这是一条纯文字动态。"}
 
             请以你自己的性格和你们的关系，自然评论这条动态。
             只输出评论正文，不要解释，不要写“评论：”，不要使用系统说明。
