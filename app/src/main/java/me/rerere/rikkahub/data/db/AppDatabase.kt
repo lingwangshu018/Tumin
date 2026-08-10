@@ -47,7 +47,7 @@ import me.rerere.rikkahub.utils.JsonInstant
         CoupleDiaryFolderEntity::class,
         CoupleAnniversaryEntity::class,
     ],
-    version = 36,
+    version = 37,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -72,6 +72,7 @@ import me.rerere.rikkahub.utils.JsonInstant
         AutoMigration(from = 33, to = 34),
         AutoMigration(from = 34, to = 35),
         AutoMigration(from = 35, to = 36),
+        AutoMigration(from = 36, to = 37),
     ]
 )
 @TypeConverters(TokenUsageConverter::class)
