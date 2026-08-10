@@ -126,6 +126,6 @@ class ToolSurfaceBuilder(
                 ))
             }
             addAll(pluginToolProvider.getTools())
-        }
+        }.distinctBy { it.name }
     }
 }
