@@ -112,7 +112,7 @@ import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantPromptPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantRequestPage
 import me.rerere.rikkahub.ui.pages.backup.BackupPage
 import me.rerere.rikkahub.ui.pages.chat.ChatPage
-import me.rerere.rikkahub.ui.pages.couple.CoupleAnniversariesPage
+import me.rerere.rikkahub.ui.pages.couple.CoupleAnniversaryBookPage
 import me.rerere.rikkahub.ui.pages.couple.CoupleDiaryPage
 import me.rerere.rikkahub.ui.pages.couple.CoupleMomentsPage
 import me.rerere.rikkahub.ui.pages.couple.CoupleSpacePage
@@ -195,7 +195,6 @@ class RouteActivity : ComponentActivity() {
     private val settingsStore by inject<SettingsStore>()
     private var navStack: MutableList<NavKey>? = null
 
-    // Volume key listener registry — last registered handler wins
     internal val volumeKeyListeners = mutableListOf<(isVolumeUp: Boolean) -> Boolean>()
 
     @SuppressLint("RestrictedApi")
@@ -222,7 +221,6 @@ class RouteActivity : ComponentActivity() {
             return
         }
 
-        // 根据设置自动启动保活服务
         try {
             if (settingsStore.settingsFlow.value.keepAliveEnabled) {
                 KeepAliveService.start(this)
@@ -290,17 +288,14 @@ class RouteActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        // Navigate to the chat screen if a conversation ID is provided
         intent.getStringExtra("conversationId")?.let { text ->
             val autoStartVoice = intent.getBooleanExtra("autoStartVoice", false)
             navStack?.let { stack ->
                 Snapshot.withMutableSnapshot {
-                    // 检查是否已经在同一个对话页面
                     val existingIndex = stack.indexOfLast {
                         it is Screen.Chat && it.id == text
                     }
                     if (existingIndex >= 0) {
-                        // 已经在同一个对话，移动到栈顶
                         val existing = stack.removeAt(existingIndex) as Screen.Chat
                         if (autoStartVoice) {
                             stack.add(existing.copy(autoStartVoice = true))
@@ -308,14 +303,12 @@ class RouteActivity : ComponentActivity() {
                             stack.add(existing)
                         }
                     } else {
-                        // 添加新对话页面
                         stack.add(Screen.Chat(text, autoStartVoice = autoStartVoice))
                     }
                 }
             }
         }
 
-        // 新增逻辑: 从语音通话通知点击, 回到通话页面
         intent.getStringExtra("openVoiceCallConversationId")?.let { convId ->
             navStack?.let { stack ->
                 Snapshot.withMutableSnapshot {
@@ -341,7 +334,6 @@ class RouteActivity : ComponentActivity() {
         val scope = rememberCoroutineScope()
         val tts = rememberCustomTtsState()
 
-        // 首次启动：未同意免责声明时强制展示
         if (!settings.disclaimerAccepted) {
             DisclaimerPage(
                 onAccept = {
@@ -378,18 +370,15 @@ class RouteActivity : ComponentActivity() {
 
         ShareHandler(backStack)
 
-        // 监听 App 事件: TTS 朗读 / AI 主动发起语音通话
         LaunchedEffect(tts) {
             eventBus.events.collect { event ->
                 when (event) {
                     is AppEvent.Speak -> tts.speak(event.text)
-                    is AppEvent.EmojiSelected -> { /* handled in UIAvatar */ }
-                    is AppEvent.McpOAuthCallback -> Unit // 由 McpManager 消费
+                    is AppEvent.EmojiSelected -> { }
+                    is AppEvent.McpOAuthCallback -> Unit
                     is AppEvent.RequestVoiceCall -> {
                         val convId = event.conversationId
-                        // 单通话守卫: 已有通话进行中就不重复弹
                         if (VoiceCallService.activeConversationId.value != null) return@collect
-                        // 防止重复叠加来电页
                         val alreadyIncoming = backStack.lastOrNull() is Screen.IncomingCall
                         if (!alreadyIncoming) {
                             backStack.add(Screen.IncomingCall(convId))
@@ -474,296 +463,97 @@ class RouteActivity : ComponentActivity() {
                                 )
                             }
 
-                            entry<Screen.ShareHandler> { key ->
-                                ShareHandlerPage(
-                                    text = key.text,
-                                    image = key.streamUri
-                                )
-                            }
-
-                            entry<Screen.History> {
-                                HistoryPage()
-                            }
-
-                            entry<Screen.Favorite> {
-                                FavoritePage()
-                            }
-
+                            entry<Screen.ShareHandler> { key -> ShareHandlerPage(text = key.text, image = key.streamUri) }
+                            entry<Screen.History> { HistoryPage() }
+                            entry<Screen.Favorite> { FavoritePage() }
                             entry<Screen.CoupleSpace> { CoupleSpacePage() }
                             entry<Screen.CoupleMoments> { CoupleMomentsPage() }
                             entry<Screen.CoupleDiary> { CoupleDiaryPage() }
-                            entry<Screen.CoupleAnniversaries> { CoupleAnniversariesPage() }
+                            entry<Screen.CoupleAnniversaries> { CoupleAnniversaryBookPage() }
                             entry<Screen.LifeHub> { LifeHubPage() }
-
-                            entry<Screen.Assistant> {
-                                AssistantPage()
-                            }
-
-                            entry<Screen.AssistantDetail> { key ->
-                                AssistantDetailPage(key.id)
-                            }
-
-                            entry<Screen.AssistantBasic> { key ->
-                                AssistantBasicPage(key.id)
-                            }
-
-                            entry<Screen.AssistantPrompt> { key ->
-                                AssistantPromptPage(key.id)
-                            }
-
-                            entry<Screen.AssistantMemory> { key ->
-                                AssistantMemoryPage(key.id)
-                            }
-
-                            entry<Screen.AssistantRequest> { key ->
-                                AssistantRequestPage(key.id)
-                            }
-
-                            entry<Screen.AssistantMcp> { key ->
-                                AssistantMcpPage(key.id)
-                            }
-
-                            entry<Screen.AssistantLocalTool> { key ->
-                                AssistantLocalToolPage(key.id)
-                            }
-
-                            entry<Screen.AssistantInjections> { key ->
-                                AssistantExtensionsPage(key.id)
-                            }
-
-                            entry<Screen.Translator> {
-                                TranslatorPage()
-                            }
-
-                            entry<Screen.Setting> {
-                                SettingPage()
-                            }
-
-                            entry<Screen.Backup> {
-                                BackupPage()
-                            }
-
-                            entry<Screen.ImageGen> {
-                                ImageGenPage()
-                            }
-
-                            entry<Screen.WebView> { key ->
-                                WebViewPage(key.url, key.content)
-                            }
-
-                            entry<Screen.SettingDisplay> {
-                                SettingDisplayPage()
-                            }
-
-                            entry<Screen.SettingTheme> {
-                                SettingThemePage()
-                            }
-
-                            entry<Screen.SettingDisplayTheme> {
-                                SettingDisplayThemePage()
-                            }
-                            entry<Screen.SettingDisplayColor> {
-                                SettingDisplayColorPage()
-                            }
-                            entry<Screen.SettingDisplayTransparency> {
-                                SettingDisplayTransparencyPage()
-                            }
-                            entry<Screen.SettingDisplayIllustration> {
-                                SettingDisplayIllustrationPage()
-                            }
-                            entry<Screen.SettingDisplayMessage> {
-                                SettingDisplayMessagePage()
-                            }
-                            entry<Screen.SettingDisplayCodeInteraction> {
-                                SettingDisplayCodeInteractionPage()
-                            }
-                            entry<Screen.SettingDisplayGeneral> {
-                                SettingDisplayGeneralPage()
-                            }
-                            entry<Screen.SettingDisplayNotification> {
-                                SettingDisplayNotificationPage()
-                            }
-
-                            entry<Screen.SettingProvider> {
-                                SettingProviderPage()
-                            }
-
-                            entry<Screen.SettingProviderDetail> { key ->
-                                val id = Uuid.parse(key.providerId)
-                                SettingProviderDetailPage(id = id)
-                            }
-
-                            entry<Screen.SettingModels> {
-                                SettingModelPage()
-                            }
-
-                            entry<Screen.SettingAbout> {
-                                SettingAboutPage()
-                            }
-
-                            entry<Screen.SettingSearch> {
-                                SettingSearchPage()
-                            }
-
-                            entry<Screen.SettingSearchDetail> { key ->
-                                val id = Uuid.parse(key.serviceId)
-                                SettingSearchDetailPage(id)
-                            }
-
-                            entry<Screen.SettingSpeech> {
-                                SettingSpeechPage()
-                            }
-
-                            entry<Screen.SettingMcp> {
-                                SettingMcpPage()
-                            }
-
-                            entry<Screen.SettingDonate> {
-                                SettingDonatePage()
-                            }
-
-                            entry<Screen.SettingFiles> {
-                                SettingFilesPage()
-                            }
-
-                            entry<Screen.SettingWeb> {
-                                SettingWebPage()
-                            }
-
-                            entry<Screen.Developer> {
-                                DeveloperPage()
-                            }
-
-                            entry<Screen.Debug> {
-                                DebugPage()
-                            }
-
-entry<Screen.Log> {
-    LogPage()
-}
-
-entry<Screen.SecurityAudit> {
-    SecurityAuditPage()
-}
-
-entry<Screen.Extensions> {
-                                ExtensionsPage()
-                            }
-
-                            entry<Screen.QuickMessages> {
-                                QuickMessagesPage()
-                            }
-
-                            entry<Screen.ExternalMemories> {
-                                ExternalMemoriesPage()
-                            }
-
-                            entry<Screen.Prompts> {
-                                PromptPage()
-                            }
-
-                            entry<Screen.Skills> {
-                                SkillsPage()
-                            }
-
-                            entry<Screen.SkillDetail> { key ->
-                                SkillDetailPage(skillName = key.skillName)
-                            }
-
-                            entry<Screen.Workspaces> {
-                                WorkspacePage()
-                            }
-
-                            entry<Screen.WorkspaceDetail> { key ->
-                                WorkspaceDetailPage(key.id)
-                            }
-
-                            entry<Screen.WorkspaceTerminal> { key ->
-                                WorkspaceTerminalPage(key.id)
-                            }
-
-                            entry<Screen.MessageSearch> {
-                                SearchPage()
-                            }
-
-                            entry<Screen.Health> {
-                                HealthPage()
-                            }
-
-                            entry<Screen.Stats> {
-                                StatsPage()
-                            }
-
-                            entry<Screen.SettingSystemTools> {
-                                SettingSystemToolsPage()
-                            }
-
-                            entry<Screen.SettingSecurity> {
-                                SecuritySettingPage()
-                            }
-
-                            entry<Screen.SettingProactiveMessage> {
-                                SettingProactiveMessagePage()
-                            }
-
-                            entry<Screen.SettingWeixinBot> {
-                                SettingWeixinBotPage()
-                            }
-
-                            entry<Screen.SettingQqBot> {
-                                SettingQqBotPage()
-                            }
-
-                            entry<Screen.Workflows> {
-                                me.rerere.rikkahub.workflow.ui.WorkflowsScreen()
-                            }
-
-                            entry<Screen.WorkflowDetail> { key ->
-                                me.rerere.rikkahub.workflow.ui.WorkflowDetailScreen(key.id)
-                            }
-
+                            entry<Screen.Assistant> { AssistantPage() }
+                            entry<Screen.AssistantDetail> { key -> AssistantDetailPage(key.id) }
+                            entry<Screen.AssistantBasic> { key -> AssistantBasicPage(key.id) }
+                            entry<Screen.AssistantPrompt> { key -> AssistantPromptPage(key.id) }
+                            entry<Screen.AssistantMemory> { key -> AssistantMemoryPage(key.id) }
+                            entry<Screen.AssistantRequest> { key -> AssistantRequestPage(key.id) }
+                            entry<Screen.AssistantMcp> { key -> AssistantMcpPage(key.id) }
+                            entry<Screen.AssistantLocalTool> { key -> AssistantLocalToolPage(key.id) }
+                            entry<Screen.AssistantInjections> { key -> AssistantExtensionsPage(key.id) }
+                            entry<Screen.Translator> { TranslatorPage() }
+                            entry<Screen.Setting> { SettingPage() }
+                            entry<Screen.Backup> { BackupPage() }
+                            entry<Screen.ImageGen> { ImageGenPage() }
+                            entry<Screen.WebView> { key -> WebViewPage(key.url, key.content) }
+                            entry<Screen.SettingDisplay> { SettingDisplayPage() }
+                            entry<Screen.SettingTheme> { SettingThemePage() }
+                            entry<Screen.SettingDisplayTheme> { SettingDisplayThemePage() }
+                            entry<Screen.SettingDisplayColor> { SettingDisplayColorPage() }
+                            entry<Screen.SettingDisplayTransparency> { SettingDisplayTransparencyPage() }
+                            entry<Screen.SettingDisplayIllustration> { SettingDisplayIllustrationPage() }
+                            entry<Screen.SettingDisplayMessage> { SettingDisplayMessagePage() }
+                            entry<Screen.SettingDisplayCodeInteraction> { SettingDisplayCodeInteractionPage() }
+                            entry<Screen.SettingDisplayGeneral> { SettingDisplayGeneralPage() }
+                            entry<Screen.SettingDisplayNotification> { SettingDisplayNotificationPage() }
+                            entry<Screen.SettingProvider> { SettingProviderPage() }
+                            entry<Screen.SettingProviderDetail> { key -> SettingProviderDetailPage(id = Uuid.parse(key.providerId)) }
+                            entry<Screen.SettingModels> { SettingModelPage() }
+                            entry<Screen.SettingAbout> { SettingAboutPage() }
+                            entry<Screen.SettingSearch> { SettingSearchPage() }
+                            entry<Screen.SettingSearchDetail> { key -> SettingSearchDetailPage(Uuid.parse(key.serviceId)) }
+                            entry<Screen.SettingSpeech> { SettingSpeechPage() }
+                            entry<Screen.SettingMcp> { SettingMcpPage() }
+                            entry<Screen.SettingDonate> { SettingDonatePage() }
+                            entry<Screen.SettingFiles> { SettingFilesPage() }
+                            entry<Screen.SettingWeb> { SettingWebPage() }
+                            entry<Screen.Developer> { DeveloperPage() }
+                            entry<Screen.Debug> { DebugPage() }
+                            entry<Screen.Log> { LogPage() }
+                            entry<Screen.SecurityAudit> { SecurityAuditPage() }
+                            entry<Screen.Extensions> { ExtensionsPage() }
+                            entry<Screen.QuickMessages> { QuickMessagesPage() }
+                            entry<Screen.ExternalMemories> { ExternalMemoriesPage() }
+                            entry<Screen.Prompts> { PromptPage() }
+                            entry<Screen.Skills> { SkillsPage() }
+                            entry<Screen.SkillDetail> { key -> SkillDetailPage(skillName = key.skillName) }
+                            entry<Screen.Workspaces> { WorkspacePage() }
+                            entry<Screen.WorkspaceDetail> { key -> WorkspaceDetailPage(key.id) }
+                            entry<Screen.WorkspaceTerminal> { key -> WorkspaceTerminalPage(key.id) }
+                            entry<Screen.MessageSearch> { SearchPage() }
+                            entry<Screen.Health> { HealthPage() }
+                            entry<Screen.Stats> { StatsPage() }
+                            entry<Screen.SettingSystemTools> { SettingSystemToolsPage() }
+                            entry<Screen.SettingSecurity> { SecuritySettingPage() }
+                            entry<Screen.SettingProactiveMessage> { SettingProactiveMessagePage() }
+                            entry<Screen.SettingWeixinBot> { SettingWeixinBotPage() }
+                            entry<Screen.SettingQqBot> { SettingQqBotPage() }
+                            entry<Screen.Workflows> { me.rerere.rikkahub.workflow.ui.WorkflowsScreen() }
+                            entry<Screen.WorkflowDetail> { key -> me.rerere.rikkahub.workflow.ui.WorkflowDetailScreen(key.id) }
                             entry<Screen.SettingPlugins> {
                                 val nav = LocalNavController.current
                                 me.rerere.rikkahub.plugin.ui.PluginManagePage(
-                                    onNavigateToFolder = { folderId ->
-                                        nav.navigate(Screen.PluginFolder(folderId))
-                                    },
-                                    onNavigateToDetail = { pluginId ->
-                                        nav.navigate(Screen.PluginDetail(pluginId))
-                                    }
+                                    onNavigateToFolder = { folderId -> nav.navigate(Screen.PluginFolder(folderId)) },
+                                    onNavigateToDetail = { pluginId -> nav.navigate(Screen.PluginDetail(pluginId)) }
                                 )
                             }
-
                             entry<Screen.PluginFolder> { key ->
                                 val nav = LocalNavController.current
                                 me.rerere.rikkahub.plugin.ui.PluginFolderPage(
                                     folderId = key.folderId,
                                     onNavigateBack = { backStack.removeLastOrNull() },
-                                    onNavigateToDetail = { pluginId ->
-                                        nav.navigate(Screen.PluginDetail(pluginId))
-                                    }
+                                    onNavigateToDetail = { pluginId -> nav.navigate(Screen.PluginDetail(pluginId)) }
                                 )
                             }
-
                             entry<Screen.PluginDetail> { key ->
                                 val nav = LocalNavController.current
                                 me.rerere.rikkahub.plugin.ui.PluginDetailPage(
                                     pluginId = key.pluginId,
                                     onNavigateBack = { backStack.removeLastOrNull() },
-                                    onNavigateToCustomPage = { customPage ->
-                                        when (customPage) {
-                                            "memory_bank" -> nav.navigate(Screen.MemoryBank)
-                                        }
-                                    },
-                                    onNavigateToWebView = { pluginId, entryPath ->
-                                        nav.navigate(Screen.PluginWebView(pluginId, entryPath))
-                                    },
-                                    onNavigateToDeclarativeUI = { pluginId ->
-                                        nav.navigate(Screen.PluginDeclarativeUI(pluginId))
-                                    }
+                                    onNavigateToCustomPage = { customPage -> if (customPage == "memory_bank") nav.navigate(Screen.MemoryBank) },
+                                    onNavigateToWebView = { pluginId, entryPath -> nav.navigate(Screen.PluginWebView(pluginId, entryPath)) },
+                                    onNavigateToDeclarativeUI = { pluginId -> nav.navigate(Screen.PluginDeclarativeUI(pluginId)) }
                                 )
                             }
-
                             entry<Screen.PluginDeclarativeUI> { key ->
                                 val pluginManager = koinInject<me.rerere.rikkahub.plugin.manager.PluginManager>()
                                 me.rerere.rikkahub.plugin.ui.PluginUIDeclarativePage(
@@ -772,7 +562,6 @@ entry<Screen.Extensions> {
                                     onNavigateBack = { backStack.removeLastOrNull() }
                                 )
                             }
-
                             entry<Screen.PluginWebView> { key ->
                                 val pluginManager = koinInject<me.rerere.rikkahub.plugin.manager.PluginManager>()
                                 PluginWebViewPage(
@@ -782,34 +571,13 @@ entry<Screen.Extensions> {
                                     onNavigateBack = { backStack.removeLastOrNull() }
                                 )
                             }
-
-                            entry<Screen.MemoryBank> {
-                                MemoryBankPage(
-                                    onBack = { backStack.removeLastOrNull() }
-                                )
-                            }
-
-                            entry<Screen.EmojiPicker> {
-                                EmojiPickerPage(
-                                    onBack = { backStack.removeLastOrNull() }
-                                )
-                            }
-
-                            entry<Screen.VoiceCall> { key ->
-                                VoiceCallPage(
-                                    conversationId = Uuid.parse(key.conversationId),
-                                    onBack = { backStack.removeLastOrNull() }
-                                )
-                            }
-
+                            entry<Screen.MemoryBank> { MemoryBankPage(onBack = { backStack.removeLastOrNull() }) }
+                            entry<Screen.EmojiPicker> { EmojiPickerPage(onBack = { backStack.removeLastOrNull() }) }
+                            entry<Screen.VoiceCall> { key -> VoiceCallPage(conversationId = Uuid.parse(key.conversationId), onBack = { backStack.removeLastOrNull() }) }
                             entry<Screen.IncomingCall> { key ->
-                                // 来电界面: 接听 -> 启动通话并跳转到通话页; 拒接 -> 返回
-                                // 通过 conversationId 查会话 -> assistantId -> 助手名
                                 val conversationRepo = koinInject<ConversationRepository>()
                                 val chatService = koinInject<ChatService>()
-                                var assistantName by remember {
-                                    mutableStateOf("")
-                                }
+                                var assistantName by remember { mutableStateOf("") }
                                 LaunchedEffect(key.conversationId) {
                                     assistantName = runCatching {
                                         conversationRepo.getConversationById(Uuid.parse(key.conversationId))
@@ -822,16 +590,10 @@ entry<Screen.Extensions> {
                                     assistantName = assistantName,
                                     onStartCall = {
                                         val convId = key.conversationId
-                                        // 先停掉聊天侧的 TTS, 避免音频焦点抢占导致 ASR 识别质量下降
-                                        // (AI 刚说完话触发主动来电时, 聊天页的 TTS 可能还在播放)
                                         runCatching { tts.stop() }
                                         if (VoiceCallService.activeConversationId.value == null) {
-                                            VoiceCallService.start(
-                                                this@RouteActivity,
-                                                convId
-                                            )
+                                            VoiceCallService.start(this@RouteActivity, convId)
                                         }
-                                        // 替换来电页为通话页
                                         backStack.removeLastOrNull()
                                         backStack.add(Screen.VoiceCall(convId))
                                     },
@@ -845,29 +607,10 @@ entry<Screen.Extensions> {
                                     }
                                 )
                             }
-
-                            entry<Screen.MiniAppManager> {
-                                MiniAppManagerPage()
-                            }
-
-                            entry<Screen.MiniAppEdit> { key ->
-                                MiniAppEditPage(id = key.id)
-                            }
-
-                            entry<Screen.MiniApp> { key ->
-                                MiniAppPage(
-                                    url = key.url,
-                                    title = key.title,
-                                )
-                            }
-
-                            entry<Screen.Legal> { key ->
-                                LegalPage(
-                                    titleRes = key.titleRes,
-                                    contentRes = key.contentRes,
-                                )
-                            }
-
+                            entry<Screen.MiniAppManager> { MiniAppManagerPage() }
+                            entry<Screen.MiniAppEdit> { key -> MiniAppEditPage(id = key.id) }
+                            entry<Screen.MiniApp> { key -> MiniAppPage(url = key.url, title = key.title) }
+                            entry<Screen.Legal> { key -> LegalPage(titleRes = key.titleRes, contentRes = key.contentRes) }
                         }
                     )
                     AnimatedVisibility(
@@ -888,10 +631,7 @@ entry<Screen.Extensions> {
                                 verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
                                 CircularProgressIndicator()
-                                Text(
-                                    text = stringResource(R.string.db_migrating),
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
+                                Text(text = stringResource(R.string.db_migrating), style = MaterialTheme.typography.bodyLarge)
                                 if (state != null) {
                                     Text(
                                         text = "v${state.from} → v${state.to}",
@@ -909,253 +649,84 @@ entry<Screen.Extensions> {
 }
 
 sealed interface Screen : NavKey {
-    @Serializable
-    data class Chat(
-        val id: String,
-        val text: String? = null,
-        val files: List<String> = emptyList(),
-        val nodeId: String? = null,
-        val autoStartVoice: Boolean = false,
-    ) : Screen
-
-    @Serializable
-    data class ShareHandler(val text: String, val streamUri: String? = null) : Screen
-
-    @Serializable
-    data object History : Screen
-
-    @Serializable
-    data object Favorite : Screen
-
-    @Serializable
-    data object CoupleSpace : Screen
-
-    @Serializable
-    data object CoupleMoments : Screen
-
-    @Serializable
-    data object CoupleDiary : Screen
-
-    @Serializable
-    data object CoupleAnniversaries : Screen
-
-    @Serializable
-    data object Assistant : Screen
-
-    @Serializable
-    data class AssistantDetail(val id: String) : Screen
-
-    @Serializable
-    data class AssistantBasic(val id: String) : Screen
-
-    @Serializable
-    data class AssistantPrompt(val id: String) : Screen
-
-    @Serializable
-    data class AssistantMemory(val id: String) : Screen
-
-    @Serializable
-    data class AssistantRequest(val id: String) : Screen
-
-    @Serializable
-    data class AssistantMcp(val id: String) : Screen
-
-    @Serializable
-    data class AssistantLocalTool(val id: String) : Screen
-
-    @Serializable
-    data class AssistantInjections(val id: String) : Screen
-
-    @Serializable
-    data object Translator : Screen
-
-    @Serializable
-    data object Setting : Screen
-
-    @Serializable
-    data object Backup : Screen
-
-    @Serializable
-    data object ImageGen : Screen
-
-    @Serializable
-    data class WebView(val url: String = "", val content: String = "") : Screen
-
-    @Serializable
-    data object SettingDisplay : Screen
-
-    @Serializable
-    data object SettingTheme : Screen
-
-    @Serializable
-    data object SettingDisplayTheme : Screen
-
-    @Serializable
-    data object SettingDisplayColor : Screen
-
-    @Serializable
-    data object SettingDisplayTransparency : Screen
-
-    @Serializable
-    data object SettingDisplayIllustration : Screen
-
-    @Serializable
-    data object SettingDisplayMessage : Screen
-
-    @Serializable
-    data object SettingDisplayCodeInteraction : Screen
-
-    @Serializable
-    data object SettingDisplayGeneral : Screen
-
-    @Serializable
-    data object SettingDisplayNotification : Screen
-
-    @Serializable
-    data object SettingProvider : Screen
-
-    @Serializable
-    data class SettingProviderDetail(val providerId: String) : Screen
-
-    @Serializable
-    data object SettingModels : Screen
-
-    @Serializable
-    data object SettingAbout : Screen
-
-    @Serializable
-    data object SettingSearch : Screen
-
-    @Serializable
-    data class SettingSearchDetail(val serviceId: String) : Screen
-
-    @Serializable
-    data object SettingSpeech : Screen
-
-    @Serializable
-    data object SettingMcp : Screen
-
-    @Serializable
-    data object SettingDonate : Screen
-
-    @Serializable
-    data object SettingFiles : Screen
-
-    @Serializable
-    data object SettingWeb : Screen
-
-    @Serializable
-    data object Developer : Screen
-
-    @Serializable
-    data object Debug : Screen
-
-    @Serializable
-    data object Log : Screen
-
-    @Serializable
-    data object SecurityAudit : Screen
-
-    @Serializable
-    data object Extensions : Screen
-
-    @Serializable
-    data object QuickMessages : Screen
-
-    @Serializable
-    data object Prompts : Screen
-
-    @Serializable
-    data object Skills : Screen
-
-    @Serializable
-    data class SkillDetail(val skillName: String) : Screen
-
-    @Serializable
-    data object Workspaces : Screen
-
-    @Serializable
-    data class WorkspaceDetail(val id: String) : Screen
-
-    @Serializable
-    data class WorkspaceTerminal(val id: String) : Screen
-
-    @Serializable
-    data object MessageSearch : Screen
-
-    @Serializable
-    data object Stats : Screen
-
-    @Serializable
-    data object SettingSystemTools : Screen
-
-    @Serializable
-    data object SettingSecurity : Screen
-
-    @Serializable
-    data object SettingProactiveMessage : Screen
-
-    @Serializable
-    data object SettingWeixinBot : Screen
-
-    @Serializable
-    data object SettingQqBot : Screen
-
-    @Serializable
-    data object Health : Screen
-
-    @Serializable
-    data object LifeHub : Screen
-
-    @Serializable
-    data object SettingPlugins : Screen
-
-    @Serializable
-    data object Workflows : Screen
-
-    @Serializable
-    data class WorkflowDetail(val id: String) : Screen
-
-    @Serializable
-    data class PluginDetail(val pluginId: String) : Screen
-
-    @Serializable
-    data class PluginFolder(val folderId: String) : Screen
-
-    @Serializable
-    data class PluginWebView(val pluginId: String, val entryPath: String) : Screen
-
-    @Serializable
-    data class PluginDeclarativeUI(val pluginId: String) : Screen
-
-    @Serializable
-    data object MemoryBank : Screen
-
-    @Serializable
-    data object EmojiPicker : Screen
-
-    @Serializable
-    data object ExternalMemories : Screen
-
-    @Serializable
-    data class VoiceCall(val conversationId: String) : Screen
-
-    /**
-     * AI 主动发起语音通话时弹出的来电界面.
-     * conversationId 用于接听后跳转到对应会话的通话页.
-     */
-    @Serializable
-    data class IncomingCall(val conversationId: String) : Screen
-
-    @Serializable
-    data object MiniAppManager : Screen
-
-    @Serializable
-    data class MiniAppEdit(val id: String?) : Screen
-
-    @Serializable
-    data class MiniApp(val url: String, val title: String?) : Screen
-
-    @Serializable
-    data class Legal(val titleRes: Int, val contentRes: Int) : Screen
+    @Serializable data class Chat(val id: String, val text: String? = null, val files: List<String> = emptyList(), val nodeId: String? = null, val autoStartVoice: Boolean = false) : Screen
+    @Serializable data class ShareHandler(val text: String, val streamUri: String? = null) : Screen
+    @Serializable data object History : Screen
+    @Serializable data object Favorite : Screen
+    @Serializable data object CoupleSpace : Screen
+    @Serializable data object CoupleMoments : Screen
+    @Serializable data object CoupleDiary : Screen
+    @Serializable data object CoupleAnniversaries : Screen
+    @Serializable data object Assistant : Screen
+    @Serializable data class AssistantDetail(val id: String) : Screen
+    @Serializable data class AssistantBasic(val id: String) : Screen
+    @Serializable data class AssistantPrompt(val id: String) : Screen
+    @Serializable data class AssistantMemory(val id: String) : Screen
+    @Serializable data class AssistantRequest(val id: String) : Screen
+    @Serializable data class AssistantMcp(val id: String) : Screen
+    @Serializable data class AssistantLocalTool(val id: String) : Screen
+    @Serializable data class AssistantInjections(val id: String) : Screen
+    @Serializable data object Translator : Screen
+    @Serializable data object Setting : Screen
+    @Serializable data object Backup : Screen
+    @Serializable data object ImageGen : Screen
+    @Serializable data class WebView(val url: String = "", val content: String = "") : Screen
+    @Serializable data object SettingDisplay : Screen
+    @Serializable data object SettingTheme : Screen
+    @Serializable data object SettingDisplayTheme : Screen
+    @Serializable data object SettingDisplayColor : Screen
+    @Serializable data object SettingDisplayTransparency : Screen
+    @Serializable data object SettingDisplayIllustration : Screen
+    @Serializable data object SettingDisplayMessage : Screen
+    @Serializable data object SettingDisplayCodeInteraction : Screen
+    @Serializable data object SettingDisplayGeneral : Screen
+    @Serializable data object SettingDisplayNotification : Screen
+    @Serializable data object SettingProvider : Screen
+    @Serializable data class SettingProviderDetail(val providerId: String) : Screen
+    @Serializable data object SettingModels : Screen
+    @Serializable data object SettingAbout : Screen
+    @Serializable data object SettingSearch : Screen
+    @Serializable data class SettingSearchDetail(val serviceId: String) : Screen
+    @Serializable data object SettingSpeech : Screen
+    @Serializable data object SettingMcp : Screen
+    @Serializable data object SettingDonate : Screen
+    @Serializable data object SettingFiles : Screen
+    @Serializable data object SettingWeb : Screen
+    @Serializable data object Developer : Screen
+    @Serializable data object Debug : Screen
+    @Serializable data object Log : Screen
+    @Serializable data object SecurityAudit : Screen
+    @Serializable data object Extensions : Screen
+    @Serializable data object QuickMessages : Screen
+    @Serializable data object Prompts : Screen
+    @Serializable data object Skills : Screen
+    @Serializable data class SkillDetail(val skillName: String) : Screen
+    @Serializable data object Workspaces : Screen
+    @Serializable data class WorkspaceDetail(val id: String) : Screen
+    @Serializable data class WorkspaceTerminal(val id: String) : Screen
+    @Serializable data object MessageSearch : Screen
+    @Serializable data object Stats : Screen
+    @Serializable data object SettingSystemTools : Screen
+    @Serializable data object SettingSecurity : Screen
+    @Serializable data object SettingProactiveMessage : Screen
+    @Serializable data object SettingWeixinBot : Screen
+    @Serializable data object SettingQqBot : Screen
+    @Serializable data object Health : Screen
+    @Serializable data object LifeHub : Screen
+    @Serializable data object SettingPlugins : Screen
+    @Serializable data object Workflows : Screen
+    @Serializable data class WorkflowDetail(val id: String) : Screen
+    @Serializable data class PluginDetail(val pluginId: String) : Screen
+    @Serializable data class PluginFolder(val folderId: String) : Screen
+    @Serializable data class PluginWebView(val pluginId: String, val entryPath: String) : Screen
+    @Serializable data class PluginDeclarativeUI(val pluginId: String) : Screen
+    @Serializable data object MemoryBank : Screen
+    @Serializable data object EmojiPicker : Screen
+    @Serializable data object ExternalMemories : Screen
+    @Serializable data class VoiceCall(val conversationId: String) : Screen
+    @Serializable data class IncomingCall(val conversationId: String) : Screen
+    @Serializable data object MiniAppManager : Screen
+    @Serializable data class MiniAppEdit(val id: String?) : Screen
+    @Serializable data class MiniApp(val url: String, val title: String?) : Screen
+    @Serializable data class Legal(val titleRes: Int, val contentRes: Int) : Screen
 }
