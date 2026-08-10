@@ -36,7 +36,7 @@ private fun detectCompanionIntent(text: String): CompanionIntent? {
     if (text.isBlank()) return null
     val t = text.lowercase()
     return when {
-        listOf("qq空间", "qq 空间", "情侣空间", "空间动态", "发动态", "评论空间", "看空间", "朋友圈").any(t::contains) -> CompanionIntent.COUPLE_SPACE
+        listOf("兔眠空间", "兔眠动态", "qq空间", "qq 空间", "情侣空间", "空间动态", "发动态", "评论空间", "看空间", "朋友圈").any(t::contains) -> CompanionIntent.COUPLE_SPACE
         listOf("日记", "回信", "journal").any(t::contains) -> CompanionIntent.DIARY
         listOf("纪念日", "纪念册", "anniversary").any(t::contains) -> CompanionIntent.ANNIVERSARY
         listOf("备忘录", "备忘", "memo", "记一下", "记住这件事").any(t::contains) -> CompanionIntent.MEMO
@@ -110,7 +110,7 @@ class ToolSurfaceBuilder(
 
             // When the latest user request clearly targets a companion surface, expose the exact
             // matching tool(s) first and keep unrelated plugin/MCP/workspace tools out of the tool
-            // surface for this turn. This prevents requests such as “更新情侣空间” from being
+            // surface for this turn. This prevents requests such as “更新兔眠空间” from being
             // misrouted to unrelated image/HTML plugins.
             when (companionIntent) {
                 CompanionIntent.COUPLE_SPACE -> {
