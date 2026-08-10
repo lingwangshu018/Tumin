@@ -43,9 +43,10 @@ fun readCoupleSpaceTool(
 ) = Tool(
     name = "read_couple_space",
     description = """
+        【情侣空间/QQ空间专用读取工具】当用户说“看看空间”“去QQ空间看看”“看看我刚发的动态”“读一下情侣空间”“查看空间评论”时，必须优先使用本工具。
         Read the current assistant's bound couple-space / QQ-space timeline and recent comments.
-        Use this when the user asks you to look at their QQ space, check a post, inspect recent couple-space activity,
-        or before commenting on a specific post. Returns real post IDs; never pretend you read the space without calling this tool.
+        Returns real post IDs and comments. Never pretend that you checked the space without a successful tool result.
+        This tool is for OrangeChat couple-space data; do NOT use HTML/image/plugin tools for these requests.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -101,9 +102,10 @@ fun postCoupleSpaceTool(
 ) = Tool(
     name = "post_couple_space",
     description = """
-        Publish a real QQ-space style post as the current assistant into the couple space bound to this assistant.
-        Use it when the user asks you to post/share something there, or when you naturally and intentionally choose to post.
-        The database is actually changed; do not claim you posted unless this tool succeeds.
+        【情侣空间/QQ空间专用发动态工具】当用户说“发条空间”“去空间发动态”“你也发一条”“更新一下情侣空间”时，使用本工具真正写入动态。
+        Publish a real QQ-space style post as the current assistant into the bound couple space.
+        The database is actually changed. Never claim a post was published unless this tool returns success.
+        Do NOT substitute HTML/image/plugin tools for a couple-space post request.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -140,8 +142,10 @@ fun commentCoupleSpaceTool(
 ) = Tool(
     name = "comment_couple_space",
     description = """
+        【情侣空间/QQ空间专用评论工具】当用户说“评论我刚发的空间”“给这条动态留言”“去空间评论一下”时，使用本工具真正写入评论。
         Add a real comment as the current assistant to an existing QQ-space post in the bound couple space.
-        Call read_couple_space first if you do not know the exact post_id. Never invent a post ID and never claim a comment was posted unless this tool succeeds.
+        Call read_couple_space first if you do not know the exact post_id. Never invent a post ID and never claim success without a successful tool result.
+        Do NOT use HTML/image/plugin tools for couple-space comments.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
