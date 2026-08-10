@@ -52,6 +52,18 @@ data class CoupleDiaryEntity(
     @ColumnInfo("created_at") val createdAt: Long,
 )
 
+@Entity(
+    tableName = "couple_diary_folder",
+    indices = [Index(value = ["relationship_id", "name"], unique = true), Index("sort_order")],
+)
+data class CoupleDiaryFolderEntity(
+    @PrimaryKey val id: String,
+    @ColumnInfo("relationship_id") val relationshipId: String,
+    val name: String,
+    @ColumnInfo("sort_order") val sortOrder: Int = 0,
+    @ColumnInfo("created_at") val createdAt: Long,
+)
+
 @Entity(tableName = "couple_anniversary", indices = [Index("relationship_id"), Index("event_date")])
 data class CoupleAnniversaryEntity(
     @PrimaryKey val id: String,
