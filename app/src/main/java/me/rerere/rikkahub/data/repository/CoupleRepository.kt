@@ -59,7 +59,11 @@ class CoupleRepository(private val dao: CoupleDAO) {
     }
 
     suspend fun toggleLike(post: CouplePostEntity) = dao.savePost(post.copy(liked = !post.liked))
-    suspend fun deletePost(post: CouplePostEntity) = dao.deletePost(post)
+
+    suspend fun deletePost(post: CouplePostEntity) {
+        dao.deleteCommentsForPost(post.id)
+        dao.deletePost(post)
+    }
 
     suspend fun addComment(
         relationshipId: String,
