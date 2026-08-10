@@ -47,7 +47,7 @@ import me.rerere.rikkahub.utils.JsonInstant
         CoupleDiaryFolderEntity::class,
         CoupleAnniversaryEntity::class,
     ],
-    version = 33,
+    version = 34,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -69,6 +69,7 @@ import me.rerere.rikkahub.utils.JsonInstant
         AutoMigration(from = 30, to = 31),
         AutoMigration(from = 31, to = 32),
         AutoMigration(from = 32, to = 33),
+        AutoMigration(from = 33, to = 34),
     ]
 )
 @TypeConverters(TokenUsageConverter::class)
@@ -83,7 +84,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun workspaceDao(): WorkspaceDAO
     abstract fun folderDao(): FolderDAO
     abstract fun workflowDao(): WorkflowDao
-    abstract fun workflowRunDao(): WorkflowRunDao
+    abstract fun workflowRunDao(): WorkflowRunDAO
     abstract fun sshHostDao(): SshHostDao
     abstract fun securityAuditDao(): SecurityAuditDao
     abstract fun coupleDao(): CoupleDAO
