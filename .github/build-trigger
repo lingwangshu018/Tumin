@@ -1,4 +1,4 @@
-build: 2026-08-10T21:57+08:00
+build: 2026-08-10T22:30+08:00
 source: latest master
-revision: 4508049
-purpose: build v2.3.4 with repaired diary anniversary memo calendar reading music AI channels
+revision: 817e268
+purpose: rebuild v2.3.4 after restoring known-good Android Gradle configuration
