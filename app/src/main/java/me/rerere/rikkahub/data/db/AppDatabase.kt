@@ -21,7 +21,6 @@ import me.rerere.rikkahub.workflow.db.WorkflowEntity
 import me.rerere.rikkahub.workflow.db.WorkflowRunDao
 import me.rerere.rikkahub.workflow.db.WorkflowRunEntity
 import me.rerere.rikkahub.data.db.migrations.Migration_16_17
-import me.rerere.rikkahub.data.db.migrations.Migration_24_25
 import me.rerere.rikkahub.data.db.migrations.Migration_8_9
 import me.rerere.rikkahub.utils.JsonInstant
 
@@ -66,13 +65,6 @@ import me.rerere.rikkahub.utils.JsonInstant
         AutoMigration(from = 26, to = 27),
         AutoMigration(from = 27, to = 28),
         AutoMigration(from = 28, to = 29),
-        AutoMigration(from = 30, to = 31),
-        AutoMigration(from = 31, to = 32),
-        AutoMigration(from = 32, to = 33),
-        AutoMigration(from = 33, to = 34),
-        AutoMigration(from = 34, to = 35),
-        AutoMigration(from = 35, to = 36),
-        AutoMigration(from = 36, to = 37),
     ]
 )
 @TypeConverters(TokenUsageConverter::class)
