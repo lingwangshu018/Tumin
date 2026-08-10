@@ -59,8 +59,32 @@ class CoupleRepository(private val dao: CoupleDAO) {
 
     suspend fun deleteComment(comment: CoupleCommentEntity) = dao.deleteComment(comment)
 
-    suspend fun addDiary(relationshipId: String, author: String, title: String, content: String, date: Long) = dao.saveDiary(
-        CoupleDiaryEntity(UUID.randomUUID().toString(), relationshipId, author, title, content, date, System.currentTimeMillis())
+    suspend fun addDiary(
+        relationshipId: String,
+        author: String,
+        title: String,
+        content: String,
+        date: Long,
+        folder: String = "全部心事",
+        paper: String = "ivory",
+    ): CoupleDiaryEntity {
+        val entry = CoupleDiaryEntity(
+            id = UUID.randomUUID().toString(),
+            relationshipId = relationshipId,
+            author = author,
+            title = title,
+            content = content,
+            entryDate = date,
+            folder = folder,
+            paper = paper,
+            createdAt = System.currentTimeMillis(),
+        )
+        dao.saveDiary(entry)
+        return entry
+    }
+
+    suspend fun saveDiaryReply(entry: CoupleDiaryEntity, reply: String) = dao.saveDiary(
+        entry.copy(reply = reply, replyAt = System.currentTimeMillis())
     )
 
     suspend fun deleteDiary(entry: CoupleDiaryEntity) = dao.deleteDiary(entry)
