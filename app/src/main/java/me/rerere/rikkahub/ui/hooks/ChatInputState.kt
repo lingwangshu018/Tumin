@@ -56,7 +56,12 @@ class ChatInputState {
             } else {
                 payload
             }
-            if (url.startsWith("http://") || url.startsWith("https://")) {
+            if (
+                url.startsWith("http://") ||
+                url.startsWith("https://") ||
+                url.startsWith("file:") ||
+                url.startsWith("content:")
+            ) {
                 val metadata = buildJsonObject {
                     put(STICKER_NAME_METADATA, JsonPrimitive(name))
                 }
@@ -107,7 +112,6 @@ class ChatInputState {
                         }
                     }
                 }
-                // Newly added attachments are appended in insertion order.
                 merged.addAll(remainingAttachments)
                 return merged
             }
