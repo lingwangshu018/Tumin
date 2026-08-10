@@ -1,6 +1,11 @@
 package me.rerere.rikkahub.ui.components.ui
 
 import android.content.Context
+import android.net.Uri
+import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -28,6 +33,7 @@ import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 import org.koin.compose.koinInject
+import java.io.File
 import java.util.UUID
 
 private const val STICKER_PREFS = "tumin_sticker_library"
@@ -45,6 +51,11 @@ private data class StickerPack(
     val stickers: List<StickerItem>,
 )
 
+private data class PendingGallerySticker(
+    val url: String,
+    val name: String,
+)
+
 @Composable
 fun StickerUrlPicker(
     modifier: Modifier = Modifier,
@@ -60,11 +71,54 @@ fun StickerUrlPicker(
     var managing by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var galleryDrafts by remember { mutableStateOf<List<PendingGallerySticker>>(emptyList()) }
 
     fun persist(updated: List<StickerPack>) {
         packs = updated
         saveStickerPacks(context, updated)
         if (selectedPackId !in updated.map { it.id }) selectedPackId = updated.firstOrNull()?.id
+    }
+
+    fun addGalleryStickers(stickers: List<StickerItem>) {
+        if (stickers.isEmpty()) return
+        val currentId = selectedPackId
+        if (currentId != null && packs.any { it.id == currentId }) {
+            persist(
+                packs.map { pack ->
+                    if (pack.id == currentId) {
+                        pack.copy(stickers = (pack.stickers + stickers).distinctBy { it.url })
+                    } else pack
+                }
+            )
+        } else {
+            val pack = StickerPack(
+                id = UUID.randomUUID().toString(),
+                name = "相册表情",
+                sourceUrl = "",
+                stickers = stickers.distinctBy { it.url },
+            )
+            persist(packs + pack)
+            selectedPackId = pack.id
+        }
+    }
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            loading = true
+            error = null
+            scope.launch {
+                runCatching { copyGalleryStickers(context, uris) }
+                    .onSuccess { copied ->
+                        galleryDrafts = copied.mapIndexed { index, url ->
+                            PendingGallerySticker(url = url, name = "表情 ${index + 1}")
+                        }
+                    }
+                    .onFailure { error = it.message ?: "相册图片导入失败" }
+                loading = false
+            }
+        }
     }
 
     Surface(
@@ -75,10 +129,14 @@ fun StickerUrlPicker(
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("我的表情包", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text("名字 + URL · 点一下直接作为图片发送", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("URL 或相册导入 · 给每张表情起名字", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 TextButton(onClick = { managing = !managing }) { Text(if (managing) "完成" else "管理") }
-                FilledTonalButton(onClick = { showImport = true }, shape = RoundedCornerShape(14.dp)) { Text("＋ 导入") }
+                TextButton(
+                    enabled = !loading,
+                    onClick = { galleryLauncher.launch("image/*") },
+                ) { Text("🖼 相册") }
+                FilledTonalButton(onClick = { showImport = true }, shape = RoundedCornerShape(14.dp)) { Text("＋ URL") }
             }
 
             if (packs.isEmpty()) {
@@ -96,9 +154,16 @@ fun StickerUrlPicker(
                         Text("🧸", style = MaterialTheme.typography.headlineMedium)
                         Spacer(Modifier.height(6.dp))
                         Text("这里还没有自己的表情包", fontWeight = FontWeight.SemiBold)
-                        Text("可以直接粘贴“哭哭: https://…gif”，也可以导入一个远程表情清单 URL。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            "可以从相册选图并逐张命名，也可以粘贴“哭哭: https://…gif”。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         Spacer(Modifier.height(10.dp))
-                        FilledTonalButton(onClick = { showImport = true }) { Text("导入第一个表情包") }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilledTonalButton(onClick = { galleryLauncher.launch("image/*") }) { Text("从相册导入") }
+                            OutlinedButton(onClick = { showImport = true }) { Text("从 URL 导入") }
+                        }
                     }
                 }
             } else {
@@ -120,8 +185,15 @@ fun StickerUrlPicker(
                                 Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Column(Modifier.weight(1f)) {
                                         Text(pack.name, fontWeight = FontWeight.SemiBold)
-                                        val sourceLabel = pack.sourceUrl.ifBlank { "手动粘贴清单" }
-                                        Text("${pack.stickers.size} 张 · $sourceLabel", maxLines = 1, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        val sourceLabel = pack.sourceUrl.ifBlank {
+                                            if (pack.stickers.any { it.url.startsWith("file:") }) "本地 / 手动导入" else "手动粘贴清单"
+                                        }
+                                        Text(
+                                            "${pack.stickers.size} 张 · $sourceLabel",
+                                            maxLines = 1,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
                                     }
                                     if (pack.sourceUrl.isNotBlank()) {
                                         TextButton(
@@ -132,7 +204,15 @@ fun StickerUrlPicker(
                                                 scope.launch {
                                                     runCatching { fetchStickerPack(client, pack.sourceUrl, pack.name) }
                                                         .onSuccess { refreshed ->
-                                                            persist(packs.map { if (it.id == pack.id) refreshed.copy(id = pack.id) else it })
+                                                            val localItems = pack.stickers.filter { it.url.startsWith("file:") }
+                                                            persist(
+                                                                packs.map {
+                                                                    if (it.id == pack.id) refreshed.copy(
+                                                                        id = pack.id,
+                                                                        stickers = (refreshed.stickers + localItems).distinctBy { item -> item.url },
+                                                                    ) else it
+                                                                }
+                                                            )
                                                         }
                                                         .onFailure { error = it.message ?: "刷新失败" }
                                                     loading = false
@@ -181,6 +261,7 @@ fun StickerUrlPicker(
                 }
             }
 
+            if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         }
     }
@@ -209,6 +290,88 @@ fun StickerUrlPicker(
             },
         )
     }
+
+    if (galleryDrafts.isNotEmpty()) {
+        NameGalleryStickersDialog(
+            drafts = galleryDrafts,
+            onDraftsChange = { galleryDrafts = it },
+            onDismiss = { galleryDrafts = emptyList() },
+            onSave = {
+                addGalleryStickers(
+                    galleryDrafts.mapIndexed { index, draft ->
+                        StickerItem(
+                            name = draft.name.trim().ifBlank { "表情 ${index + 1}" },
+                            url = draft.url,
+                        )
+                    }
+                )
+                galleryDrafts = emptyList()
+            },
+        )
+    }
+}
+
+@Composable
+private fun NameGalleryStickersDialog(
+    drafts: List<PendingGallerySticker>,
+    onDraftsChange: (List<PendingGallerySticker>) -> Unit,
+    onDismiss: () -> Unit,
+    onSave: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(24.dp),
+        title = { Text("给表情起个名字") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "名字会和图片一起保存，例如“哭哭”“抱抱”“委屈”。AI 收到表情时也能知道它代表什么。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 420.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    listItems(drafts.indices.toList(), key = { drafts[it].url }) { index ->
+                        val draft = drafts[index]
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        ) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                AsyncImage(
+                                    model = draft.url,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(62.dp),
+                                    contentScale = ContentScale.Fit,
+                                )
+                                OutlinedTextField(
+                                    value = draft.name,
+                                    onValueChange = { newName ->
+                                        onDraftsChange(
+                                            drafts.mapIndexed { i, item ->
+                                                if (i == index) item.copy(name = newName) else item
+                                            }
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    label = { Text("这张表情叫什么？") },
+                                    singleLine = true,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { FilledTonalButton(onClick = onSave) { Text("收进表情包") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
 }
 
 @Composable
@@ -223,7 +386,7 @@ private fun ImportStickerPackDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(24.dp),
-        title = { Text("导入我的表情包") },
+        title = { Text("从 URL 导入表情包") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
@@ -257,6 +420,33 @@ private fun ImportStickerPackDialog(
         },
         dismissButton = { TextButton(enabled = !loading, onClick = onDismiss) { Text("取消") } },
     )
+}
+
+private suspend fun copyGalleryStickers(context: Context, uris: List<Uri>): List<String> = withContext(Dispatchers.IO) {
+    val targetDir = File(context.filesDir, "stickers").apply { mkdirs() }
+    uris.mapNotNull { uri ->
+        runCatching {
+            val mime = context.contentResolver.getType(uri).orEmpty()
+            val displayName = context.contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
+                null,
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+            val extensionFromName = displayName?.substringAfterLast('.', "")?.takeIf { it.length in 2..5 }
+            val extension = extensionFromName
+                ?: MimeTypeMap.getSingleton().getExtensionFromMimeType(mime)
+                ?: "img"
+            val file = File(targetDir, "sticker_${UUID.randomUUID()}.$extension")
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                file.outputStream().use { output -> input.copyTo(output) }
+            } ?: error("无法读取图片")
+            Uri.fromFile(file).toString()
+        }.getOrNull()
+    }
 }
 
 private suspend fun importStickerPack(
