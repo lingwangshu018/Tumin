@@ -81,14 +81,14 @@ fun EmojiPicker(
     useStickerLibrary: Boolean = true,
 ) {
     if (useStickerLibrary) {
-        StickerUrlPicker(
+        StickerAiPicker(
             modifier = modifier,
             height = height,
-            onStickerSelected = { url ->
+            onStickerSelected = { name, url ->
                 onEmojiSelected(
                     Emoji(
-                        name = "自定义表情包",
-                        emoji = STICKER_MARKER + url,
+                        name = name,
+                        emoji = STICKER_MARKER + name + "\u001F" + url,
                         code = emptyList(),
                     )
                 )
