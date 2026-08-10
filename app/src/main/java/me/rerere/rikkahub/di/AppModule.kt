@@ -1,4 +1,4 @@
-/*
+﻿/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -25,16 +25,9 @@ import org.koin.dsl.module
 
 val appModule = module {
     single<Json> { JsonInstant }
+    single { Highlighter(get()) }
+    single { AppEventBus() }
 
-    single {
-        Highlighter(get())
-    }
-
-    single {
-        AppEventBus()
-    }
-
-    // Workflows: AgentRun ledger (no-op stub), repository, engine, trigger registry.
     single { me.rerere.rikkahub.data.agentrun.AgentRunRepository() }
     single {
         me.rerere.rikkahub.data.repository.SshHostRepository(
@@ -68,21 +61,14 @@ val appModule = module {
         )
     }
 
-    single {
-        LocalTools(get(), get(), get(), get(), get())
-    }
-
-    // 微信 Bot (iLink 协议) HTTP 客户端
+    single { LocalTools(get(), get(), get(), get(), get()) }
     single { me.rerere.rikkahub.data.weixin.WeixinBotClient(get()) }
-
-    // QQ Bot (API v2) HTTP 客户端 + WebSocket 共用同一个 OkHttpClient
     single { me.rerere.rikkahub.data.qq.QqBotClient(get()) }
 
     single {
         me.rerere.rikkahub.data.ai.tools.ToolSurfaceBuilder(
             context = get(),
             localTools = get(),
-            toolSurfaceBuilder = get(),
             mcpManager = get(),
             filesManager = get(),
             skillManager = get(),
@@ -94,30 +80,12 @@ val appModule = module {
         )
     }
 
-    single {
-        UpdateChecker(get())
-    }
-
-    single {
-        AppScope()
-    }
-
-    single<EmojiData> {
-        EmojiUtils.loadEmoji(get())
-    }
-
-    single {
-        TTSManager(get())
-    }
-
-    single {
-        SoundEffectPlayer(get())
-    }
-
-    single {
-        AILoggingManager()
-    }
-
+    single { UpdateChecker(get()) }
+    single { AppScope() }
+    single<EmojiData> { EmojiUtils.loadEmoji(get()) }
+    single { TTSManager(get()) }
+    single { SoundEffectPlayer(get()) }
+    single { AILoggingManager() }
     single {
         MemoryBankService(
             memoryBankDAO = get(),
@@ -137,6 +105,7 @@ val appModule = module {
             templateTransformer = get(),
             providerManager = get(),
             localTools = get(),
+            toolSurfaceBuilder = get(),
             mcpManager = get(),
             filesManager = get(),
             skillManager = get(),
@@ -158,5 +127,4 @@ val appModule = module {
             filesManager = get()
         )
     }
-
 }
