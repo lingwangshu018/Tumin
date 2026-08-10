@@ -27,6 +27,14 @@ interface CoupleDAO {
 
     @Delete suspend fun deletePost(value: CouplePostEntity)
 
+    @Query("SELECT * FROM couple_comment WHERE relationship_id = :id ORDER BY created_at ASC")
+    fun comments(id: String): Flow<List<CoupleCommentEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveComment(value: CoupleCommentEntity)
+
+    @Delete suspend fun deleteComment(value: CoupleCommentEntity)
+
     @Query("SELECT * FROM couple_diary WHERE relationship_id = :id ORDER BY entry_date DESC")
     fun diaries(id: String): Flow<List<CoupleDiaryEntity>>
 
