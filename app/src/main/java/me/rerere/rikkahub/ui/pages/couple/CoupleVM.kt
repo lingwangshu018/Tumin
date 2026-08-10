@@ -5,7 +5,9 @@ import androidx.lifecycle.viewModelScope
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
@@ -14,11 +16,20 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.entity.*
 import me.rerere.rikkahub.data.repository.CoupleRepository
 
+data class RabbitSpaceUiState(
+    val generatingPost: Boolean = false,
+    val commentingPostId: String? = null,
+    val notice: String? = null,
+    val error: String? = null,
+)
+
 class CoupleVM(
     private val repository: CoupleRepository,
     settingsStore: SettingsStore,
 ) : ViewModel() {
     private val coupleAi = CoupleAiService()
+    private val _rabbitSpaceUiState = MutableStateFlow(RabbitSpaceUiState())
+    val rabbitSpaceUiState = _rabbitSpaceUiState.asStateFlow()
 
     val settings = settingsStore.settingsFlow
     val relationship = repository.relationship.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
@@ -37,6 +48,10 @@ class CoupleVM(
         repository.bind(assistantId, startedAt)
     }
 
+    fun clearRabbitSpaceFeedback() {
+        _rabbitSpaceUiState.value = _rabbitSpaceUiState.value.copy(notice = null, error = null)
+    }
+
     fun setJournalCover(cover: String) {
         val relation = relationship.value ?: return
         viewModelScope.launch { repository.updateJournalCover(relation, cover) }
@@ -53,8 +68,20 @@ class CoupleVM(
         viewModelScope.launch {
             val persistedImages = imageUris.take(9)
             val post = repository.addPost(relation.id, "user", content.trim(), persistedImages)
-            coupleAi.commentOnUserPost(relation.assistantId, content.trim(), persistedImages)?.let { reply ->
+            _rabbitSpaceUiState.value = RabbitSpaceUiState(
+                commentingPostId = post.id,
+                notice = "动态已发表，正在等 TA 来评论……",
+            )
+            val reply = runCatching {
+                coupleAi.commentOnUserPost(relation.assistantId, content.trim(), persistedImages)
+            }.getOrNull()
+            if (!reply.isNullOrBlank()) {
                 repository.addComment(relation.id, post.id, "assistant", reply)
+                _rabbitSpaceUiState.value = RabbitSpaceUiState(notice = "TA 已经来留言啦")
+            } else {
+                _rabbitSpaceUiState.value = RabbitSpaceUiState(
+                    error = coupleAi.lastErrorMessage ?: "动态已经发出，但 TA 的自动评论生成失败",
+                )
             }
         }
     }
@@ -64,8 +91,20 @@ class CoupleVM(
         viewModelScope.launch {
             repository.addComment(relation.id, post.id, "user", content)
             if (post.author == "assistant") {
-                coupleAi.replyToUserComment(relation.assistantId, post.content, content, decodeImageUris(post.imageUri))?.let { reply ->
+                _rabbitSpaceUiState.value = RabbitSpaceUiState(
+                    commentingPostId = post.id,
+                    notice = "留言已发出，正在等 TA 回复……",
+                )
+                val reply = runCatching {
+                    coupleAi.replyToUserComment(relation.assistantId, post.content, content, decodeImageUris(post.imageUri))
+                }.getOrNull()
+                if (!reply.isNullOrBlank()) {
                     repository.addComment(relation.id, post.id, "assistant", reply)
+                    _rabbitSpaceUiState.value = RabbitSpaceUiState(notice = "TA 回复了你的留言")
+                } else {
+                    _rabbitSpaceUiState.value = RabbitSpaceUiState(
+                        error = coupleAi.lastErrorMessage ?: "留言已经保存，但 TA 的回复生成失败",
+                    )
                 }
             }
         }
@@ -77,27 +116,61 @@ class CoupleVM(
         val latestAiPost = existingPosts.firstOrNull { it.author == "assistant" }
         val cooldownMs = 12 * 60 * 60 * 1000L
         if (!force && latestAiPost != null && System.currentTimeMillis() - latestAiPost.createdAt < cooldownMs) return
+        if (_rabbitSpaceUiState.value.generatingPost) return
 
         viewModelScope.launch {
-            val recentContext = existingPosts.take(8).reversed().joinToString("\n") { post ->
-                val who = if (post.author == "assistant") "你" else "恋人"
-                val count = decodeImageUris(post.imageUri).size
-                val photoHint = when { count > 1 -> "（带${count}张照片）"; count == 1 -> "（带1张照片）"; else -> "" }
-                "$who$photoHint：${post.content}"
-            }.ifBlank { "这里还没有动态，你可以发第一条。" }
+            _rabbitSpaceUiState.value = RabbitSpaceUiState(
+                generatingPost = true,
+                notice = if (force) "TA 正在想发什么……" else null,
+            )
+            try {
+                val recentContext = existingPosts.take(8).reversed().joinToString("\n") { post ->
+                    val who = if (post.author == "assistant") "你" else "恋人"
+                    val count = decodeImageUris(post.imageUri).size
+                    val photoHint = when { count > 1 -> "（带${count}张照片）"; count == 1 -> "（带1张照片）"; else -> "" }
+                    "$who$photoHint：${post.content}"
+                }.ifBlank { "这里还没有动态，你可以发第一条。" }
 
-            val draft = coupleAi.createPostDraft(relation.assistantId, recentContext) ?: return@launch
-            if (draft.content.isBlank() && !draft.needImage) return@launch
-            val generatedImages = if (draft.needImage && draft.imagePrompt.isNotBlank()) {
-                coupleAi.generatePostImages(draft.imagePrompt, draft.imageCount)
-            } else emptyList()
-            if (draft.content.isNotBlank() || generatedImages.isNotEmpty()) {
-                repository.addPost(relation.id, "assistant", draft.content.trim(), generatedImages)
+                val draft = coupleAi.createPostDraft(relation.assistantId, recentContext)
+                if (draft == null) {
+                    _rabbitSpaceUiState.value = RabbitSpaceUiState(
+                        error = coupleAi.lastErrorMessage ?: "TA 没有生成出可发表的动态",
+                    )
+                    return@launch
+                }
+                if (draft.content.isBlank() && !draft.needImage) {
+                    _rabbitSpaceUiState.value = RabbitSpaceUiState(error = "TA 返回了一条空动态，请重试")
+                    return@launch
+                }
+                val generatedImages = if (draft.needImage && draft.imagePrompt.isNotBlank()) {
+                    coupleAi.generatePostImages(draft.imagePrompt, draft.imageCount)
+                } else emptyList()
+                if (draft.content.isNotBlank() || generatedImages.isNotEmpty()) {
+                    repository.addPost(relation.id, "assistant", draft.content.trim(), generatedImages)
+                    val imageNote = if (draft.needImage && generatedImages.isEmpty()) "（配图生成失败，已先发表文字）" else ""
+                    _rabbitSpaceUiState.value = RabbitSpaceUiState(notice = "TA 已发表动态$imageNote")
+                } else {
+                    _rabbitSpaceUiState.value = RabbitSpaceUiState(error = coupleAi.lastErrorMessage ?: "动态生成失败")
+                }
+            } catch (error: Throwable) {
+                _rabbitSpaceUiState.value = RabbitSpaceUiState(
+                    error = error.message?.takeIf { it.isNotBlank() } ?: "兔眠空间生成失败",
+                )
             }
         }
     }
 
     fun toggleLike(post: CouplePostEntity) = viewModelScope.launch { repository.toggleLike(post) }
+
+    fun deletePost(post: CouplePostEntity) = viewModelScope.launch {
+        runCatching { repository.deletePost(post) }
+            .onSuccess { _rabbitSpaceUiState.value = RabbitSpaceUiState(notice = "这条动态已经删除") }
+            .onFailure { error ->
+                _rabbitSpaceUiState.value = RabbitSpaceUiState(
+                    error = error.message?.takeIf { it.isNotBlank() } ?: "删除动态失败",
+                )
+            }
+    }
 
     fun addDiary(title: String, content: String, folder: String = "全部心事", paper: String = "ivory") = relationship.value?.let { value ->
         viewModelScope.launch {
