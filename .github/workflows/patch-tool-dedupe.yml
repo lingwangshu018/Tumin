@@ -1,0 +1,36 @@
+name: Patch Tool Surface Dedupe
+on:
+  push:
+    paths:
+      - '.github/tool-dedupe-trigger'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch ToolSurfaceBuilder
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('app/src/main/java/me/rerere/rikkahub/data/ai/tools/ToolSurfaceBuilder.kt')
+          s=p.read_text(encoding='utf-8-sig')
+          old='''        return buildList {\n            if (assistant.enableMemory) {'''
+          new='''        return buildList {\n            if (assistant.enableMemory) {'''
+          assert old in s
+          # Keep the existing build logic, but dedupe the final ordinary-chat tool surface by provider-visible name.
+          # First occurrence wins: built-in memory/local/system/companion tools take precedence over later workspace/skill/MCP/plugin additions.
+          tail='''            addAll(pluginToolProvider.getTools())\n        }\n    }\n}\n'''
+          replacement='''            addAll(pluginToolProvider.getTools())\n        }.distinctBy { it.name }\n    }\n}\n'''
+          assert tail in s
+          s=s.replace(tail,replacement,1)
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add app/src/main/java/me/rerere/rikkahub/data/ai/tools/ToolSurfaceBuilder.kt
+          git commit -m 'fix: dedupe provider-visible tool names in unified surface'
+          git push
