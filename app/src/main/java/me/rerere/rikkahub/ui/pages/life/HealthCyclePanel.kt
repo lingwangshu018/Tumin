@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -37,7 +38,6 @@ import org.json.JSONObject
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
@@ -55,11 +55,7 @@ private const val LAST_NOTIFICATION_KEY = "last_period_notification"
 private const val PERIOD_WORK_NAME = "tumin_period_reminder"
 private const val PERIOD_CHANNEL_ID = "tumin_period_cycle"
 
-private data class PeriodRecord(
-    val start: LocalDate,
-    val end: LocalDate? = null,
-)
-
+private data class PeriodRecord(val start: LocalDate, val end: LocalDate? = null)
 private data class DailyBodyLog(
     val date: LocalDate,
     val flow: String = "",
@@ -69,51 +65,48 @@ private data class DailyBodyLog(
     val note: String = "",
 )
 
-private val symptoms = listOf("腹痛", "腰酸", "头痛", "胸胀", "疲惫", "失眠", "食欲变化", "皮肤状态")
-private val moods = listOf("开心", "平静", "敏感", "烦躁", "低落", "焦虑")
-private val energies = listOf("高", "中", "低")
-private val flows = listOf("少量", "中等", "较多")
+private val symptomOptions = listOf("腹痛", "腰酸", "头痛", "胸胀", "疲惫", "失眠", "食欲变化", "皮肤状态")
+private val moodOptions = listOf("开心", "平静", "敏感", "烦躁", "低落", "焦虑")
+private val energyOptions = listOf("高", "中", "低")
+private val flowOptions = listOf("少量", "中等", "较多")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HealthCyclePanel() {
     val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences(HEALTH_PREFS, Context.MODE_PRIVATE) }
     var periods by remember { mutableStateOf(loadPeriods(context)) }
     var logs by remember { mutableStateOf(loadDailyLogs(context)) }
     var month by remember { mutableStateOf(YearMonth.now()) }
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     var showLogEditor by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
-    var cycleLength by remember { mutableIntStateOf(context.getSharedPreferences(HEALTH_PREFS, Context.MODE_PRIVATE).getInt(CYCLE_LENGTH_KEY, 28)) }
-    var periodLength by remember { mutableIntStateOf(context.getSharedPreferences(HEALTH_PREFS, Context.MODE_PRIVATE).getInt(PERIOD_LENGTH_KEY, 5)) }
-    var reminderEnabled by remember { mutableStateOf(context.getSharedPreferences(HEALTH_PREFS, Context.MODE_PRIVATE).getBoolean(REMINDER_ENABLED_KEY, false)) }
-    var reminderDays by remember { mutableIntStateOf(context.getSharedPreferences(HEALTH_PREFS, Context.MODE_PRIVATE).getInt(REMINDER_DAYS_KEY, 3)) }
-    var aiAllowed by remember { mutableStateOf(context.getSharedPreferences(HEALTH_PREFS, Context.MODE_PRIVATE).getBoolean(AI_ALLOWED_KEY, true)) }
+    var cycleLength by remember { mutableIntStateOf(prefs.getInt(CYCLE_LENGTH_KEY, 28)) }
+    var periodLength by remember { mutableIntStateOf(prefs.getInt(PERIOD_LENGTH_KEY, 5)) }
+    var reminderEnabled by remember { mutableStateOf(prefs.getBoolean(REMINDER_ENABLED_KEY, false)) }
+    var reminderDays by remember { mutableIntStateOf(prefs.getInt(REMINDER_DAYS_KEY, 3)) }
+    var aiAllowed by remember { mutableStateOf(prefs.getBoolean(AI_ALLOWED_KEY, true)) }
+    var pendingReminderEnable by remember { mutableStateOf(false) }
 
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (!granted) {
-            reminderEnabled = false
-            saveSettings(context, cycleLength, periodLength, reminderEnabled, reminderDays, aiAllowed)
-        }
+        reminderEnabled = granted && pendingReminderEnable
+        pendingReminderEnable = false
+        saveSettings(context, cycleLength, periodLength, reminderEnabled, reminderDays, aiAllowed)
+        if (reminderEnabled) schedulePeriodReminder(context) else cancelPeriodReminder(context)
     }
 
     val effectiveCycle = averageCycleLength(periods) ?: cycleLength
     val effectivePeriod = averagePeriodLength(periods) ?: periodLength
-    val current = periods.maxByOrNull { it.start }
-    val predictedStart = current?.let { it.start.plusDays(effectiveCycle.toLong()) }
+    val latestPeriod = periods.maxByOrNull { it.start }
+    val predictedStart = latestPeriod?.start?.plusDays(effectiveCycle.toLong())
     val today = LocalDate.now()
-    val activePeriod = periods.firstOrNull { record ->
-        !today.isBefore(record.start) && !today.isAfter(record.end ?: today)
-    }
+    val activePeriod = periods.firstOrNull { !today.isBefore(it.start) && !today.isAfter(it.end ?: today) }
     val dayInPeriod = activePeriod?.let { ChronoUnit.DAYS.between(it.start, today).toInt() + 1 }
     val daysUntil = predictedStart?.let { ChronoUnit.DAYS.between(today, it).toInt() }
 
-    LaunchedEffect(reminderEnabled, reminderDays, cycleLength, periodLength, periods) {
+    LaunchedEffect(reminderEnabled, reminderDays, cycleLength, periodLength, aiAllowed) {
         saveSettings(context, cycleLength, periodLength, reminderEnabled, reminderDays, aiAllowed)
         if (reminderEnabled) schedulePeriodReminder(context) else cancelPeriodReminder(context)
-    }
-    LaunchedEffect(aiAllowed) {
-        saveSettings(context, cycleLength, periodLength, reminderEnabled, reminderDays, aiAllowed)
     }
 
     LazyColumn(
@@ -193,15 +186,7 @@ fun HealthCyclePanel() {
                         TextButton(onClick = { month = YearMonth.now(); selectedDate = today }) { Text("今天") }
                         TextButton(onClick = { month = month.plusMonths(1) }) { Text("›") }
                     }
-                    HealthMonthCalendar(
-                        month = month,
-                        selected = selectedDate,
-                        periods = periods,
-                        logs = logs,
-                        predictedStart = predictedStart,
-                        predictedLength = effectivePeriod,
-                        onSelect = { selectedDate = it },
-                    )
+                    HealthMonthCalendar(month, selectedDate, periods, logs, predictedStart, effectivePeriod) { selectedDate = it }
                 }
             }
         }
@@ -222,75 +207,56 @@ fun HealthCyclePanel() {
                         }
                         FilledTonalButton(onClick = { showLogEditor = true }, shape = RoundedCornerShape(16.dp)) { Text(if (log == null) "记录" else "编辑") }
                     }
-                    if (log != null) {
-                        if (log.flow.isNotBlank()) Text("🩸 流量：${log.flow}")
-                        if (log.symptoms.isNotEmpty()) Text("🌿 身体：${log.symptoms.joinToString("、")}")
-                        if (log.mood.isNotBlank()) Text("💭 心情：${log.mood}")
-                        if (log.energy.isNotBlank()) Text("☁️ 精力：${log.energy}")
-                        if (log.note.isNotBlank()) Text(log.note, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    log?.let {
+                        if (it.flow.isNotBlank()) Text("🩸 流量：${it.flow}")
+                        if (it.symptoms.isNotEmpty()) Text("🌿 身体：${it.symptoms.joinToString("、")}")
+                        if (it.mood.isNotBlank()) Text("💭 心情：${it.mood}")
+                        if (it.energy.isNotBlank()) Text("☁️ 精力：${it.energy}")
+                        if (it.note.isNotBlank()) Text(it.note, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
         }
 
         item {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(22.dp),
-                color = Color(0xFFF4F0F8),
-            ) {
+            Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp), color = Color(0xFFF4F0F8)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("♡ TA 能知道什么", fontWeight = FontWeight.Bold, color = Color(0xFF735F82))
                     Text(
-                        if (aiAllowed) "当前已允许 AI 读取最近的周期阶段与身体记录，用于更自然地关心你。" else "当前已关闭。聊天里的 AI 不会收到周期与身体记录。",
+                        if (aiAllowed) "当前允许 AI 读取最近的周期阶段与身体记录，用于更自然地关心你。" else "当前已关闭，聊天 AI 不会收到周期与身体记录。",
                         color = Color(0xFF766E7B),
                     )
-                    Text("不会把整段历史每次都塞进聊天，只提供当前状态和最近记录。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("只提供当前状态和最近记录，不会每次发送完整周期历史。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
-
-        item {
-            Text("周期预测只根据你记录的历史日期做简单估算，不用于诊断、避孕或替代医疗建议。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        item { Text("周期预测只根据你记录的历史日期做简单估算，不用于诊断、避孕或替代医疗建议。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 
     if (showLogEditor) {
-        BodyLogDialog(
-            date = selectedDate,
-            initial = logs.firstOrNull { it.date == selectedDate },
-            onDismiss = { showLogEditor = false },
-            onSave = { updated ->
-                logs = (logs.filterNot { it.date == updated.date } + updated).sortedBy { it.date }
-                saveDailyLogs(context, logs)
-                showLogEditor = false
-            },
-        )
+        BodyLogDialog(selectedDate, logs.firstOrNull { it.date == selectedDate }, onDismiss = { showLogEditor = false }) { updated ->
+            logs = (logs.filterNot { it.date == updated.date } + updated).sortedBy { it.date }
+            saveDailyLogs(context, logs)
+            showLogEditor = false
+        }
     }
 
     if (showSettings) {
-        HealthSettingsDialog(
-            cycleLength = cycleLength,
-            periodLength = periodLength,
-            reminderEnabled = reminderEnabled,
-            reminderDays = reminderDays,
-            aiAllowed = aiAllowed,
-            onDismiss = { showSettings = false },
-            onSave = { c, p, enabled, days, ai ->
-                cycleLength = c
-                periodLength = p
-                reminderDays = days
-                aiAllowed = ai
-                if (enabled && Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                } else {
-                    reminderEnabled = enabled
-                }
-                saveSettings(context, c, p, reminderEnabled, days, ai)
+        HealthSettingsDialog(cycleLength, periodLength, reminderEnabled, reminderDays, aiAllowed, onDismiss = { showSettings = false }) { c, p, enabled, days, ai ->
+            cycleLength = c
+            periodLength = p
+            reminderDays = days
+            aiAllowed = ai
+            if (enabled && Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                pendingReminderEnable = true
+                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                reminderEnabled = enabled
+                saveSettings(context, c, p, enabled, days, ai)
                 if (enabled) schedulePeriodReminder(context) else cancelPeriodReminder(context)
-                showSettings = false
-            },
-        )
+            }
+            showSettings = false
+        }
     }
 }
 
@@ -317,45 +283,28 @@ private fun HealthMonthCalendar(
     val first = month.atDay(1)
     val start = first.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
     val dates = (0 until 42).map { start.plusDays(it.toLong()) }
-    val labels = listOf("一", "二", "三", "四", "五", "六", "日")
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth()) {
-            labels.forEach { Text(it, Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall) }
+            listOf("一", "二", "三", "四", "五", "六", "日").forEach { Text(it, Modifier.weight(1f), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall) }
         }
         dates.chunked(7).forEach { week ->
             Row(Modifier.fillMaxWidth()) {
                 week.forEach { date ->
-                    val actual = periods.any { record -> !date.isBefore(record.start) && !date.isAfter(record.end ?: record.start.plusDays(6)) }
-                    val predicted = predictedStart?.let { !date.isBefore(it) && date.isBefore(it.plusDays(predictedLength.toLong())) } == true
+                    val actual = periods.any { !date.isBefore(it.start) && !date.isAfter(it.end ?: it.start.plusDays(6)) }
+                    val predicted = predictedStart?.let { startDate -> !date.isBefore(startDate) && date.isBefore(startDate.plusDays(predictedLength.toLong())) } == true
                     val hasLog = logs.any { it.date == date }
                     val isToday = date == LocalDate.now()
                     val isSelected = date == selected
-                    Box(
-                        modifier = Modifier.weight(1f).aspectRatio(1f).padding(2.dp).clickable { onSelect(date) },
-                        contentAlignment = Alignment.Center,
-                    ) {
+                    Box(Modifier.weight(1f).aspectRatio(1f).padding(2.dp).clickable { onSelect(date) }, contentAlignment = Alignment.Center) {
                         Surface(
                             modifier = Modifier.size(36.dp),
                             shape = CircleShape,
-                            color = when {
-                                isSelected -> Color(0xFFC9637D)
-                                actual -> Color(0xFFFFD5DF)
-                                predicted -> Color(0xFFFFEDF2)
-                                else -> Color.Transparent
-                            },
+                            color = when { isSelected -> Color(0xFFC9637D); actual -> Color(0xFFFFD5DF); predicted -> Color(0xFFFFEDF2); else -> Color.Transparent },
                             border = if (isToday && !isSelected) BorderStroke(1.5.dp, Color(0xFFC9637D)) else null,
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                Text(
-                                    date.dayOfMonth.toString(),
-                                    color = when {
-                                        isSelected -> Color.White
-                                        date.month != month.month -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .35f)
-                                        else -> MaterialTheme.colorScheme.onSurface
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                                if (hasLog) Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 3.dp).size(4.dp).aspectRatio(1f)) { Surface(Modifier.fillMaxSize(), shape = CircleShape, color = if (isSelected) Color.White else Color(0xFF8B75A0)) {} }
+                                Text(date.dayOfMonth.toString(), color = when { isSelected -> Color.White; date.month != month.month -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .35f); else -> MaterialTheme.colorScheme.onSurface }, style = MaterialTheme.typography.bodySmall)
+                                if (hasLog) Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 3.dp).size(4.dp)) { Surface(Modifier.fillMaxSize(), shape = CircleShape, color = if (isSelected) Color.White else Color(0xFF8B75A0)) {} }
                             }
                         }
                     }
@@ -370,7 +319,6 @@ private fun HealthMonthCalendar(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun BodyLogDialog(date: LocalDate, initial: DailyBodyLog?, onDismiss: () -> Unit, onSave: (DailyBodyLog) -> Unit) {
     var flow by remember(date) { mutableStateOf(initial?.flow.orEmpty()) }
@@ -385,19 +333,13 @@ private fun BodyLogDialog(date: LocalDate, initial: DailyBodyLog?, onDismiss: ()
         text = {
             LazyColumn(Modifier.heightIn(max = 560.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item { Text("经量", fontWeight = FontWeight.Bold) }
-                item { ChoiceRow(flows, flow) { flow = if (flow == it) "" else it } }
+                item { ChoiceRow(flowOptions, flow) { flow = if (flow == it) "" else it } }
                 item { Text("身体感受", fontWeight = FontWeight.Bold) }
-                item {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                        items(symptoms) { symptom ->
-                            FilterChip(selected = symptom in selectedSymptoms, onClick = { selectedSymptoms = if (symptom in selectedSymptoms) selectedSymptoms - symptom else selectedSymptoms + symptom }, label = { Text(symptom) })
-                        }
-                    }
-                }
+                item { LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) { items(symptomOptions) { symptom -> FilterChip(selected = symptom in selectedSymptoms, onClick = { selectedSymptoms = if (symptom in selectedSymptoms) selectedSymptoms - symptom else selectedSymptoms + symptom }, label = { Text(symptom) }) } } }
                 item { Text("心情", fontWeight = FontWeight.Bold) }
-                item { ChoiceRow(moods, mood) { mood = if (mood == it) "" else it } }
+                item { ChoiceRow(moodOptions, mood) { mood = if (mood == it) "" else it } }
                 item { Text("精力", fontWeight = FontWeight.Bold) }
-                item { ChoiceRow(energies, energy) { energy = if (energy == it) "" else it } }
+                item { ChoiceRow(energyOptions, energy) { energy = if (energy == it) "" else it } }
                 item { OutlinedTextField(note, { note = it }, modifier = Modifier.fillMaxWidth(), minLines = 3, label = { Text("今天还想记一点什么") }, shape = RoundedCornerShape(18.dp)) }
             }
         },
@@ -408,9 +350,7 @@ private fun BodyLogDialog(date: LocalDate, initial: DailyBodyLog?, onDismiss: ()
 
 @Composable
 private fun ChoiceRow(options: List<String>, selected: String, onSelect: (String) -> Unit) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-        items(options) { item -> FilterChip(selected = selected == item, onClick = { onSelect(item) }, label = { Text(item) }) }
-    }
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) { items(options) { item -> FilterChip(selected = selected == item, onClick = { onSelect(item) }, label = { Text(item) }) } }
 }
 
 @Composable
@@ -434,16 +374,11 @@ private fun HealthSettingsDialog(
         title = { Text("周期设置") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text("没有足够历史记录时，会先使用这里的默认值。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("默认周期：$cycle 天")
-                Slider(cycle.toFloat(), { cycle = it.toInt() }, valueRange = 20f..45f, steps = 24)
-                Text("默认经期：$period 天")
-                Slider(period.toFloat(), { period = it.toInt() }, valueRange = 2f..10f, steps = 7)
+                Text("历史记录不足时，会先使用这里的默认值。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("默认周期：$cycle 天"); Slider(cycle.toFloat(), { cycle = it.toInt() }, valueRange = 20f..45f, steps = 24)
+                Text("默认经期：$period 天"); Slider(period.toFloat(), { period = it.toInt() }, valueRange = 2f..10f, steps = 7)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("通知栏提醒", fontWeight = FontWeight.Bold); Text("退出橘瓣后也可以收到", style = MaterialTheme.typography.bodySmall) }; Switch(reminders, { reminders = it }) }
-                if (reminders) {
-                    Text("提前 $days 天提醒")
-                    Slider(days.toFloat(), { days = it.toInt() }, valueRange = 1f..7f, steps = 5)
-                }
+                if (reminders) { Text("提前 $days 天提醒"); Slider(days.toFloat(), { days = it.toInt() }, valueRange = 1f..7f, steps = 5) }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("允许 AI 读取", fontWeight = FontWeight.Bold); Text("只提供当前状态与最近记录", style = MaterialTheme.typography.bodySmall) }; Switch(ai, { ai = it }) }
             }
         },
@@ -455,75 +390,48 @@ private fun HealthSettingsDialog(
 private fun averageCycleLength(periods: List<PeriodRecord>): Int? {
     val starts = periods.map { it.start }.sorted()
     if (starts.size < 2) return null
-    val intervals = starts.zipWithNext { a, b -> ChronoUnit.DAYS.between(a, b).toInt() }.filter { it in 15..60 }
-    return intervals.takeLast(6).takeIf { it.isNotEmpty() }?.average()?.toInt()?.coerceIn(20, 45)
+    val intervals = starts.zipWithNext { a, b -> ChronoUnit.DAYS.between(a, b).toInt() }.filter { it in 15..60 }.takeLast(6)
+    return intervals.takeIf { it.isNotEmpty() }?.average()?.toInt()?.coerceIn(20, 45)
 }
 
 private fun averagePeriodLength(periods: List<PeriodRecord>): Int? {
-    val lengths = periods.mapNotNull { it.end?.let { end -> ChronoUnit.DAYS.between(it.start, end).toInt() + 1 } }.filter { it in 1..12 }
-    return lengths.takeLast(6).takeIf { it.isNotEmpty() }?.average()?.toInt()?.coerceIn(2, 10)
+    val lengths = periods.mapNotNull { record -> record.end?.let { ChronoUnit.DAYS.between(record.start, it).toInt() + 1 } }.filter { it in 1..12 }.takeLast(6)
+    return lengths.takeIf { it.isNotEmpty() }?.average()?.toInt()?.coerceIn(2, 10)
 }
 
 private fun loadPeriods(context: Context): List<PeriodRecord> = runCatching {
-    val raw = context.getSharedPreferences(HEALTH_PREFS, Context.MODE_PRIVATE).getString(PERIODS_KEY, "[]") ?: "[]"
-    val array = JSONArray(raw)
-    buildList {
-        for (i in 0 until array.length()) {
-            val obj = array.getJSONObject(i)
-            val start = LocalDate.parse(obj.getString("start"))
-            val end = obj.optString("end").takeIf { it.isNotBlank() }?.let(LocalDate::parse)
-            add(PeriodRecord(start, end))
-        }
-    }
+    val array = JSONArray(context.getSharedPreferences(HEALTH_PREFS, Context.MODE_PRIVATE).getString(PERIODS_KEY, "[]") ?: "[]")
+    buildList { for (i in 0 until array.length()) { val obj = array.getJSONObject(i); add(PeriodRecord(LocalDate.parse(obj.getString("start")), obj.optString("end").takeIf { it.isNotBlank() }?.let(LocalDate::parse))) } }
 }.getOrDefault(emptyList())
 
 private fun savePeriods(context: Context, periods: List<PeriodRecord>) {
-    val array = JSONArray()
-    periods.forEach { record -> array.put(JSONObject().apply { put("start", record.start.toString()); record.end?.let { put("end", it.toString()) } }) }
+    val array = JSONArray(); periods.forEach { record -> array.put(JSONObject().apply { put("start", record.start.toString()); record.end?.let { put("end", it.toString()) } }) }
     context.getSharedPreferences(HEALTH_PREFS, Context.MODE_PRIVATE).edit().putString(PERIODS_KEY, array.toString()).apply()
 }
 
 private fun loadDailyLogs(context: Context): List<DailyBodyLog> = runCatching {
-    val raw = context.getSharedPreferences(HEALTH_PREFS, Context.MODE_PRIVATE).getString(DAILY_KEY, "[]") ?: "[]"
-    val array = JSONArray(raw)
+    val array = JSONArray(context.getSharedPreferences(HEALTH_PREFS, Context.MODE_PRIVATE).getString(DAILY_KEY, "[]") ?: "[]")
     buildList {
         for (i in 0 until array.length()) {
-            val obj = array.getJSONObject(i)
-            val symptomArray = obj.optJSONArray("symptoms") ?: JSONArray()
-            val symptomSet = buildSet { for (j in 0 until symptomArray.length()) add(symptomArray.getString(j)) }
-            add(DailyBodyLog(LocalDate.parse(obj.getString("date")), obj.optString("flow"), symptomSet, obj.optString("mood"), obj.optString("energy"), obj.optString("note")))
+            val obj = array.getJSONObject(i); val symptoms = obj.optJSONArray("symptoms") ?: JSONArray(); val set = buildSet { for (j in 0 until symptoms.length()) add(symptoms.getString(j)) }
+            add(DailyBodyLog(LocalDate.parse(obj.getString("date")), obj.optString("flow"), set, obj.optString("mood"), obj.optString("energy"), obj.optString("note")))
         }
     }
 }.getOrDefault(emptyList())
 
 private fun saveDailyLogs(context: Context, logs: List<DailyBodyLog>) {
-    val array = JSONArray()
-    logs.forEach { log ->
-        array.put(JSONObject().apply {
-            put("date", log.date.toString()); put("flow", log.flow); put("symptoms", JSONArray(log.symptoms.toList())); put("mood", log.mood); put("energy", log.energy); put("note", log.note)
-        })
-    }
+    val array = JSONArray(); logs.forEach { log -> array.put(JSONObject().apply { put("date", log.date.toString()); put("flow", log.flow); put("symptoms", JSONArray(log.symptoms.toList())); put("mood", log.mood); put("energy", log.energy); put("note", log.note) }) }
     context.getSharedPreferences(HEALTH_PREFS, Context.MODE_PRIVATE).edit().putString(DAILY_KEY, array.toString()).apply()
 }
 
 private fun saveSettings(context: Context, cycle: Int, period: Int, reminder: Boolean, reminderDays: Int, ai: Boolean) {
-    context.getSharedPreferences(HEALTH_PREFS, Context.MODE_PRIVATE).edit()
-        .putInt(CYCLE_LENGTH_KEY, cycle)
-        .putInt(PERIOD_LENGTH_KEY, period)
-        .putBoolean(REMINDER_ENABLED_KEY, reminder)
-        .putInt(REMINDER_DAYS_KEY, reminderDays)
-        .putBoolean(AI_ALLOWED_KEY, ai)
-        .apply()
+    context.getSharedPreferences(HEALTH_PREFS, Context.MODE_PRIVATE).edit().putInt(CYCLE_LENGTH_KEY, cycle).putInt(PERIOD_LENGTH_KEY, period).putBoolean(REMINDER_ENABLED_KEY, reminder).putInt(REMINDER_DAYS_KEY, reminderDays).putBoolean(AI_ALLOWED_KEY, ai).apply()
 }
 
 private fun schedulePeriodReminder(context: Context) {
-    val request = PeriodicWorkRequestBuilder<PeriodReminderWorker>(24, TimeUnit.HOURS).build()
-    WorkManager.getInstance(context).enqueueUniquePeriodicWork(PERIOD_WORK_NAME, ExistingPeriodicWorkPolicy.UPDATE, request)
+    WorkManager.getInstance(context).enqueueUniquePeriodicWork(PERIOD_WORK_NAME, ExistingPeriodicWorkPolicy.UPDATE, PeriodicWorkRequestBuilder<PeriodReminderWorker>(24, TimeUnit.HOURS).build())
 }
-
-private fun cancelPeriodReminder(context: Context) {
-    WorkManager.getInstance(context).cancelUniqueWork(PERIOD_WORK_NAME)
-}
+private fun cancelPeriodReminder(context: Context) { WorkManager.getInstance(context).cancelUniqueWork(PERIOD_WORK_NAME) }
 
 class PeriodReminderWorker(appContext: Context, params: WorkerParameters) : Worker(appContext, params) {
     override fun doWork(): Result {
@@ -537,23 +445,14 @@ class PeriodReminderWorker(appContext: Context, params: WorkerParameters) : Work
         val today = LocalDate.now()
         val days = ChronoUnit.DAYS.between(today, predicted).toInt()
         if (days != before && days != 0) return Result.success()
-
         val marker = "$today:$days"
         if (prefs.getString(LAST_NOTIFICATION_KEY, "") == marker) return Result.success()
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(applicationContext, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return Result.success()
 
         val manager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            manager.createNotificationChannel(NotificationChannel(PERIOD_CHANNEL_ID, "周期提醒", NotificationManager.IMPORTANCE_DEFAULT).apply { description = "经期预测与周期提醒" })
-        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) manager.createNotificationChannel(NotificationChannel(PERIOD_CHANNEL_ID, "周期提醒", NotificationManager.IMPORTANCE_DEFAULT).apply { description = "经期预测与周期提醒" })
         val text = if (days == 0) "按记录估算，今天可能接近经期开始日。记得按实际情况记录哦。" else "按记录估算，大约还有 $days 天可能进入经期。要不要提前准备一下？"
-        val notification = NotificationCompat.Builder(applicationContext, PERIOD_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("🌷 周期小提醒")
-            .setContentText(text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
-            .setAutoCancel(true)
-            .build()
+        val notification = NotificationCompat.Builder(applicationContext, PERIOD_CHANNEL_ID).setSmallIcon(android.R.drawable.ic_dialog_info).setContentTitle("🌷 周期小提醒").setContentText(text).setStyle(NotificationCompat.BigTextStyle().bigText(text)).setAutoCancel(true).build()
         NotificationManagerCompat.from(applicationContext).notify(46321, notification)
         prefs.edit().putString(LAST_NOTIFICATION_KEY, marker).apply()
         return Result.success()
