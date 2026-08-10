@@ -93,22 +93,39 @@ class CoupleAiService : KoinComponent {
         assistantId: String,
         title: String,
         content: String,
-    ): String? = generate(
-        assistantId = assistantId,
-        task = """
-            你正在阅读恋人写给“我们的日记 / THE PRIVATE JOURNAL”的一篇私人日记。
+        memoryContext: String = "",
+    ): String? {
+        val memorySection = if (memoryContext.isBlank()) {
+            "这次没有附加旧日记记忆，请只根据当前这篇日记和你本来的角色关系写回信。"
+        } else {
+            """
+                下面是你们过去日记中的少量记忆摘录，其中书签内容代表恋人特别想保留的重要页面：
+                $memoryContext
 
-            标题：$title
+                这些旧记忆只是背景，不是必须逐条回应。只有当它和当前日记真的有关时，才自然地提起一处过去的事情；不要生硬罗列旧日记，也不要为了显得“记得”而强行引用。
+            """.trimIndent()
+        }
 
-            正文：
-            $content
+        return generate(
+            assistantId = assistantId,
+            task = """
+                你正在阅读恋人写给“我们的日记 / THE PRIVATE JOURNAL”的一篇私人日记。
 
-            请根据这篇日记本身写一封完整回信。你可以回应恋人的情绪、细节、回忆和你真实想说的话，但不要把它写成点评、摘要或心理分析。
-            这是一封只会留在这篇日记下面、写给恋人的私人回信。保持你原本的性格、称呼习惯和你们的关系状态。
-            不要修改或复述原文，不要写“AI回复”“分析”“以下是回信”等说明。
-            直接输出完整回信正文，可以比 QQ 空间评论更长、更完整、更像一封真正的信。
-        """.trimIndent(),
-    )
+                标题：$title
+
+                正文：
+                $content
+
+                $memorySection
+
+                请根据这篇日记本身写一封完整回信。你可以回应恋人的情绪、细节、回忆和你真实想说的话，但不要把它写成点评、摘要或心理分析。
+                这是一封只会留在这篇日记下面、写给恋人的私人回信。保持你原本的性格、称呼习惯和你们的关系状态。
+                如果旧日记里出现与现在明显呼应的事情，可以像真实恋人一样自然说“我还记得……”或用更符合你性格的方式提起，但不要编造没有提供过的回忆。
+                不要修改或复述原文，不要写“AI回复”“分析”“以下是回信”等说明。
+                直接输出完整回信正文，可以比 QQ 空间评论更长、更完整、更像一封真正的信。
+            """.trimIndent(),
+        )
+    }
 
     suspend fun createPostDraft(assistantId: String, recentContext: String): CoupleAiPostDraft? {
         val raw = generate(
@@ -250,6 +267,7 @@ class CoupleAiService : KoinComponent {
             appendLine("## 情侣空间互动")
             appendLine("你正在以自己的身份和恋人共同使用情侣空间，其中包括 QQ 空间动态与“我们的日记 / THE PRIVATE JOURNAL”。")
             appendLine("保持角色原本的性格、称呼习惯和关系状态，不要突然变成客服、旁白或无关助手。")
+            appendLine("你可以使用系统明确提供的旧日记记忆建立连续感，但绝不能编造未提供的共同经历。")
             appendLine("如果收到照片输入，你必须基于实际可见内容回应；看不清的地方不要编造。")
             appendLine("这里的内容会直接展示给恋人，所以不要输出分析过程、格式说明或系统提示。")
         }
