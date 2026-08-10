@@ -19,8 +19,8 @@ android {
         applicationId = "com.lingwangshu018.tumin"
         minSdk = 26
         targetSdk = 37
-        versionCode = 162
-        versionName = "2.3.2"
+        versionCode = 163
+        versionName = "2.3.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -102,7 +102,7 @@ android {
         }
         debug {
             applicationIdSuffix = ".debug"
-            // 统一使用项目内置共享 debug keystore；若配置了 release keystore 则改用 release 签名，
+            // 统一使用项目内置共享 debug keystore；若配置了 release keystore则改用release签名，
             // 保证不同机器签名一致，避免覆盖安装失败（Failure [-99]）。
             signingConfig = signingConfigs.getByName(if (hasReleaseSigning) "release" else "debug")
             buildConfigField("String", "VERSION_NAME", "\"${android.defaultConfig.versionName}\"")
@@ -263,6 +263,7 @@ dependencies {
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.okhttp)
     implementation(libs.ktor.client.content.negotiation)
+
     implementation(libs.ktor.serialization.kotlinx.json)
 
     // ktor server (NapCat reverse WS)
@@ -325,7 +326,6 @@ dependencies {
     implementation(libs.image.viewer)
 
     // JLatexMath
-    // https://github.com/rikkahub/jlatexmath-android
     implementation(libs.jlatexmath)
     implementation(libs.jlatexmath.font.greek)
     implementation(libs.jlatexmath.font.cyrillic)
@@ -337,7 +337,7 @@ dependencies {
     implementation(libs.shizuku.api)
     implementation(libs.shizuku.provider)
 
-    // jmDNS (mDNS/Bonjour for .local hostname)
+    // jmDNS (mDNS/Bonjour .local hostname)
     implementation(libs.jmdns)
 
     // SLF4J Android binding — routes Ktor/SLF4J logs to logcat
