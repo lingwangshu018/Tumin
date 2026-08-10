@@ -36,11 +36,12 @@ class CoupleVM(
         val relation = relationship.value ?: return
         if (content.isBlank() && imageUris.isEmpty()) return
         viewModelScope.launch {
-            val post = repository.addPost(relation.id, "user", content.trim(), imageUris)
+            val persistedImages = imageUris.take(9)
+            val post = repository.addPost(relation.id, "user", content.trim(), persistedImages)
             coupleAi.commentOnUserPost(
                 assistantId = relation.assistantId,
                 postContent = content.trim(),
-                imageCount = imageUris.size,
+                imageUris = persistedImages,
             )?.let { reply ->
                 repository.addComment(relation.id, post.id, "assistant", reply)
             }
@@ -56,6 +57,7 @@ class CoupleVM(
                     assistantId = relation.assistantId,
                     postContent = post.content,
                     userComment = content,
+                    imageUris = decodeImageUris(post.imageUri),
                 )?.let { reply ->
                     repository.addComment(relation.id, post.id, "assistant", reply)
                 }
@@ -76,7 +78,12 @@ class CoupleVM(
                 .reversed()
                 .joinToString("\n") { post ->
                     val who = if (post.author == "assistant") "你" else "恋人"
-                    val photoHint = if (!post.imageUri.isNullOrBlank()) "（带照片）" else ""
+                    val count = decodeImageUris(post.imageUri).size
+                    val photoHint = when {
+                        count > 1 -> "（带${count}张照片）"
+                        count == 1 -> "（带1张照片）"
+                        else -> ""
+                    }
                     "$who$photoHint：${post.content}"
                 }
                 .ifBlank { "这里还没有动态，你可以发第一条。" }
@@ -95,5 +102,16 @@ class CoupleVM(
 
     fun addAnniversary(title: String, date: Long = System.currentTimeMillis(), yearly: Boolean = true) = relationship.value?.let { value ->
         viewModelScope.launch { repository.addAnniversary(value.id, title, date, yearly) }
+    }
+
+    private fun decodeImageUris(raw: String?): List<String> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return runCatching {
+            val array = org.json.JSONArray(raw)
+            List(array.length()) { index -> array.getString(index) }
+        }.getOrElse {
+            // 兼容早期仅保存单张 URI 的动态。
+            listOf(raw)
+        }.filter { it.isNotBlank() }.take(9)
     }
 }
