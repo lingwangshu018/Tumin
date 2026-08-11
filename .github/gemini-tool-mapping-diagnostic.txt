@@ -1,0 +1,1283 @@
+=== FILES ===
+ai/.gitignore
+ai/README.md
+ai/build.gradle.kts
+ai/consumer-rules.pro
+ai/proguard-rules.pro
+ai/src/androidTest/java/me/rerere/ai/ExampleInstrumentedTest.kt
+ai/src/main/AndroidManifest.xml
+ai/src/main/java/me/rerere/ai/core/MessageRole.kt
+ai/src/main/java/me/rerere/ai/core/Reasoning.kt
+ai/src/main/java/me/rerere/ai/core/Tool.kt
+ai/src/main/java/me/rerere/ai/core/Usage.kt
+ai/src/main/java/me/rerere/ai/provider/Model.kt
+ai/src/main/java/me/rerere/ai/provider/Provider.kt
+ai/src/main/java/me/rerere/ai/provider/ProviderManager.kt
+ai/src/main/java/me/rerere/ai/provider/ProviderSetting.kt
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt
+ai/src/main/java/me/rerere/ai/provider/providers/OpenAIProvider.kt
+ai/src/main/java/me/rerere/ai/provider/providers/ProviderMessageUtils.kt
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt
+ai/src/main/java/me/rerere/ai/provider/providers/openai/OpenAIImpl.kt
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt
+ai/src/main/java/me/rerere/ai/provider/providers/vertex/ServiceAccountTokenProvider.kt
+ai/src/main/java/me/rerere/ai/registry/ModelDsl.kt
+ai/src/main/java/me/rerere/ai/registry/ModelRegistry.kt
+ai/src/main/java/me/rerere/ai/ui/Image.kt
+ai/src/main/java/me/rerere/ai/ui/Message.kt
+ai/src/main/java/me/rerere/ai/util/ErrorParser.kt
+ai/src/main/java/me/rerere/ai/util/FileEncoder.kt
+ai/src/main/java/me/rerere/ai/util/Json.kt
+ai/src/main/java/me/rerere/ai/util/KeyRoulette.kt
+ai/src/main/java/me/rerere/ai/util/Request.kt
+ai/src/main/java/me/rerere/ai/util/SSE.kt
+ai/src/main/java/me/rerere/ai/util/Serializer.kt
+ai/src/test/java/me/rerere/ai/ExampleUnitTest.kt
+ai/src/test/java/me/rerere/ai/ModelRegistryTest.kt
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderPromptCacheTest.kt
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ResponseAPIMessageTest.kt
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt
+ai/src/test/java/me/rerere/ai/ui/ToolApprovalStateTest.kt
+ai/src/test/java/me/rerere/ai/util/FileEncoderExifTransformTest.kt
+ai/src/test/java/me/rerere/ai/util/JsonTest.kt
+
+=== function_response/functionResponse/toolName/toolCallId matches ===
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-48-
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-49-    @Test
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-50-    fun `limitContext with executed tool at start should include corresponding tool call`() {
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-51-        val messages = listOf(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-52-            UIMessage(role = MessageRole.USER, parts = listOf(UIMessagePart.Text("User message"))),
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-53-            UIMessage(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-54-                role = MessageRole.ASSISTANT, parts = listOf(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-55-                    UIMessagePart.Tool(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt:56:                        toolCallId = "call1",
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt:57:                        toolName = "test_tool",
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-58-                        input = "{}",
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-59-                        output = emptyList() // Not executed
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-60-                    )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-61-                )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-62-            ),
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-63-            UIMessage(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-64-                role = MessageRole.ASSISTANT, parts = listOf(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-65-                    UIMessagePart.Tool(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt:66:                        toolCallId = "call1",
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt:67:                        toolName = "test_tool",
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-68-                        input = "{}",
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-69-                        output = listOf(UIMessagePart.Text("result")) // Executed
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-70-                    )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-71-                )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-72-            ),
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-73-            UIMessage(role = MessageRole.ASSISTANT, parts = listOf(UIMessagePart.Text("Final response")))
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-74-        )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-75-
+--
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-80-
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-81-    @Test
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-82-    fun `limitContext with tool call at start should include corresponding user message`() {
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-83-        val messages = listOf(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-84-            UIMessage(role = MessageRole.USER, parts = listOf(UIMessagePart.Text("User query"))),
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-85-            UIMessage(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-86-                role = MessageRole.ASSISTANT, parts = listOf(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-87-                    UIMessagePart.Tool(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt:88:                        toolCallId = "call1",
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt:89:                        toolName = "test_tool",
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-90-                        input = "{}",
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-91-                        output = emptyList()
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-92-                    )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-93-                )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-94-            ),
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-95-            UIMessage(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-96-                role = MessageRole.ASSISTANT, parts = listOf(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-97-                    UIMessagePart.Tool(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt:98:                        toolCallId = "call1",
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt:99:                        toolName = "test_tool",
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-100-                        input = "{}",
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-101-                        output = listOf(UIMessagePart.Text("result"))
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-102-                    )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-103-                )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-104-            ),
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-105-            UIMessage(role = MessageRole.ASSISTANT, parts = listOf(UIMessagePart.Text("Final response")))
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-106-        )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-107-
+--
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-166-    }
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-167-
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-168-    @Test
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-169-    fun `isValidToUpload should keep tool-only message valid`() {
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-170-        val message = UIMessage(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-171-            role = MessageRole.ASSISTANT,
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-172-            parts = listOf(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-173-                UIMessagePart.Tool(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt:174:                    toolCallId = "call-1",
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt:175:                    toolName = "search",
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-176-                    input = """{"q":"hello"}"""
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-177-                )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-178-            )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-179-        )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-180-
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-181-        assertTrue(message.isValidToUpload())
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-182-    }
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-183-
+--
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-186-    @Test
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-187-    @Suppress("DEPRECATION")
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-188-    fun `migrateToolMessages should convert ToolCall to Tool`() {
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-189-        val messages = listOf(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-190-            UIMessage(role = MessageRole.USER, parts = listOf(UIMessagePart.Text("Query"))),
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-191-            UIMessage(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-192-                role = MessageRole.ASSISTANT, parts = listOf(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-193-                    UIMessagePart.ToolCall(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt:194:                        toolCallId = "call1",
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt:195:                        toolName = "test_tool",
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-196-                        arguments = """{"arg": "value"}"""
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-197-                    )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-198-                )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-199-            )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-200-        )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-201-
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-202-        val result = messages.migrateToolMessages()
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-203-
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-204-        assertEquals(2, result.size)
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-205-        val assistantParts = result[1].parts
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-206-        assertEquals(1, assistantParts.size)
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-207-        assertTrue(assistantParts[0] is UIMessagePart.Tool)
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-208-
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-209-        val tool = assistantParts[0] as UIMessagePart.Tool
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt:210:        assertEquals("call1", tool.toolCallId)
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt:211:        assertEquals("test_tool", tool.toolName)
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-212-        assertEquals("""{"arg": "value"}""", tool.input)
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-213-        assertTrue(tool.output.isEmpty())
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-214-    }
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-215-
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-216-    @Test
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-217-    @Suppress("DEPRECATION")
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-218-    fun `migrateToolMessages should merge TOOL message into previous ASSISTANT`() {
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-219-        val messages = listOf(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-220-            UIMessage(role = MessageRole.USER, parts = listOf(UIMessagePart.Text("Query"))),
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-221-            UIMessage(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-222-                role = MessageRole.ASSISTANT, parts = listOf(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-223-                    UIMessagePart.ToolCall(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt:224:                        toolCallId = "call1",
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt:225:                        toolName = "test_tool",
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-226-                        arguments = "{}"
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-227-                    )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-228-                )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-229-            ),
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-230-            UIMessage(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-231-                role = MessageRole.TOOL, parts = listOf(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-232-                    UIMessagePart.ToolResult(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt:233:                        toolCallId = "call1",
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt:234:                        toolName = "test_tool",
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-235-                        content = JsonPrimitive("tool output"),
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-236-                        arguments = JsonPrimitive("{}")
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-237-                    )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-238-                )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-239-            )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-240-        )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-241-
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-242-        val result = messages.migrateToolMessages()
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-243-
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-244-        // TOOL message should be removed
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-245-        assertEquals(2, result.size)
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-246-        assertEquals(MessageRole.USER, result[0].role)
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-247-        assertEquals(MessageRole.ASSISTANT, result[1].role)
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-248-
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-249-        // Check the Tool part has output
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-250-        val tool = result[1].parts[0] as UIMessagePart.Tool
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt:251:        assertEquals("call1", tool.toolCallId)
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-252-        assertTrue(tool.isExecuted)
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-253-        assertEquals(1, tool.output.size)
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-254-    }
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-255-
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-256-    @Test
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-257-    @Suppress("DEPRECATION")
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-258-    fun `migrateToolMessages should handle multiple tool calls and results`() {
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-259-        val messages = listOf(
+--
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-282-
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-283-    @Test
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-284-    fun `migrateToolMessages should not affect new Tool format`() {
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-285-        val messages = listOf(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-286-            UIMessage(role = MessageRole.USER, parts = listOf(UIMessagePart.Text("Query"))),
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-287-            UIMessage(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-288-                role = MessageRole.ASSISTANT, parts = listOf(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-289-                    UIMessagePart.Tool(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt:290:                        toolCallId = "call1",
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt:291:                        toolName = "test_tool",
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-292-                        input = "{}",
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-293-                        output = listOf(UIMessagePart.Text("result"))
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-294-                    )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-295-                )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-296-            )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-297-        )
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-298-
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-299-        val result = messages.migrateToolMessages()
+--
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-361-        assertEquals(3, result.size)
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-362-        assertEquals("node1", result[0].id)
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-363-        assertEquals("node2", result[1].id)
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-364-        assertEquals("node4", result[2].id)
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-365-
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-366-        // Check ASSISTANT node has merged Tool with output
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-367-        val assistantMessage = result[1].messages[0]
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-368-        val tool = assistantMessage.parts[0] as UIMessagePart.Tool
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt:369:        assertEquals("call1", tool.toolCallId)
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-370-        assertTrue(tool.isExecuted)
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-371-    }
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-372-
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-373-    @Test
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-374-    @Suppress("DEPRECATION")
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-375-    fun `migrateToolNodes should handle multiple branches in ASSISTANT node`() {
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-376-        val nodes = listOf(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-377-            TestNode(
+--
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-418-        assertEquals(2, result.size)
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-419-
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-420-        // Both branches should be migrated
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-421-        val assistantNode = result[1]
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-422-        assertEquals(2, assistantNode.messages.size)
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-423-
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-424-        // Branch 1 should have call1 result
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-425-        val branch1Tool = assistantNode.messages[0].parts[0] as UIMessagePart.Tool
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt:426:        assertEquals("call1", branch1Tool.toolCallId)
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-427-        assertTrue(branch1Tool.isExecuted)
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-428-
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-429-        // Branch 2 should have call2 result
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-430-        val branch2Tool = assistantNode.messages[1].parts[0] as UIMessagePart.Tool
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt:431:        assertEquals("call2", branch2Tool.toolCallId)
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-432-        assertTrue(branch2Tool.isExecuted)
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-433-    }
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-434-
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-435-    @Test
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-436-    fun `migrateToolNodes should not affect nodes without TOOL role`() {
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-437-        val nodes = listOf(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-438-            TestNode(
+ai/src/test/java/me/rerere/ai/ui/MessageTest.kt-439-                id = "node1",
+--
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-21-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-22-/**
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-23- * Unit tests for GoogleProvider message building logic.
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-24- * Tests the conversion from UIMessage list to Google Gemini API format,
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-25- * specifically focusing on multi-round reasoning/tool scenarios.
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-26- *
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-27- * Google API format:
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-28- * - role: "user" or "model"
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:29: * - parts array containing text, functionCall, functionResponse
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-30- * - thought: true for reasoning parts
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-31- */
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-32-class GoogleProviderMessageTest {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-33-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-34-    private lateinit var provider: GoogleProvider
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-35-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-36-    @Before
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-37-    fun setUp() {
+--
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-44-            "buildContents",
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-45-            List::class.java
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-46-        )
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-47-        method.isAccessible = true
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-48-        return method.invoke(provider, messages) as JsonArray
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-49-    }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-50-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-51-    @Test
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:52:    fun `multi-round tool calls should produce functionCall followed by functionResponse`() {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-53-        // Scenario: Multiple rounds of tool calls
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-54-        val assistantMessage = UIMessage(
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-55-            role = MessageRole.ASSISTANT,
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-56-            parts = listOf(
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-57-                UIMessagePart.Text("Let me search"),
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-58-                createExecutedTool("call_1", "search", """{"query": "test"}""", "Search result"),
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-59-                UIMessagePart.Text("Now calculating"),
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-60-                createExecutedTool("call_2", "calculate", """{"expr": "2+2"}""", "4"),
+--
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-67-            assistantMessage
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-68-        )
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-69-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-70-        val result = invokeBuildContents(messages)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-71-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-72-        // Google format:
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-73-        // 1. user message
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-74-        // 2. model message with [text, functionCall(search)]
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:75:        // 3. user message with [functionResponse(search)]
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-76-        // 4. model message with [text, functionCall(calculate)]
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:77:        // 5. user message with [functionResponse(calculate)]
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-78-        // 6. model message with [text]
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-79-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:80:        // Collect all functionCall and functionResponse parts
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-81-        val functionCalls = mutableListOf<kotlinx.serialization.json.JsonObject>()
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:82:        val functionResponses = mutableListOf<kotlinx.serialization.json.JsonObject>()
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-83-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-84-        for (msg in result) {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-85-            val msgObj = msg.jsonObject
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-86-            val parts = msgObj["parts"]?.jsonArray ?: continue
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-87-            for (part in parts) {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-88-                val partObj = part.jsonObject
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-89-                if (partObj.containsKey("functionCall")) {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-90-                    functionCalls.add(partObj["functionCall"]!!.jsonObject)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-91-                }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:92:                if (partObj.containsKey("functionResponse")) {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:93:                    functionResponses.add(partObj["functionResponse"]!!.jsonObject)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-94-                }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-95-            }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-96-        }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-97-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-98-        assertEquals("Should have 2 functionCall parts", 2, functionCalls.size)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:99:        assertEquals("Should have 2 functionResponse parts", 2, functionResponses.size)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-100-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-101-        // Verify functionCall contents
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-102-        assertEquals("search", functionCalls[0]["name"]?.jsonPrimitive?.content)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-103-        assertEquals("calculate", functionCalls[1]["name"]?.jsonPrimitive?.content)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-104-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:105:        // Verify functionResponse contents
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:106:        assertEquals("search", functionResponses[0]["name"]?.jsonPrimitive?.content)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:107:        assertEquals("calculate", functionResponses[1]["name"]?.jsonPrimitive?.content)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-108-    }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-109-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-110-    @Test
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:111:    fun `functionCall in model should be followed by user message with functionResponse`() {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-112-        val assistantMessage = UIMessage(
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-113-            role = MessageRole.ASSISTANT,
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-114-            parts = listOf(
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-115-                UIMessagePart.Text("Using tool"),
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-116-                createExecutedTool("call_abc", "my_tool", "{}", "Tool output")
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-117-            )
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-118-        )
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-119-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-120-        val messages = listOf(
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-121-            UIMessage.user("Use a tool"),
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-122-            assistantMessage
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-123-        )
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-124-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-125-        val result = invokeBuildContents(messages)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-126-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-127-        // Find model message with functionCall
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:128:        var modelWithFunctionCallIndex = -1
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-129-        for (i in result.indices) {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-130-            val msg = result[i].jsonObject
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-131-            if (msg["role"]?.jsonPrimitive?.content == "model") {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-132-                val parts = msg["parts"]?.jsonArray ?: continue
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-133-                if (parts.any { it.jsonObject.containsKey("functionCall") }) {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:134:                    modelWithFunctionCallIndex = i
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-135-                    break
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-136-                }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-137-            }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-138-        }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-139-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:140:        assertTrue("Should find model with functionCall", modelWithFunctionCallIndex >= 0)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:141:        assertTrue("Should not be last message", modelWithFunctionCallIndex < result.size - 1)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-142-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:143:        // Next message should be user with functionResponse
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:144:        val nextMsg = result[modelWithFunctionCallIndex + 1].jsonObject
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-145-        assertEquals("user", nextMsg["role"]?.jsonPrimitive?.content)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-146-        val nextParts = nextMsg["parts"]?.jsonArray
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:147:        assertTrue("Next message should have functionResponse",
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:148:            nextParts?.any { it.jsonObject.containsKey("functionResponse") } == true)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-149-    }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-150-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-151-    @Test
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-152-    fun `reasoning parts should have thought flag set to true`() {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-153-        val assistantMessage = UIMessage(
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-154-            role = MessageRole.ASSISTANT,
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-155-            parts = listOf(
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-156-                UIMessagePart.Reasoning(reasoning = "Let me think about this..."),
+--
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-215-            if (msgObj["role"]?.jsonPrimitive?.content != "model") continue
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-216-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-217-            val parts = msgObj["parts"]?.jsonArray ?: continue
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-218-            val functionCallParts = parts.filter { it.jsonObject.containsKey("functionCall") }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-219-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-220-            if (functionCallParts.size == 3) {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-221-                foundModelWithMultipleCalls = true
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-222-                // Verify tool names
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:223:                val toolNames = functionCallParts.map {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-224-                    it.jsonObject["functionCall"]?.jsonObject?.get("name")?.jsonPrimitive?.content
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-225-                }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:226:                assertTrue(toolNames.contains("tool_a"))
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:227:                assertTrue(toolNames.contains("tool_b"))
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:228:                assertTrue(toolNames.contains("tool_c"))
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-229-                break
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-230-            }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-231-        }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-232-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-233-        assertTrue("Should have model with 3 parallel functionCall parts",
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-234-            foundModelWithMultipleCalls)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-235-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:236:        // Verify corresponding functionResponse parts in user message
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-237-        var foundUserWithMultipleResponses = false
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-238-        for (msg in result) {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-239-            val msgObj = msg.jsonObject
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-240-            if (msgObj["role"]?.jsonPrimitive?.content != "user") continue
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-241-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-242-            val parts = msgObj["parts"]?.jsonArray ?: continue
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:243:            val responseParts = parts.filter { it.jsonObject.containsKey("functionResponse") }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-244-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-245-            if (responseParts.size == 3) {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-246-                foundUserWithMultipleResponses = true
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-247-                break
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-248-            }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-249-        }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-250-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:251:        assertTrue("Should have user with 3 functionResponse parts",
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-252-            foundUserWithMultipleResponses)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-253-    }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-254-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-255-    @Test
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-256-    fun `multi-round reasoning and tools should maintain correct order`() {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-257-        val assistantMessage = UIMessage(
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-258-            role = MessageRole.ASSISTANT,
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-259-            parts = listOf(
+--
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-271-        val messages = listOf(
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-272-            UIMessage.user("Analyze"),
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-273-            assistantMessage
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-274-        )
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-275-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-276-        val result = invokeBuildContents(messages)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-277-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-278-        // Verify structure:
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:279:        // model -> user (functionResponse) -> model -> user (functionResponse) -> model
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-280-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-281-        var functionCallCount = 0
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:282:        var functionResponseCount = 0
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-283-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-284-        for (msg in result) {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-285-            val msgObj = msg.jsonObject
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-286-            val parts = msgObj["parts"]?.jsonArray ?: continue
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-287-            for (part in parts) {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-288-                val partObj = part.jsonObject
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-289-                if (partObj.containsKey("functionCall")) functionCallCount++
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:290:                if (partObj.containsKey("functionResponse")) functionResponseCount++
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-291-            }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-292-        }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-293-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-294-        assertEquals("Should have 2 functionCall parts", 2, functionCallCount)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:295:        assertEquals("Should have 2 functionResponse parts", 2, functionResponseCount)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-296-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:297:        // Verify functionCall -> functionResponse order
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-298-        for (i in 0 until result.size - 1) {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-299-            val msg = result[i].jsonObject
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-300-            val parts = msg["parts"]?.jsonArray ?: continue
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:301:            val hasFunctionCall = parts.any { it.jsonObject.containsKey("functionCall") }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-302-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:303:            if (hasFunctionCall && msg["role"]?.jsonPrimitive?.content == "model") {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:304:                // Next should be user with functionResponse
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-305-                val nextMsg = result[i + 1].jsonObject
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-306-                assertEquals("user", nextMsg["role"]?.jsonPrimitive?.content)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-307-                val nextParts = nextMsg["parts"]?.jsonArray
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:308:                assertTrue("Should have functionResponse in next message",
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:309:                    nextParts?.any { it.jsonObject.containsKey("functionResponse") } == true)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-310-            }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-311-        }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-312-    }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-313-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-314-    @Test
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-315-    fun `user message parts should be correctly formatted`() {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-316-        val messages = listOf(
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-317-            UIMessage(
+--
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-355-        )
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-356-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-357-        val result = invokeBuildContents(messages)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-358-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-359-        // Count roles
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-360-        val userCount = result.count { it.jsonObject["role"]?.jsonPrimitive?.content == "user" }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-361-        val modelCount = result.count { it.jsonObject["role"]?.jsonPrimitive?.content == "model" }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-362-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:363:        // Should have: 1 initial user + 3 functionResponse users = 4 user messages
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-364-        // And: multiple model messages
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-365-        assertEquals("Should have 4 user messages (1 initial + 3 responses)", 4, userCount)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-366-        assertTrue("Should have multiple model messages", modelCount >= 3)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-367-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:368:        // Verify order: each functionCall should be followed by functionResponse
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:369:        var lastFunctionCallIndex = -1
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-370-        for (i in result.indices) {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-371-            val msg = result[i].jsonObject
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-372-            val parts = msg["parts"]?.jsonArray ?: continue
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-373-            if (parts.any { it.jsonObject.containsKey("functionCall") }) {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-374-                assertTrue("functionCall should not be last", i < result.size - 1)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-375-                val next = result[i + 1].jsonObject
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-376-                assertEquals("user", next["role"]?.jsonPrimitive?.content)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:377:                assertTrue("Index should increase", i > lastFunctionCallIndex)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:378:                lastFunctionCallIndex = i
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-379-            }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-380-        }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-381-    }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-382-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-383-    @Test
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:384:    fun `functionResponse should contain correct result structure`() {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-385-        val assistantMessage = UIMessage(
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-386-            role = MessageRole.ASSISTANT,
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-387-            parts = listOf(
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-388-                createExecutedTool("call_1", "my_tool", """{"input": "test"}""", "Expected output value")
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-389-            )
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-390-        )
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-391-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-392-        val messages = listOf(
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-393-            UIMessage.user("Use tool"),
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-394-            assistantMessage
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-395-        )
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-396-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-397-        val result = invokeBuildContents(messages)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-398-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:399:        // Find functionResponse
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:400:        var functionResponse: kotlinx.serialization.json.JsonObject? = null
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-401-        for (msg in result) {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-402-            val msgObj = msg.jsonObject
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-403-            val parts = msgObj["parts"]?.jsonArray ?: continue
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-404-            for (part in parts) {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:405:                if (part.jsonObject.containsKey("functionResponse")) {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:406:                    functionResponse = part.jsonObject["functionResponse"]?.jsonObject
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-407-                    break
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-408-                }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-409-            }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:410:            if (functionResponse != null) break
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-411-        }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-412-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:413:        assertTrue("Should find functionResponse", functionResponse != null)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:414:        assertEquals("my_tool", functionResponse!!["name"]?.jsonPrimitive?.content)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-415-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-416-        // Verify response structure
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:417:        val response = functionResponse["response"]?.jsonObject
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-418-        assertTrue("Response should contain result",
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-419-            response?.containsKey("result") == true)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-420-        assertTrue("Result should contain expected output",
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-421-            response?.get("result")?.jsonPrimitive?.content?.contains("Expected output value") == true)
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-422-    }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-423-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-424-    // ==================== Helper Functions ====================
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-425-
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-426-    private fun createExecutedTool(
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-427-        callId: String,
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-428-        name: String,
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-429-        input: String,
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-430-        output: String
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-431-    ): UIMessagePart.Tool {
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-432-        return UIMessagePart.Tool(
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:433:            toolCallId = callId,
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt:434:            toolName = name,
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-435-            input = input,
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-436-            output = listOf(UIMessagePart.Text(output))
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-437-        )
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-438-    }
+ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt-439-}
+--
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-144-        var foundAssistantWithMultipleTools = false
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-145-        for (element in result) {
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-146-            val msg = element.jsonObject
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-147-            if (msg["role"]?.jsonPrimitive?.content == "assistant") {
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-148-                val toolCalls = msg["tool_calls"]?.jsonArray
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-149-                if (toolCalls != null && toolCalls.size == 3) {
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-150-                    foundAssistantWithMultipleTools = true
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-151-                    // Verify all three tool calls are present
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt:152:                    val toolNames = toolCalls.map {
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-153-                        it.jsonObject["function"]?.jsonObject?.get("name")?.jsonPrimitive?.content
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-154-                    }
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt:155:                    assertTrue(toolNames.contains("search_web"))
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt:156:                    assertTrue(toolNames.contains("search_docs"))
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt:157:                    assertTrue(toolNames.contains("search_wiki"))
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-158-                    break
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-159-                }
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-160-            }
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-161-        }
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-162-        assertTrue("Should have assistant message with 3 parallel tool calls", foundAssistantWithMultipleTools)
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-163-
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-164-        // Verify 3 separate tool result messages
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-165-        val toolResults = result.filter {
+--
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-356-
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-357-    private fun createExecutedTool(
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-358-        callId: String,
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-359-        name: String,
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-360-        input: String,
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-361-        output: String
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-362-    ): UIMessagePart.Tool {
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-363-        return UIMessagePart.Tool(
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt:364:            toolCallId = callId,
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt:365:            toolName = name,
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-366-            input = input,
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-367-            output = listOf(UIMessagePart.Text(output))
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-368-        )
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-369-    }
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPIMessageTest.kt-370-}
+--
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ResponseAPIMessageTest.kt-364-
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ResponseAPIMessageTest.kt-365-    private fun createExecutedTool(
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ResponseAPIMessageTest.kt-366-        callId: String,
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ResponseAPIMessageTest.kt-367-        name: String,
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ResponseAPIMessageTest.kt-368-        input: String,
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ResponseAPIMessageTest.kt-369-        output: String
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ResponseAPIMessageTest.kt-370-    ): UIMessagePart.Tool {
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ResponseAPIMessageTest.kt-371-        return UIMessagePart.Tool(
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ResponseAPIMessageTest.kt:372:            toolCallId = callId,
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ResponseAPIMessageTest.kt:373:            toolName = name,
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ResponseAPIMessageTest.kt-374-            input = input,
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ResponseAPIMessageTest.kt-375-            output = listOf(UIMessagePart.Text(output))
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ResponseAPIMessageTest.kt-376-        )
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ResponseAPIMessageTest.kt-377-    }
+ai/src/test/java/me/rerere/ai/provider/providers/openai/ResponseAPIMessageTest.kt-378-}
+--
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-288-            val content = msgObj["content"]?.jsonArray ?: continue
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-289-            val toolUseBlocks = content.filter {
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-290-                it.jsonObject["type"]?.jsonPrimitive?.content == "tool_use"
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-291-            }
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-292-
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-293-            if (toolUseBlocks.size == 3) {
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-294-                foundAssistantWithMultipleTools = true
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-295-                // Verify tool names
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt:296:                val toolNames = toolUseBlocks.map {
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-297-                    it.jsonObject["name"]?.jsonPrimitive?.content
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-298-                }
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt:299:                assertTrue(toolNames.contains("tool_a"))
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt:300:                assertTrue(toolNames.contains("tool_b"))
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt:301:                assertTrue(toolNames.contains("tool_c"))
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-302-                break
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-303-            }
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-304-        }
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-305-
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-306-        assertTrue("Should have assistant with 3 parallel tool_use blocks",
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-307-            foundAssistantWithMultipleTools)
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-308-
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-309-        // Verify corresponding tool_result blocks in user message
+--
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-358-
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-359-    private fun createExecutedTool(
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-360-        callId: String,
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-361-        name: String,
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-362-        input: String,
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-363-        output: String
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-364-    ): UIMessagePart.Tool {
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-365-        return UIMessagePart.Tool(
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt:366:            toolCallId = callId,
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt:367:            toolName = name,
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-368-            input = input,
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-369-            output = listOf(UIMessagePart.Text(output))
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-370-        )
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-371-    }
+ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt-372-}
+--
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-185-        assertEquals(5, result.size)
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-186-
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-187-        // Group 0: Content([Reasoning, Text])
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-188-        assertTrue(result[0] is PartGroup.Content)
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-189-        assertEquals(2, (result[0] as PartGroup.Content).parts.size)
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-190-
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-191-        // Group 1: Tools([search])
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-192-        assertTrue(result[1] is PartGroup.Tools)
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt:193:        assertEquals("search", (result[1] as PartGroup.Tools).tools[0].toolName)
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-194-
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-195-        // Group 2: Content([Reasoning, Text])
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-196-        assertTrue(result[2] is PartGroup.Content)
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-197-        assertEquals(2, (result[2] as PartGroup.Content).parts.size)
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-198-
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-199-        // Group 3: Tools([calculate])
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-200-        assertTrue(result[3] is PartGroup.Tools)
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt:201:        assertEquals("calculate", (result[3] as PartGroup.Tools).tools[0].toolName)
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-202-
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-203-        // Group 4: Content([Text])
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-204-        assertTrue(result[4] is PartGroup.Content)
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-205-        assertEquals(1, (result[4] as PartGroup.Content).parts.size)
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-206-    }
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-207-
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-208-    @Test
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-209-    fun `parallel tool calls should stay in same Tools group`() {
+--
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-343-        assertEquals("Final thought", (content[0] as UIMessagePart.Reasoning).reasoning)
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-344-        assertEquals("Final answer", (content[1] as UIMessagePart.Text).text)
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-345-    }
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-346-
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-347-    // ==================== Helper Functions ====================
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-348-
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-349-    private fun createExecutedTool(callId: String, name: String): UIMessagePart.Tool {
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-350-        return UIMessagePart.Tool(
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt:351:            toolCallId = callId,
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt:352:            toolName = name,
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-353-            input = "{}",
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-354-            output = listOf(UIMessagePart.Text("Result from $name"))
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-355-        )
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-356-    }
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-357-
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-358-    private fun createUnexecutedTool(callId: String, name: String): UIMessagePart.Tool {
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-359-        return UIMessagePart.Tool(
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt:360:            toolCallId = callId,
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt:361:            toolName = name,
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-362-            input = "{}",
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-363-            output = emptyList()
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-364-        )
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-365-    }
+ai/src/test/java/me/rerere/ai/provider/providers/ProviderMessageUtilsTest.kt-366-}
+--
+ai/src/main/java/me/rerere/ai/ui/Message.kt-93-                            } else {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-94-                                // Create new Reasoning part
+ai/src/main/java/me/rerere/ai/ui/Message.kt-95-                                acc + deltaPart
+ai/src/main/java/me/rerere/ai/ui/Message.kt-96-                            }
+ai/src/main/java/me/rerere/ai/ui/Message.kt-97-                        }
+ai/src/main/java/me/rerere/ai/ui/Message.kt-98-                    }
+ai/src/main/java/me/rerere/ai/ui/Message.kt-99-
+ai/src/main/java/me/rerere/ai/ui/Message.kt-100-                    is UIMessagePart.Tool -> {
+ai/src/main/java/me/rerere/ai/ui/Message.kt:101:                        if (deltaPart.toolCallId.isBlank()) {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-102-                            // No ID yet - append to the last Tool if it also has no ID
+ai/src/main/java/me/rerere/ai/ui/Message.kt-103-                            val lastTool = acc.lastOrNull { it is UIMessagePart.Tool } as? UIMessagePart.Tool
+ai/src/main/java/me/rerere/ai/ui/Message.kt-104-                            if (lastTool != null) {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-105-                                acc.map { part ->
+ai/src/main/java/me/rerere/ai/ui/Message.kt-106-                                    if (part === lastTool) part.merge(deltaPart) else part
+ai/src/main/java/me/rerere/ai/ui/Message.kt-107-                                }
+ai/src/main/java/me/rerere/ai/ui/Message.kt-108-                            } else {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-109-                                acc + deltaPart.copy()
+ai/src/main/java/me/rerere/ai/ui/Message.kt-110-                            }
+ai/src/main/java/me/rerere/ai/ui/Message.kt-111-                        } else {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-112-                            // Has ID - find and update by ID, or insert new
+ai/src/main/java/me/rerere/ai/ui/Message.kt-113-                            val existsPart = acc.find {
+ai/src/main/java/me/rerere/ai/ui/Message.kt:114:                                it is UIMessagePart.Tool && it.toolCallId == deltaPart.toolCallId
+ai/src/main/java/me/rerere/ai/ui/Message.kt-115-                            } as? UIMessagePart.Tool
+ai/src/main/java/me/rerere/ai/ui/Message.kt-116-                            if (existsPart == null) {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-117-                                acc + deltaPart.copy()
+ai/src/main/java/me/rerere/ai/ui/Message.kt-118-                            } else {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-119-                                acc.map { part ->
+ai/src/main/java/me/rerere/ai/ui/Message.kt:120:                                    if (part is UIMessagePart.Tool && part.toolCallId == deltaPart.toolCallId) {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-121-                                        part.merge(deltaPart)
+ai/src/main/java/me/rerere/ai/ui/Message.kt-122-                                    } else part
+ai/src/main/java/me/rerere/ai/ui/Message.kt-123-                                }
+ai/src/main/java/me/rerere/ai/ui/Message.kt-124-                            }
+ai/src/main/java/me/rerere/ai/ui/Message.kt-125-                        }
+ai/src/main/java/me/rerere/ai/ui/Message.kt-126-                    }
+ai/src/main/java/me/rerere/ai/ui/Message.kt-127-
+ai/src/main/java/me/rerere/ai/ui/Message.kt-128-                    else -> {
+--
+ai/src/main/java/me/rerere/ai/ui/Message.kt-420-    data object Search : UIMessagePart() {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-421-        override var metadata: JsonObject? = null
+ai/src/main/java/me/rerere/ai/ui/Message.kt-422-    }
+ai/src/main/java/me/rerere/ai/ui/Message.kt-423-
+ai/src/main/java/me/rerere/ai/ui/Message.kt-424-    @Deprecated("Use UIMessagePart.Tool instead")
+ai/src/main/java/me/rerere/ai/ui/Message.kt-425-    @Serializable
+ai/src/main/java/me/rerere/ai/ui/Message.kt-426-    @SerialName("tool_call")
+ai/src/main/java/me/rerere/ai/ui/Message.kt-427-    data class ToolCall(
+ai/src/main/java/me/rerere/ai/ui/Message.kt:428:        val toolCallId: String,
+ai/src/main/java/me/rerere/ai/ui/Message.kt:429:        val toolName: String,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-430-        val arguments: String,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-431-        val approvalState: ToolApprovalState = ToolApprovalState.Auto,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-432-        override var metadata: JsonObject? = null
+ai/src/main/java/me/rerere/ai/ui/Message.kt-433-    ) : UIMessagePart() {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-434-        fun merge(other: ToolCall): ToolCall {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-435-            return ToolCall(
+ai/src/main/java/me/rerere/ai/ui/Message.kt:436:                toolCallId = toolCallId,
+ai/src/main/java/me/rerere/ai/ui/Message.kt:437:                toolName = toolName + other.toolName,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-438-                arguments = arguments + other.arguments,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-439-                approvalState = approvalState,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-440-                metadata = if (other.metadata != null) other.metadata else metadata,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-441-            )
+ai/src/main/java/me/rerere/ai/ui/Message.kt-442-        }
+ai/src/main/java/me/rerere/ai/ui/Message.kt-443-    }
+ai/src/main/java/me/rerere/ai/ui/Message.kt-444-
+ai/src/main/java/me/rerere/ai/ui/Message.kt-445-    @Deprecated("Use UIMessagePart.Tool instead")
+ai/src/main/java/me/rerere/ai/ui/Message.kt-446-    @Serializable
+ai/src/main/java/me/rerere/ai/ui/Message.kt-447-    @SerialName("tool_result")
+ai/src/main/java/me/rerere/ai/ui/Message.kt-448-    data class ToolResult(
+ai/src/main/java/me/rerere/ai/ui/Message.kt:449:        val toolCallId: String,
+ai/src/main/java/me/rerere/ai/ui/Message.kt:450:        val toolName: String,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-451-        val content: JsonElement,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-452-        val arguments: JsonElement,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-453-        override var metadata: JsonObject? = null
+ai/src/main/java/me/rerere/ai/ui/Message.kt-454-    ) : UIMessagePart()
+ai/src/main/java/me/rerere/ai/ui/Message.kt-455-
+ai/src/main/java/me/rerere/ai/ui/Message.kt-456-    @Serializable
+ai/src/main/java/me/rerere/ai/ui/Message.kt-457-    @SerialName("tool")
+ai/src/main/java/me/rerere/ai/ui/Message.kt-458-    data class Tool(
+ai/src/main/java/me/rerere/ai/ui/Message.kt:459:        val toolCallId: String,
+ai/src/main/java/me/rerere/ai/ui/Message.kt:460:        val toolName: String,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-461-        val input: String,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-462-        val output: List<UIMessagePart> = emptyList(),
+ai/src/main/java/me/rerere/ai/ui/Message.kt-463-        val approvalState: ToolApprovalState = ToolApprovalState.Auto,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-464-        override var metadata: JsonObject? = null
+ai/src/main/java/me/rerere/ai/ui/Message.kt-465-    ) : UIMessagePart() {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-466-        /** Whether the tool has been executed (has output) */
+ai/src/main/java/me/rerere/ai/ui/Message.kt-467-        val isExecuted: Boolean get() = output.isNotEmpty()
+ai/src/main/java/me/rerere/ai/ui/Message.kt-468-
+--
+ai/src/main/java/me/rerere/ai/ui/Message.kt-474-
+ai/src/main/java/me/rerere/ai/ui/Message.kt-475-        /** Parse input string as JsonElement */
+ai/src/main/java/me/rerere/ai/ui/Message.kt-476-        fun inputAsJson(): JsonElement = runCatching {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-477-            json.parseToJsonElement(input.ifBlank { "{}" })
+ai/src/main/java/me/rerere/ai/ui/Message.kt-478-        }.getOrElse { JsonObject(emptyMap()) }
+ai/src/main/java/me/rerere/ai/ui/Message.kt-479-
+ai/src/main/java/me/rerere/ai/ui/Message.kt-480-        fun merge(other: Tool): Tool {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-481-            return Tool(
+ai/src/main/java/me/rerere/ai/ui/Message.kt:482:                toolCallId = if (toolCallId.isBlank()) other.toolCallId else toolCallId,
+ai/src/main/java/me/rerere/ai/ui/Message.kt:483:                toolName = if (toolName.isBlank()) other.toolName else toolName,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-484-                input = input + other.input,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-485-                output = output + other.output,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-486-                approvalState = approvalState,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-487-                metadata = if (other.metadata != null) other.metadata else metadata,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-488-            )
+ai/src/main/java/me/rerere/ai/ui/Message.kt-489-        }
+ai/src/main/java/me/rerere/ai/ui/Message.kt-490-    }
+ai/src/main/java/me/rerere/ai/ui/Message.kt-491-}
+--
+ai/src/main/java/me/rerere/ai/ui/Message.kt-580-        // Even if no ToolCall migration needed, ensure parts are sorted
+ai/src/main/java/me/rerere/ai/ui/Message.kt-581-        val sortedParts = parts.toSortedMessageParts()
+ai/src/main/java/me/rerere/ai/ui/Message.kt-582-        return if (sortedParts != parts) copy(parts = sortedParts) else this
+ai/src/main/java/me/rerere/ai/ui/Message.kt-583-    }
+ai/src/main/java/me/rerere/ai/ui/Message.kt-584-
+ai/src/main/java/me/rerere/ai/ui/Message.kt-585-    val migratedParts = parts.map { part ->
+ai/src/main/java/me/rerere/ai/ui/Message.kt-586-        if (part is UIMessagePart.ToolCall) {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-587-            UIMessagePart.Tool(
+ai/src/main/java/me/rerere/ai/ui/Message.kt:588:                toolCallId = part.toolCallId,
+ai/src/main/java/me/rerere/ai/ui/Message.kt:589:                toolName = part.toolName,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-590-                input = part.arguments,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-591-                output = emptyList(),
+ai/src/main/java/me/rerere/ai/ui/Message.kt-592-                approvalState = part.approvalState,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-593-                metadata = part.metadata
+ai/src/main/java/me/rerere/ai/ui/Message.kt-594-            )
+ai/src/main/java/me/rerere/ai/ui/Message.kt-595-        } else {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-596-            part
+ai/src/main/java/me/rerere/ai/ui/Message.kt-597-        }
+--
+ai/src/main/java/me/rerere/ai/ui/Message.kt-615-        // If this is a TOOL role message, merge its results into previous ASSISTANT message
+ai/src/main/java/me/rerere/ai/ui/Message.kt-616-        if (message.role == MessageRole.TOOL) {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-617-            val toolResults = message.parts.filterIsInstance<UIMessagePart.ToolResult>()
+ai/src/main/java/me/rerere/ai/ui/Message.kt-618-            if (result.isNotEmpty() && result.last().role == MessageRole.ASSISTANT) {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-619-                // Find the last ASSISTANT message and update its Tool parts with results
+ai/src/main/java/me/rerere/ai/ui/Message.kt-620-                val lastAssistant = result.removeAt(result.lastIndex)
+ai/src/main/java/me/rerere/ai/ui/Message.kt-621-                val updatedParts = lastAssistant.parts.map { part ->
+ai/src/main/java/me/rerere/ai/ui/Message.kt-622-                    if (part is UIMessagePart.Tool && !part.isExecuted) {
+ai/src/main/java/me/rerere/ai/ui/Message.kt:623:                        val matchingResult = toolResults.find { result -> result.toolCallId == part.toolCallId }
+ai/src/main/java/me/rerere/ai/ui/Message.kt-624-                        if (matchingResult != null) {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-625-                            part.copy(
+ai/src/main/java/me/rerere/ai/ui/Message.kt-626-                                output = listOf(
+ai/src/main/java/me/rerere/ai/ui/Message.kt-627-                                    UIMessagePart.Text(
+ai/src/main/java/me/rerere/ai/ui/Message.kt-628-                                        json.encodeToString(matchingResult.content)
+ai/src/main/java/me/rerere/ai/ui/Message.kt-629-                                    )
+ai/src/main/java/me/rerere/ai/ui/Message.kt-630-                                )
+ai/src/main/java/me/rerere/ai/ui/Message.kt-631-                            )
+ai/src/main/java/me/rerere/ai/ui/Message.kt-632-                        } else {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-633-                            part
+ai/src/main/java/me/rerere/ai/ui/Message.kt-634-                        }
+ai/src/main/java/me/rerere/ai/ui/Message.kt-635-                    } else if (part is UIMessagePart.ToolCall) {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-636-                        // Also handle legacy ToolCall parts
+ai/src/main/java/me/rerere/ai/ui/Message.kt:637:                        val matchingResult = toolResults.find { result -> result.toolCallId == part.toolCallId }
+ai/src/main/java/me/rerere/ai/ui/Message.kt-638-                        if (matchingResult != null) {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-639-                            UIMessagePart.Tool(
+ai/src/main/java/me/rerere/ai/ui/Message.kt:640:                                toolCallId = part.toolCallId,
+ai/src/main/java/me/rerere/ai/ui/Message.kt:641:                                toolName = part.toolName,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-642-                                input = part.arguments,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-643-                                output = listOf(
+ai/src/main/java/me/rerere/ai/ui/Message.kt-644-                                    UIMessagePart.Text(
+ai/src/main/java/me/rerere/ai/ui/Message.kt-645-                                        json.encodeToString(matchingResult.content)
+ai/src/main/java/me/rerere/ai/ui/Message.kt-646-                                    )
+ai/src/main/java/me/rerere/ai/ui/Message.kt-647-                                ),
+ai/src/main/java/me/rerere/ai/ui/Message.kt-648-                                approvalState = part.approvalState,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-649-                                metadata = part.metadata
+ai/src/main/java/me/rerere/ai/ui/Message.kt-650-                            )
+ai/src/main/java/me/rerere/ai/ui/Message.kt-651-                        } else {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-652-                            UIMessagePart.Tool(
+ai/src/main/java/me/rerere/ai/ui/Message.kt:653:                                toolCallId = part.toolCallId,
+ai/src/main/java/me/rerere/ai/ui/Message.kt:654:                                toolName = part.toolName,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-655-                                input = part.arguments,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-656-                                output = emptyList(),
+ai/src/main/java/me/rerere/ai/ui/Message.kt-657-                                approvalState = part.approvalState,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-658-                                metadata = part.metadata
+ai/src/main/java/me/rerere/ai/ui/Message.kt-659-                            )
+ai/src/main/java/me/rerere/ai/ui/Message.kt-660-                        }
+ai/src/main/java/me/rerere/ai/ui/Message.kt-661-                    } else {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-662-                        part
+--
+ai/src/main/java/me/rerere/ai/ui/Message.kt-716-                // Update the ASSISTANT node's messages by merging ToolResults
+ai/src/main/java/me/rerere/ai/ui/Message.kt-717-                val updatedMessages = lastMessages.map { assistantMsg ->
+ai/src/main/java/me/rerere/ai/ui/Message.kt-718-                    if (assistantMsg.role != MessageRole.ASSISTANT) return@map assistantMsg
+ai/src/main/java/me/rerere/ai/ui/Message.kt-719-
+ai/src/main/java/me/rerere/ai/ui/Message.kt-720-                    val updatedParts = assistantMsg.parts.map { part ->
+ai/src/main/java/me/rerere/ai/ui/Message.kt-721-                        when (part) {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-722-                            is UIMessagePart.Tool -> {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-723-                                if (!part.isExecuted) {
+ai/src/main/java/me/rerere/ai/ui/Message.kt:724:                                    val matchingResult = toolResults.find { it.toolCallId == part.toolCallId }
+ai/src/main/java/me/rerere/ai/ui/Message.kt-725-                                    if (matchingResult != null) {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-726-                                        part.copy(
+ai/src/main/java/me/rerere/ai/ui/Message.kt-727-                                            output = listOf(
+ai/src/main/java/me/rerere/ai/ui/Message.kt-728-                                                UIMessagePart.Text(
+ai/src/main/java/me/rerere/ai/ui/Message.kt-729-                                                    json.encodeToString(matchingResult.content)
+ai/src/main/java/me/rerere/ai/ui/Message.kt-730-                                                )
+ai/src/main/java/me/rerere/ai/ui/Message.kt-731-                                            )
+ai/src/main/java/me/rerere/ai/ui/Message.kt-732-                                        )
+ai/src/main/java/me/rerere/ai/ui/Message.kt-733-                                    } else part
+ai/src/main/java/me/rerere/ai/ui/Message.kt-734-                                } else part
+ai/src/main/java/me/rerere/ai/ui/Message.kt-735-                            }
+ai/src/main/java/me/rerere/ai/ui/Message.kt-736-
+ai/src/main/java/me/rerere/ai/ui/Message.kt-737-                            is UIMessagePart.ToolCall -> {
+ai/src/main/java/me/rerere/ai/ui/Message.kt:738:                                val matchingResult = toolResults.find { it.toolCallId == part.toolCallId }
+ai/src/main/java/me/rerere/ai/ui/Message.kt-739-                                if (matchingResult != null) {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-740-                                    UIMessagePart.Tool(
+ai/src/main/java/me/rerere/ai/ui/Message.kt:741:                                        toolCallId = part.toolCallId,
+ai/src/main/java/me/rerere/ai/ui/Message.kt:742:                                        toolName = part.toolName,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-743-                                        input = part.arguments,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-744-                                        output = listOf(
+ai/src/main/java/me/rerere/ai/ui/Message.kt-745-                                            UIMessagePart.Text(
+ai/src/main/java/me/rerere/ai/ui/Message.kt-746-                                                json.encodeToString(matchingResult.content)
+ai/src/main/java/me/rerere/ai/ui/Message.kt-747-                                            )
+ai/src/main/java/me/rerere/ai/ui/Message.kt-748-                                        ),
+ai/src/main/java/me/rerere/ai/ui/Message.kt-749-                                        approvalState = part.approvalState,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-750-                                        metadata = part.metadata
+ai/src/main/java/me/rerere/ai/ui/Message.kt-751-                                    )
+ai/src/main/java/me/rerere/ai/ui/Message.kt-752-                                } else {
+ai/src/main/java/me/rerere/ai/ui/Message.kt-753-                                    UIMessagePart.Tool(
+ai/src/main/java/me/rerere/ai/ui/Message.kt:754:                                        toolCallId = part.toolCallId,
+ai/src/main/java/me/rerere/ai/ui/Message.kt:755:                                        toolName = part.toolName,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-756-                                        input = part.arguments,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-757-                                        output = emptyList(),
+ai/src/main/java/me/rerere/ai/ui/Message.kt-758-                                        approvalState = part.approvalState,
+ai/src/main/java/me/rerere/ai/ui/Message.kt-759-                                        metadata = part.metadata
+ai/src/main/java/me/rerere/ai/ui/Message.kt-760-                                    )
+ai/src/main/java/me/rerere/ai/ui/Message.kt-761-                                }
+ai/src/main/java/me/rerere/ai/ui/Message.kt-762-                            }
+ai/src/main/java/me/rerere/ai/ui/Message.kt-763-
+--
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-637-
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-638-                    // 紧跟 tool 结果消息
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-639-                    group.tools.forEach { tool ->
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-640-                        val textOutput = tool.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-641-                        val imageOutput = if (supportsImage) tool.output.filterIsInstance<UIMessagePart.Image>() else emptyList()
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-642-
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-643-                        add(buildJsonObject {
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-644-                            put("role", "tool")
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt:645:                            put("name", tool.toolName)
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt:646:                            put("tool_call_id", tool.toolCallId)
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-647-                            put("content", textOutput)
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-648-                        })
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-649-
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-650-                        // If tool output contains images, inject a user message with the images
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-651-                        // so the AI model can "see" them (tool result content only supports text)
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-652-                        if (imageOutput.isNotEmpty()) {
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-653-                            add(buildJsonObject {
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-654-                                put("role", "user")
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-655-                                putJsonArray("content") {
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-656-                                    add(buildJsonObject {
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-657-                                        put("type", "text")
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt:658:                                        put("text", "[Tool ${tool.toolName} returned an image]")
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-659-                                    })
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-660-                                    imageOutput.forEach { imagePart ->
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-661-                                        add(buildJsonObject {
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-662-                                            imagePart.encodeBase64().onSuccess { encodedImage ->
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-663-                                                put("type", "image_url")
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-664-                                                put("image_url", buildJsonObject {
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-665-                                                    put("url", encodedImage.base64)
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-666-                                                })
+--
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-757-                }
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-758-            }
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-759-
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-760-            // tool_calls
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-761-            if (tools.isNotEmpty()) {
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-762-                put("tool_calls", buildJsonArray {
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-763-                    tools.forEach { tool ->
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-764-                        add(buildJsonObject {
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt:765:                            put("id", tool.toolCallId)
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-766-                            put("type", "function")
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-767-                            put("function", buildJsonObject {
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt:768:                                put("name", tool.toolName)
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-769-                                put("arguments", tool.input)
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-770-                            })
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-771-                        })
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-772-                    }
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-773-                })
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-774-            }
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-775-        }
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-776-    }
+--
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-846-                            createdAt = Clock.System.now(),
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-847-                            finishedAt = null
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-848-                        )
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-849-                    )
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-850-                }
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-851-                toolCalls.forEach { toolCalls ->
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-852-                    val type = toolCalls.jsonObject["type"]?.jsonPrimitive?.contentOrNull
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-853-                    if (!type.isNullOrEmpty() && type != "function") error("tool call type not supported: $type")
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt:854:                    val toolCallId = toolCalls.jsonObject["id"]?.jsonPrimitive?.contentOrNull
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt:855:                    val toolName =
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-856-                        toolCalls.jsonObject["function"]?.jsonObject?.get("name")?.jsonPrimitive?.contentOrNull
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-857-                    val arguments =
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-858-                        toolCalls.jsonObject["function"]?.jsonObject?.get("arguments")?.jsonPrimitive?.contentOrNull
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-859-                    add(
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-860-                        UIMessagePart.Tool(
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt:861:                            toolCallId = toolCallId ?: "",
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt:862:                            toolName = toolName ?: "",
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-863-                            input = arguments ?: "",
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-864-                            output = emptyList()
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-865-                        )
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-866-                    )
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-867-                }
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-868-                if (content.isNotEmpty()) add(UIMessagePart.Text(content))
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-869-                images.forEach { image ->
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt-870-                    val imageObject = image.jsonObjectOrNull ?: return@forEach
+--
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-384-                        addContentItem(MessageRole.ASSISTANT, contentBuffer)
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-385-                        contentBuffer.clear()
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-386-                    }
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-387-
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-388-                    // 输出 function_call + function_call_output
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-389-                    group.tools.forEach { tool ->
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-390-                        add(buildJsonObject {
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-391-                            put("type", "function_call")
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt:392:                            put("call_id", tool.toolCallId)
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt:393:                            put("name", tool.toolName)
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-394-                            put("arguments", tool.input)
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-395-                        })
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-396-                        val textOutput = tool.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-397-                        val imageOutput = tool.output.filterIsInstance<UIMessagePart.Image>()
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-398-
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-399-                        add(buildJsonObject {
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-400-                            put("type", "function_call_output")
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt:401:                            put("call_id", tool.toolCallId)
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-402-                            put("output", textOutput)
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-403-                        })
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-404-
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-405-                        // If tool output contains images, inject a user message with the images
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-406-                        if (imageOutput.isNotEmpty()) {
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-407-                            add(buildJsonObject {
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-408-                                put("role", "user")
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-409-                                putJsonArray("content") {
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-410-                                    add(buildJsonObject {
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-411-                                        put("type", "input_text")
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt:412:                                        put("text", "[Tool ${tool.toolName} returned an image]")
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-413-                                    })
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-414-                                    imageOutput.forEach { imagePart ->
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-415-                                        add(buildJsonObject {
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-416-                                            imagePart.encodeBase64().onSuccess { encodedImage ->
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-417-                                                put("type", "input_image")
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-418-                                                put("image_url", encodedImage.base64)
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-419-                                            }.onFailure {
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-420-                                                put("type", "input_text")
+--
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-540-                        choices = listOf(
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-541-                            UIMessageChoice(
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-542-                                index = 0,
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-543-                                message = null,
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-544-                                delta = UIMessage(
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-545-                                    role = MessageRole.ASSISTANT,
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-546-                                    parts = listOf(
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-547-                                        UIMessagePart.Tool(
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt:548:                                            toolCallId = id,
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt:549:                                            toolName = item["name"]?.jsonPrimitive?.content ?: "",
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-550-                                            input = item["arguments"]?.jsonPrimitive?.content
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-551-                                                ?: "",
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-552-                                            output = emptyList()
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-553-                                        )
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-554-                                    )
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-555-                                ),
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-556-                                finishReason = null
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-557-                            )
+--
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-665-                                finishReason = null
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-666-                            )
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-667-                        )
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-668-                    )
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-669-                }
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-670-            }
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-671-
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-672-            "response.function_call_arguments.done" -> {
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt:673:                val toolCallId =
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-674-                    jsonObject["item_id"]?.jsonPrimitive?.content ?: error("item_id not found")
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-675-                val arguments =
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-676-                    jsonObject["arguments"]?.jsonPrimitive?.content ?: error("arguments not found")
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-677-                return MessageChunk(
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt:678:                    id = toolCallId,
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-679-                    model = "",
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-680-                    choices = listOf(
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-681-                        UIMessageChoice(
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-682-                            index = 0,
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-683-                            delta = UIMessage(
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-684-                                role = MessageRole.ASSISTANT,
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-685-                                parts = listOf(
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-686-                                    UIMessagePart.Tool(
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt:687:                                        toolCallId = toolCallId,
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt:688:                                        toolName = "",
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-689-                                        input = arguments,
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-690-                                        output = emptyList()
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-691-                                    )
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-692-                                )
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-693-                            ),
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-694-                            message = null,
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-695-                            finishReason = null
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-696-                        )
+--
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-741-
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-742-                "function_call" -> {
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-743-                    val callId = output["call_id"]?.jsonPrimitive?.content ?: error("call_id not found")
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-744-                    val name = output["name"]?.jsonPrimitive?.content ?: error("name not found")
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-745-                    val arguments =
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-746-                        output["arguments"]?.jsonPrimitive?.content ?: error("arguments not found")
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-747-                    parts.add(
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-748-                        UIMessagePart.Tool(
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt:749:                            toolCallId = callId,
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt:750:                            toolName = name,
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-751-                            input = arguments,
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-752-                            output = emptyList()
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-753-                        )
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-754-                    )
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-755-                }
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-756-
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-757-                "message" -> {
+ai/src/main/java/me/rerere/ai/provider/providers/openai/ResponseAPI.kt-758-                    val content = output["content"]?.jsonArray ?: error("content not found")
+--
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-495-            metadata?.forEach { (key, value) -> put(key, value) }
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-496-        }
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-497-
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-498-        else -> null
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-499-    }
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-500-
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-501-    private fun UIMessagePart.Tool.toToolUseBlock() = buildJsonObject {
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-502-        put("type", "tool_use")
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt:503:        put("id", toolCallId)
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt:504:        put("name", toolName)
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-505-        put("input", inputAsJson())
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-506-    }
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-507-
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-508-    private fun UIMessagePart.Tool.toToolResultBlock() = buildJsonObject {
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-509-        put("type", "tool_result")
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt:510:        put("tool_use_id", toolCallId)
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-511-        putJsonArray("content") {
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-512-            output.mapNotNull { it.toContentBlock() }.forEach { add(it) }
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-513-        }
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-514-    }
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-515-
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-516-    private fun parseMessage(content: JsonArray): UIMessage {
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-517-        val parts = mutableListOf<UIMessagePart>()
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-518-
+--
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-552-                }
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-553-
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-554-                "tool_use" -> {
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-555-                    val id = block["id"]?.jsonPrimitive?.contentOrNull ?: ""
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-556-                    val name = block["name"]?.jsonPrimitive?.contentOrNull ?: ""
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-557-                    val input = block["input"]?.jsonObject ?: JsonObject(emptyMap())
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-558-                    parts.add(
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-559-                        UIMessagePart.Tool(
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt:560:                            toolCallId = id,
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt:561:                            toolName = name,
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-562-                            input = if (input.isEmpty()) "" else json.encodeToString(input),
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-563-                            output = emptyList()
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-564-                        )
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-565-                    )
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-566-                }
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-567-
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-568-                "input_json_delta" -> {
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-569-                    val input = block["partial_json"]?.jsonPrimitive?.contentOrNull
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-570-                    parts.add(
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-571-                        UIMessagePart.Tool(
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt:572:                            toolCallId = "",
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt:573:                            toolName = "",
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-574-                            input = input ?: "",
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-575-                            output = emptyList()
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-576-                        )
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-577-                    )
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-578-                }
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-579-            }
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-580-        }
+ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt-581-
+--
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-565-                    reasoning = text,
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-566-                    createdAt = Clock.System.now(),
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-567-                    finishedAt = null
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-568-                ) else UIMessagePart.Text(text)
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-569-            }
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-570-
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-571-            jsonObject.containsKey("functionCall") -> {
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-572-                UIMessagePart.Tool(
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt:573:                    toolCallId = Uuid.random().toString(),
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt:574:                    toolName = jsonObject["functionCall"]!!.jsonObject["name"]!!.jsonPrimitive.content,
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-575-                    input = json.encodeToString(jsonObject["functionCall"]!!.jsonObject["args"]),
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-576-                    output = emptyList(),
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-577-                    metadata = buildJsonObject {
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-578-                        put("thoughtSignature", jsonObject["thoughtSignature"]?.jsonPrimitive?.contentOrNull)
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-579-                    }
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-580-                )
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-581-            }
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-582-
+--
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-630-        for (group in groups) {
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-631-            when (group) {
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-632-                is PartGroup.Content -> {
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-633-                    group.parts.mapNotNull { it.toGooglePart() }.forEach { partsBuffer.add(it) }
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-634-                }
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-635-
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-636-                is PartGroup.Tools -> {
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-637-                    // 添加 functionCall 到 parts 缓冲
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt:638:                    group.tools.forEach { partsBuffer.add(it.toFunctionCallPart()) }
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-639-
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-640-                    // 输出 model 消息
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-641-                    add(buildJsonObject {
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-642-                        put("role", "model")
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-643-                        putJsonArray("parts") { partsBuffer.forEach { add(it) } }
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-644-                    })
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-645-                    partsBuffer.clear()
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-646-
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt:647:                    // 紧跟 functionResponse
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-648-                    add(buildJsonObject {
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-649-                        put("role", "user")
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-650-                        putJsonArray("parts") {
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt:651:                            group.tools.forEach { add(it.toFunctionResponsePart()) }
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-652-                        }
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-653-                    })
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-654-
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-655-                    // If any tool output contains images, inject a user message with the images
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-656-                    val toolImages = group.tools.flatMap { tool ->
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-657-                        tool.output.filterIsInstance<UIMessagePart.Image>().map { imagePart ->
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt:658:                            tool.toolName to imagePart
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-659-                        }
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-660-                    }
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-661-                    if (toolImages.isNotEmpty()) {
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-662-                        add(buildJsonObject {
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-663-                            put("role", "user")
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-664-                            putJsonArray("parts") {
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-665-                                add(buildJsonObject {
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-666-                                    put("text", toolImages.joinToString(", ") { "[Tool ${it.first} returned an image]" })
+--
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-741-                    })
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-742-                }
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-743-            }
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-744-        }
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-745-
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-746-        else -> null
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-747-    }
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-748-
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt:749:    private fun UIMessagePart.Tool.toFunctionCallPart() = buildJsonObject {
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-750-        put("functionCall", buildJsonObject {
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt:751:            put("name", toolName)
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-752-            put("args", inputAsJson())
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-753-        })
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-754-        metadata?.get("thoughtSignature")?.let {
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-755-            put("thoughtSignature", it)
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-756-        }
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-757-    }
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-758-
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt:759:    private fun UIMessagePart.Tool.toFunctionResponsePart() = buildJsonObject {
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt:760:        put("functionResponse", buildJsonObject {
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt:761:            put("name", toolName)
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-762-            put("response", buildJsonObject {
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-763-                put(
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-764-                    "result",
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-765-                    output.filterIsInstance<UIMessagePart.Text>()
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-766-                        .joinToString("\n") { it.text }
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-767-                )
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-768-            })
+ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt-769-        })
+--
+ai/src/main/java/me/rerere/ai/provider/providers/ProviderMessageUtils.kt-22- * 将消息 parts 按工具边界分组
+ai/src/main/java/me/rerere/ai/provider/providers/ProviderMessageUtils.kt-23- *
+ai/src/main/java/me/rerere/ai/provider/providers/ProviderMessageUtils.kt-24- * 例如 [Text1, Tool1, Tool2, Text2, Tool3] 会分组为:
+ai/src/main/java/me/rerere/ai/provider/providers/ProviderMessageUtils.kt-25- * - Content([Text1])
+ai/src/main/java/me/rerere/ai/provider/providers/ProviderMessageUtils.kt-26- * - Tools([Tool1, Tool2])
+ai/src/main/java/me/rerere/ai/provider/providers/ProviderMessageUtils.kt-27- * - Content([Text2])
+ai/src/main/java/me/rerere/ai/provider/providers/ProviderMessageUtils.kt-28- * - Tools([Tool3])
+ai/src/main/java/me/rerere/ai/provider/providers/ProviderMessageUtils.kt-29- *
+ai/src/main/java/me/rerere/ai/provider/providers/ProviderMessageUtils.kt:30: * 这样可以确保 tool_use/functionCall 后面紧跟 tool_result/functionResponse
+ai/src/main/java/me/rerere/ai/provider/providers/ProviderMessageUtils.kt-31- */
+ai/src/main/java/me/rerere/ai/provider/providers/ProviderMessageUtils.kt-32-internal fun groupPartsByToolBoundary(parts: List<UIMessagePart>): List<PartGroup> {
+ai/src/main/java/me/rerere/ai/provider/providers/ProviderMessageUtils.kt-33-    val groups = mutableListOf<PartGroup>()
+ai/src/main/java/me/rerere/ai/provider/providers/ProviderMessageUtils.kt-34-    val currentContent = mutableListOf<UIMessagePart>()
+ai/src/main/java/me/rerere/ai/provider/providers/ProviderMessageUtils.kt-35-    val currentTools = mutableListOf<UIMessagePart.Tool>()
+ai/src/main/java/me/rerere/ai/provider/providers/ProviderMessageUtils.kt-36-
+ai/src/main/java/me/rerere/ai/provider/providers/ProviderMessageUtils.kt-37-    fun flushContent() {
+ai/src/main/java/me/rerere/ai/provider/providers/ProviderMessageUtils.kt-38-        if (currentContent.isNotEmpty()) {
