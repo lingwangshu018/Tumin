@@ -110,17 +110,33 @@ class GenerationHandler(
  
         var messages: List<UIMessage> = messages.map { message ->
             message.copy(parts = message.parts.filterNot { part ->
-                part is UIMessagePart.Tool && part.toolName.isBlank()
+                part is UIMessagePart.Tool && (part.toolName.isBlank() || part.toolCallId.isBlank())
             })
         }.filterNot { it.parts.isEmpty() }
+
+        val companionHardRouteToolNames = setOf(
+            "read_couple_space",
+            "post_couple_space",
+            "comment_couple_space",
+            "delete_couple_space_post",
+            "shared_diary",
+            "anniversary_book",
+            "life_memo",
+            "life_calendar",
+            "shared_reading",
+            "shared_music",
+        )
+        val companionHardRoute = tools.isNotEmpty() && tools.all { it.name in companionHardRouteToolNames }
  
         for (stepIndex in 0 until maxSteps) {
             Log.i(TAG, "streamText: start step #$stepIndex (${model.id})")
  
             val toolsInternal = buildList {
-                Log.i(TAG, "generateInternal: build tools($assistant)")
-                // 文件写入工具 - AI可直接将文件内容写入设备或打包ZIP
-                add(buildWriteFilesTool(conversationId))
+                Log.i(TAG, "generateInternal: build tools($assistant), companionHardRoute=$companionHardRoute")
+                // 生活模块 Hard Route 必须保持纯净，不再混入文件等无关工具。
+                if (!companionHardRoute) {
+                    add(buildWriteFilesTool(conversationId))
+                }
                 addAll(tools)
             }.distinctBy { it.name }
  
@@ -137,7 +153,7 @@ class GenerationHandler(
                     assistant = assistant,
                     settings = settings,
                     messages = messages,
-                    pluginPromptInjections = pluginPromptInjections,
+                    pluginPromptInjections = if (companionHardRoute) emptyList() else pluginPromptInjections,
                     onUpdateMessages = {
                         messages = it.transforms(
                             transformers = outputTransformers,

@@ -851,9 +851,13 @@ class ChatService(
                 }
             }
 
-            // check invalid messages
+            // check invalid messages, including corrupt historical Tool parts.
             checkInvalidMessages(conversationId)
             val conversation = getConversationFlow(conversationId).value
+            // Persist sanitization immediately so corrupted tool history cannot return after restart.
+            session.saveMutex.withLock {
+                saveConversation(conversationId, conversation)
+            }
 
             // start generating
             generationHandler.generateText(
@@ -1080,6 +1084,21 @@ class ChatService(
         val conversation = getConversationFlow(conversationId).value
         var messagesNodes = conversation.messageNodes
 
+        // 先清理已损坏的 Tool part：空 toolName/toolCallId 会让 Gemini function_response proto 直接失效。
+        messagesNodes = messagesNodes.map { node ->
+            val cleanedMessages = node.messages.map { msg ->
+                msg.copy(parts = msg.parts.filterNot { part ->
+                    part is UIMessagePart.Tool && (part.toolName.isBlank() || part.toolCallId.isBlank())
+                })
+            }.filterNot { it.parts.isEmpty() }
+            val safeIndex = when {
+                cleanedMessages.isEmpty() -> 0
+                node.selectIndex in cleanedMessages.indices -> node.selectIndex
+                else -> 0
+            }
+            node.copy(messages = cleanedMessages, selectIndex = safeIndex)
+        }.filter { it.messages.isNotEmpty() }
+
         // 移除无效 tool (未执行的 Tool)
         messagesNodes = messagesNodes.mapIndexed { _, node ->
             // Check for Tool type with non-executed tools
@@ -1094,11 +1113,6 @@ class ChatService(
                     return@mapIndexed node
                 }
 
-                // If all tools are executed, it's valid
-                val allToolsExecuted = node.currentMessage.getTools().all { it.isExecuted }
-                if (allToolsExecuted && node.currentMessage.getTools().isNotEmpty()) {
-                    return@mapIndexed node
-                }
 
                 // Remove messages that still have unresolved tool approvals.
                 return@mapIndexed node.copy(
