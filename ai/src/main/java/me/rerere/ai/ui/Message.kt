@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -109,17 +109,30 @@ data class UIMessage(
                                 acc + deltaPart.copy()
                             }
                         } else {
-                            // Has ID - find and update by ID, or insert new
+                            // A streamed tool call may arrive as an arguments-only fragment first,
+                            // followed later by the fragment that finally carries the real id/name.
+                            // Merge that concrete fragment into the blank placeholder instead of
+                            // appending a second Tool, otherwise an empty-name Tool can survive into
+                            // history and become an invalid function_response on the next request.
                             val existsPart = acc.find {
                                 it is UIMessagePart.Tool && it.toolCallId == deltaPart.toolCallId
                             } as? UIMessagePart.Tool
-                            if (existsPart == null) {
-                                acc + deltaPart.copy()
-                            } else {
+                            if (existsPart != null) {
                                 acc.map { part ->
                                     if (part is UIMessagePart.Tool && part.toolCallId == deltaPart.toolCallId) {
                                         part.merge(deltaPart)
                                     } else part
+                                }
+                            } else {
+                                val blankPlaceholder = acc.lastOrNull {
+                                    it is UIMessagePart.Tool && it.toolCallId.isBlank()
+                                } as? UIMessagePart.Tool
+                                if (blankPlaceholder != null) {
+                                    acc.map { part ->
+                                        if (part === blankPlaceholder) part.merge(deltaPart) else part
+                                    }
+                                } else {
+                                    acc + deltaPart.copy()
                                 }
                             }
                         }

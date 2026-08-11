@@ -205,9 +205,29 @@ class GenerationHandler(
                 )
                 emit(GenerationChunk.Messages(messages))
  
-                val tools = messages.last().getTools().filter { !it.isExecuted }
+                // Never execute or persist an incomplete streamed tool fragment.
+                // OpenAI-compatible gateways are allowed to split tool_calls so an intermediate
+                // delta can temporarily have an empty id/name. If such a fragment survives the
+                // stream merge, drop it here before execution and before it can poison history.
+                val incompleteTools = messages.last().getTools().filter {
+                    !it.isExecuted && (it.toolCallId.isBlank() || it.toolName.isBlank())
+                }
+                if (incompleteTools.isNotEmpty()) {
+                    Log.w(TAG, "generateText: dropping incomplete streamed tool fragments: ${incompleteTools.size}")
+                    val lastMessage = messages.last()
+                    val cleanedParts = lastMessage.parts.filterNot { part ->
+                        part is UIMessagePart.Tool && !part.isExecuted &&
+                            (part.toolCallId.isBlank() || part.toolName.isBlank())
+                    }
+                    messages = messages.dropLast(1) + lastMessage.copy(parts = cleanedParts)
+                    emit(GenerationChunk.Messages(messages))
+                }
+
+                val tools = messages.last().getTools().filter {
+                    !it.isExecuted && it.toolCallId.isNotBlank() && it.toolName.isNotBlank()
+                }
                 if (tools.isEmpty()) {
-                    // no tool calls, break
+                    // no valid tool calls, break
                     break
                 }
  
