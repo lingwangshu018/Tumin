@@ -1,0 +1,116 @@
+name: Fix Streaming Tool Fragments
+on:
+  push:
+    paths:
+      - '.github/fix-streaming-tool-fragments-trigger'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch tool fragment merge and execution guard
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # 1) Merge a later concrete tool-call fragment into an earlier blank-id placeholder.
+          p = Path('ai/src/main/java/me/rerere/ai/ui/Message.kt')
+          s = p.read_text(encoding='utf-8-sig')
+          old = '''                        } else {
+                            // Has ID - find and update by ID, or insert new
+                            val existsPart = acc.find {
+                                it is UIMessagePart.Tool && it.toolCallId == deltaPart.toolCallId
+                            } as? UIMessagePart.Tool
+                            if (existsPart == null) {
+                                acc + deltaPart.copy()
+                            } else {
+                                acc.map { part ->
+                                    if (part is UIMessagePart.Tool && part.toolCallId == deltaPart.toolCallId) {
+                                        part.merge(deltaPart)
+                                    } else part
+                                }
+                            }
+                        }
+'''
+          new = '''                        } else {
+                            // Has ID - first update an exact call-id match. Some OpenAI-compatible
+                            // gateways stream tool_calls out of order: an arguments-only delta can
+                            // arrive before the fragment carrying id/name. In that case we already
+                            // have a blank-id placeholder; merge the concrete fragment into it instead
+                            // of appending a second Tool and leaving an invalid blank-name tool behind.
+                            val existsPart = acc.find {
+                                it is UIMessagePart.Tool && it.toolCallId == deltaPart.toolCallId
+                            } as? UIMessagePart.Tool
+                            if (existsPart != null) {
+                                acc.map { part ->
+                                    if (part is UIMessagePart.Tool && part.toolCallId == deltaPart.toolCallId) {
+                                        part.merge(deltaPart)
+                                    } else part
+                                }
+                            } else {
+                                val blankPlaceholder = acc.lastOrNull {
+                                    it is UIMessagePart.Tool && it.toolCallId.isBlank()
+                                } as? UIMessagePart.Tool
+                                if (blankPlaceholder != null) {
+                                    acc.map { part ->
+                                        if (part === blankPlaceholder) part.merge(deltaPart) else part
+                                    }
+                                } else {
+                                    acc + deltaPart.copy()
+                                }
+                            }
+                        }
+'''
+          if old not in s:
+              raise SystemExit('Message.kt tool merge anchor not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+
+          # 2) Never execute/round-trip an incomplete tool call at the end of a generation step.
+          p = Path('app/src/main/java/me/rerere/rikkahub/data/ai/GenerationHandler.kt')
+          s = p.read_text(encoding='utf-8-sig')
+          old = '''                val tools = messages.last().getTools().filter { !it.isExecuted }
+                if (tools.isEmpty()) {
+                    // no tool calls, break
+                    break
+                }
+'''
+          new = '''                val incompleteTools = messages.last().getTools().filter {
+                    !it.isExecuted && (it.toolCallId.isBlank() || it.toolName.isBlank())
+                }
+                if (incompleteTools.isNotEmpty()) {
+                    Log.w(TAG, "generateText: dropping incomplete streamed tool fragments: ${incompleteTools.size}")
+                    val lastMessage = messages.last()
+                    val cleanedParts = lastMessage.parts.filterNot { part ->
+                        part is UIMessagePart.Tool && !part.isExecuted &&
+                            (part.toolCallId.isBlank() || part.toolName.isBlank())
+                    }
+                    messages = messages.dropLast(1) + lastMessage.copy(parts = cleanedParts)
+                    emit(GenerationChunk.Messages(messages))
+                }
+
+                val tools = messages.last().getTools().filter {
+                    !it.isExecuted && it.toolCallId.isNotBlank() && it.toolName.isNotBlank()
+                }
+                if (tools.isEmpty()) {
+                    // no valid tool calls, break
+                    break
+                }
+'''
+          if old not in s:
+              raise SystemExit('GenerationHandler tool execution anchor not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+          PY
+      - name: Run focused tests and compile
+        run: |
+          ./gradlew :ai:testDebugUnitTest :app:compileDebugKotlin --no-daemon
+      - name: Commit repair
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add ai/src/main/java/me/rerere/ai/ui/Message.kt app/src/main/java/me/rerere/rikkahub/data/ai/GenerationHandler.kt
+          git commit -m 'fix: merge fragmented tool calls before provider round-trip'
+          git push
