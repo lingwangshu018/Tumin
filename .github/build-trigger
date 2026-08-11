@@ -1,4 +1,4 @@
-build: 2026-08-11T01:32+08:00
+build: 2026-08-11T11:30+08:00
 source: latest master
-revision: 7d1f76e
-purpose: build v2.3.5 with real ChatService Rabbit Space hard route
+revision: 7574a28
+purpose: build v2.3.5 after provider-visible tool-name dedupe
