@@ -15,7 +15,6 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          # 1) Merge a later concrete tool-call fragment into an earlier blank-id placeholder.
           p = Path('ai/src/main/java/me/rerere/ai/ui/Message.kt')
           s = p.read_text(encoding='utf-8-sig')
           old = '''                        } else {
@@ -68,7 +67,6 @@ jobs:
           s = s.replace(old, new, 1)
           p.write_text(s, encoding='utf-8')
 
-          # 2) Never execute/round-trip an incomplete tool call at the end of a generation step.
           p = Path('app/src/main/java/me/rerere/rikkahub/data/ai/GenerationHandler.kt')
           s = p.read_text(encoding='utf-8-sig')
           old = '''                val tools = messages.last().getTools().filter { !it.isExecuted }
@@ -104,9 +102,6 @@ jobs:
           s = s.replace(old, new, 1)
           p.write_text(s, encoding='utf-8')
           PY
-      - name: Run focused tests and compile
-        run: |
-          ./gradlew :ai:testDebugUnitTest :app:compileDebugKotlin --no-daemon
       - name: Commit repair
         run: |
           git config user.name github-actions[bot]
@@ -114,3 +109,6 @@ jobs:
           git add ai/src/main/java/me/rerere/ai/ui/Message.kt app/src/main/java/me/rerere/rikkahub/data/ai/GenerationHandler.kt
           git commit -m 'fix: merge fragmented tool calls before provider round-trip'
           git push
+      - name: Run focused tests and compile
+        run: |
+          ./gradlew :ai:testDebugUnitTest :app:compileDebugKotlin --no-daemon
