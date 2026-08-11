@@ -1,4 +1,4 @@
-build: 2026-08-11T11:30+08:00
+build: 2026-08-11T15:58+08:00
 source: latest master
-revision: 7574a28
-purpose: build v2.3.5 after provider-visible tool-name dedupe
+revision: rabbit-tool-chain-hardened
+purpose: build v2.3.5 after Rabbit Space tool history, hard-route, and duplicate-memory fixes
