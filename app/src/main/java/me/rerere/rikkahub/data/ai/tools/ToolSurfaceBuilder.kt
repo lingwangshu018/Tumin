@@ -58,17 +58,16 @@ class ToolSurfaceBuilder(
         recentMessages: List<UIMessage> = emptyList(),
         workspaceCwd: String? = null,
     ): List<Tool> {
+        // Companion routing must be based only on the latest USER turn. Never let an older
+        // Rabbit Space / diary / music request keep a later ordinary chat turn inside a hard route.
         val latestUserText = recentMessages.asReversed()
             .firstOrNull { it.role == MessageRole.USER }
             ?.parts?.filterIsInstance<UIMessagePart.Text>()
             ?.joinToString("\n") { it.text }.orEmpty()
         val companionIntent = detectCompanionIntent(latestUserText)
 
-        // HARD ROUTE: once a companion intent is detected, expose ONLY that surface's tools.
-        // Do not expose memory/web/local/system/workspace/skill/MCP/plugin tools in the same turn.
-        // This deliberately removes tool-choice competition (e.g. HTMLCSStoImage stealing a
-        // Rabbit Space request) and makes the model choose among only the actions that can
-        // actually complete the requested in-app operation.
+        // HARD ROUTE: explicit companion operations expose ONLY the relevant in-app tools.
+        // No memory/web/local/system/workspace/skill/MCP/plugin tool is allowed to compete in this turn.
         if (companionIntent != null) {
             return when (companionIntent) {
                 CompanionIntent.COUPLE_SPACE -> listOf(
@@ -86,6 +85,10 @@ class ToolSurfaceBuilder(
             }
         }
 
+        // Ordinary chat intentionally returns to the original/general tool surface.
+        // Companion tools are NOT registered here; they are loaded only when the latest user
+        // message explicitly asks for a companion-space operation. This prevents ordinary Gemini
+        // chat from being destabilized by ten extra app tools and keeps pre-companion behavior intact.
         return buildList {
             if (assistant.enableMemory) {
                 val memoryAssistantId = if (assistant.useGlobalMemory) MemoryRepository.GLOBAL_MEMORY_ID else assistant.id.toString()
@@ -99,23 +102,14 @@ class ToolSurfaceBuilder(
             if (settings.enableWebSearch) addAll(createSearchTools(settings))
             addAll(localTools.getTools(assistant.localTools, invocationContext))
             val systemToolsOptions = settings.systemToolsSetting.getEnabledOptions()
-            if (systemToolsOptions.isNotEmpty()) addAll(SystemTools(context, settings).getTools(systemToolsOptions, recentMessages, filesManager))
-
-            // Ordinary chat keeps companion tools available, but they no longer compete with
-            // unrelated tools on an explicitly detected companion-operation turn.
-            add(readCoupleSpaceTool(coupleRepository, invocationContext))
-            add(postCoupleSpaceTool(coupleRepository, invocationContext))
-            add(commentCoupleSpaceTool(coupleRepository, invocationContext))
-            add(deleteCoupleSpacePostTool(coupleRepository, invocationContext))
-            add(sharedDiaryTool(coupleRepository, invocationContext))
-            add(anniversaryBookTool(coupleRepository, invocationContext))
-            add(lifeMemoTool(context, invocationContext))
-            add(lifeCalendarTool(context, invocationContext))
-            add(sharedReadingTool(context, invocationContext))
-            add(sharedMusicTool(context, invocationContext))
+            if (systemToolsOptions.isNotEmpty()) {
+                addAll(SystemTools(context, settings).getTools(systemToolsOptions, recentMessages, filesManager))
+            }
 
             addAll(createWorkspaceTools(assistant.workspaceId?.toString(), workspaceRepository, workspaceCwd))
-            if (assistant.enabledSkills.isNotEmpty()) addAll(createSkillTools(assistant.enabledSkills, skillManager.listSkills(), skillManager))
+            if (assistant.enabledSkills.isNotEmpty()) {
+                addAll(createSkillTools(assistant.enabledSkills, skillManager.listSkills(), skillManager))
+            }
             mcpManager.getAllAvailableTools().forEach { (serverId, tool) ->
                 add(Tool(
                     name = ToolNaming.buildMcpToolName(serverId, tool.name),
