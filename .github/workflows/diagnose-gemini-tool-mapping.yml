@@ -1,0 +1,28 @@
+name: Diagnose Gemini Tool Mapping
+on:
+  push:
+    paths:
+      - '.github/diagnose-gemini-tool-trigger'
+permissions:
+  contents: write
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect AI provider tool mapping
+        run: |
+          {
+            echo '=== FILES ==='
+            find ai -type f | sort
+            echo
+            echo '=== function_response/functionResponse/toolName/toolCallId matches ==='
+            grep -RInE -C 8 'function_response|functionResponse|toolName|toolCallId|FunctionResponse|FunctionCall' ai || true
+          } > .github/gemini-tool-mapping-diagnostic.txt
+      - name: Commit diagnostic
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .github/gemini-tool-mapping-diagnostic.txt
+          git commit -m 'diag: capture Gemini tool mapping implementation'
+          git push
