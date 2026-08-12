@@ -1,0 +1,36 @@
+name: Patch Cross Window Memory v1
+
+on:
+  push:
+    paths:
+      - '.github/cross-window-memory-v1-trigger'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply cross-window memory v1 patch
+        run: python3 .github/scripts/patch_cross_window_memory_v1.py
+
+      - name: Validate compile
+        run: ./gradlew :app:compileDebugKotlin --no-daemon
+
+      - name: Commit sources
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add app/src/main/java/me/rerere/rikkahub/data/model/Assistant.kt app/src/main/java/me/rerere/rikkahub/data/ai/GenerationHandler.kt
+          if git diff --cached --quiet; then
+            echo 'No source changes needed'
+          else
+            git commit -m 'feat: add cross-window shared recent memory v1'
+            git pull --rebase origin master
+            git push origin HEAD:master
+          fi
