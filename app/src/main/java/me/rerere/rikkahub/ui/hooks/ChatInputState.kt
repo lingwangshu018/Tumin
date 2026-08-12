@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -15,6 +15,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.MessageQuote
 import kotlin.uuid.Uuid
 
 private const val STICKER_MARKER = "__TUMIN_STICKER__:"
@@ -25,6 +26,8 @@ class ChatInputState {
     val textContent = TextFieldState()
     var messageContent by mutableStateOf(listOf<UIMessagePart>())
     var editingMessage by mutableStateOf<Uuid?>(null)
+    var quote by mutableStateOf<MessageQuote?>(null)
+    var regenerateAfterEdit by mutableStateOf(false)
     private var editingParts: List<UIMessagePart>? = null
     private var editingAttachmentUrls: Set<String> = emptySet()
 
@@ -32,11 +35,20 @@ class ChatInputState {
         textContent.setTextAndPlaceCursorAtEnd("")
         messageContent = emptyList()
         editingMessage = null
+        quote = null
+        regenerateAfterEdit = false
         editingParts = null
         editingAttachmentUrls = emptySet()
     }
 
     fun isEditing() = editingMessage != null
+
+    fun startEditing(messageId: Uuid, contents: List<UIMessagePart>, regenerate: Boolean) {
+        editingMessage = messageId
+        regenerateAfterEdit = regenerate
+        quote = null
+        setContents(contents)
+    }
 
     fun setMessageText(text: String) {
         textContent.setTextAndPlaceCursorAtEnd(text)
@@ -176,3 +188,4 @@ class ChatInputState {
         }
     }
 }
+
