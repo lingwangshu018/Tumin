@@ -1,4 +1,4 @@
-build: 2026-08-12T22:00+08:00
+build: 2026-08-12T22:35+08:00
 source: latest master
-revision: de68a7a
-purpose: build v2.3.7 with memory control center
+revision: e9f0704
+purpose: build v2.3.8 with narrow-screen memory strategy fix
