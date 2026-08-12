@@ -49,10 +49,23 @@ data class RelationshipState(
     val recentChanges: List<RelationshipChange> = emptyList(),
     val unresolvedIssues: List<String> = emptyList(),
     val updatedAt: Long = 0L,
-)
+) {
+    fun normalized() = copy(
+        intimacy = intimacy.coerceIn(0, 100),
+        trust = trust.coerceIn(0, 100),
+        attraction = attraction.coerceIn(0, 100),
+        security = security.coerceIn(0, 100),
+        conflict = conflict.coerceIn(0, 100),
+        recentChanges = recentChanges.takeLast(20),
+        milestones = milestones.distinct().takeLast(50),
+        unresolvedIssues = unresolvedIssues.distinct().takeLast(20),
+    )
+}
 
 @Serializable
 data class CompanionState(
     val character: CharacterState = CharacterState(),
     val relationship: RelationshipState = RelationshipState(),
-)
+) {
+    fun normalized() = copy(relationship = relationship.normalized())
+}

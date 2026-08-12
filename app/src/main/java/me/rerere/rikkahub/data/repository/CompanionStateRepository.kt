@@ -26,7 +26,7 @@ class CompanionStateRepository(context: Context) {
     fun update(assistantId: Uuid, transform: (CompanionState) -> CompanionState) {
         val key = assistantId.toString()
         val flow = flows.getOrPut(key) { MutableStateFlow(read(key)) }
-        val updated = transform(flow.value)
+        val updated = transform(flow.value).normalized()
         preferences.edit().putString(key, json.encodeToString(updated)).apply()
         flow.value = updated
     }
