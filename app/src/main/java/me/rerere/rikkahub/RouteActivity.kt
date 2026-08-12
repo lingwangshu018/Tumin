@@ -154,6 +154,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingThemePage
 import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
 import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
 import me.rerere.rikkahub.ui.pages.setting.SettingMcpPage
+import me.rerere.rikkahub.ui.pages.setting.SettingMemoryPage
 import me.rerere.rikkahub.ui.pages.setting.SettingModelPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderDetailPage
@@ -503,6 +504,7 @@ class RouteActivity : ComponentActivity() {
                             entry<Screen.SettingSearchDetail> { key -> SettingSearchDetailPage(Uuid.parse(key.serviceId)) }
                             entry<Screen.SettingSpeech> { SettingSpeechPage() }
                             entry<Screen.SettingMcp> { SettingMcpPage() }
+                            entry<Screen.SettingMemory> { SettingMemoryPage() }
                             entry<Screen.SettingDonate> { SettingDonatePage() }
                             entry<Screen.SettingFiles> { SettingFilesPage() }
                             entry<Screen.SettingWeb> { SettingWebPage() }
@@ -689,6 +691,7 @@ sealed interface Screen : NavKey {
     @Serializable data class SettingSearchDetail(val serviceId: String) : Screen
     @Serializable data object SettingSpeech : Screen
     @Serializable data object SettingMcp : Screen
+    @Serializable data object SettingMemory : Screen
     @Serializable data object SettingDonate : Screen
     @Serializable data object SettingFiles : Screen
     @Serializable data object SettingWeb : Screen
