@@ -1,4 +1,7 @@
-﻿/*
+Exit code: 0
+Wall time: 0.4 seconds
+Output:
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -53,6 +56,7 @@ import me.rerere.hugeicons.stroke.Book01
 import me.rerere.hugeicons.stroke.Book03
 import me.rerere.hugeicons.stroke.Bookshelf01
 import me.rerere.hugeicons.stroke.Brain02
+import me.rerere.hugeicons.stroke.Brain01
 import me.rerere.hugeicons.stroke.Clapping01
 import me.rerere.hugeicons.stroke.Database02
 import me.rerere.hugeicons.stroke.Developer
@@ -231,6 +235,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     modifier = Modifier.padding(horizontal = 8.dp),
                     title = { Text(stringResource(R.string.setting_page_model_and_services)) },
                 ) {
+                    item(
+                        onClick = { navController.navigate(Screen.SettingMemory) },
+                        leadingContent = { Icon(HugeIcons.Brain01, null) },
+                        supportingContent = { Text("管理核心身份、近期生活流、长期记忆与记忆策略") },
+                        headlineContent = { Text("记忆") },
+                    )
                     item(
                         onClick = { navController.navigate(Screen.SettingModels) },
                         leadingContent = { Icon(HugeIcons.AiMagic, null) },
@@ -469,3 +479,4 @@ private fun ProviderConfigWarningCard(navController: Navigator) {
         }
     }
 }
+
