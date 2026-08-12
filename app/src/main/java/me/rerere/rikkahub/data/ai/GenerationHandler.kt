@@ -449,6 +449,20 @@ class GenerationHandler(
         workspaceCwd: String? = null,
         crossWindowMemoryPrompt: String = "",
     ) {
+        val latestVisibleUserText = messages
+            .lastOrNull { it.role == MessageRole.USER }
+            ?.visibleBodyText()
+            .orEmpty()
+        val recalledLocalMemories = if (assistant.enableMemory && assistant.enableThreeLayerMemory) {
+            ThreeLayerMemoryPolicy.selectLongTermMemories(
+                memories = memories,
+                query = latestVisibleUserText,
+                limit = assistant.longTermMemoryRecallCount,
+                maxChars = assistant.longTermMemoryMaxChars,
+            )
+        } else {
+            memories
+        }
         val internalMessages = buildList {
             val system = buildString {
                 val effectiveSystemPrompt =
@@ -462,9 +476,9 @@ class GenerationHandler(
                 }
  
                 // 记忆
-                if (assistant.enableMemory) {
+                if (assistant.enableMemory && recalledLocalMemories.isNotEmpty()) {
                     appendLine()
-                    append(buildMemoryPrompt(memories = memories))
+                    append(buildMemoryPrompt(memories = recalledLocalMemories))
                 }
  
                 // 外置记忆库召回
@@ -563,7 +577,7 @@ class GenerationHandler(
                     Log.w(TAG, "External memory recall failed", e)
                 }
  
-                if (assistant.enableRecentChatsReference) {
+                if (ThreeLayerMemoryPolicy.shouldInjectRecentChats(assistant)) {
                     appendLine()
                     append(buildRecentChatsPrompt(assistant, conversationRepo))
                 }
@@ -643,7 +657,7 @@ class GenerationHandler(
         val historyCharsForObservation = limitedHistoryForObservation.sumOf { it.toText().length }
         val pluginPromptCharsForObservation = pluginPromptInjections.sumOf { it.length }
         val externalMemoryConfigCountForObservation = settings.externalMemories.count { it.enabled && it.id in assistant.externalMemoryIds }
-        Log.i("TokenObserver", "model=${model.id}, systemChars=$systemCharsForObservation, historyMessages=${limitedHistoryForObservation.size}, historyChars=$historyCharsForObservation, memoryItems=${if (assistant.enableMemory) memories.size else 0}, tools=${tools.size}, pluginPrompts=${pluginPromptInjections.size}, pluginPromptChars=$pluginPromptCharsForObservation, recentChats=${assistant.enableRecentChatsReference}, externalMemoryConfigs=$externalMemoryConfigCountForObservation, contextMessageSize=${assistant.contextMessageSize}")
+        Log.i("TokenObserver", "model=${model.id}, systemChars=$systemCharsForObservation, historyMessages=${limitedHistoryForObservation.size}, historyChars=$historyCharsForObservation, memoryItems=${if (assistant.enableMemory) recalledLocalMemories.size else 0}, tools=${tools.size}, pluginPrompts=${pluginPromptInjections.size}, pluginPromptChars=$pluginPromptCharsForObservation, recentChats=${ThreeLayerMemoryPolicy.shouldInjectRecentChats(assistant)}, threeLayerMemory=${assistant.enableThreeLayerMemory}, externalMemoryConfigs=$externalMemoryConfigCountForObservation, contextMessageSize=${assistant.contextMessageSize}")
 
         var messages: List<UIMessage> = messages
         val params = TextGenerationParams(
