@@ -58,6 +58,7 @@ import me.rerere.hugeicons.stroke.LeftToRightListBullet
 import me.rerere.hugeicons.stroke.Menu03
 import me.rerere.hugeicons.stroke.MessageAdd01
 import me.rerere.hugeicons.stroke.Voice
+import me.rerere.hugeicons.stroke.Video01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
@@ -299,6 +300,14 @@ private fun ChatPageContent(
                                 }
                             }
                         },
+                        onVideoCall = {
+                            val activeId = VoiceCallService.activeConversationId.value
+                            if (activeId == null || activeId == conversation.id.toString()) {
+                                navController.navigate(Screen.VideoCall(conversation.id.toString()))
+                            } else {
+                                toaster.show("当前有通话进行中，请先挂断", type = ToastType.Warning)
+                            }
+                        },
                     )
                     ChatMusicHeader()
                 }
@@ -498,6 +507,7 @@ private fun TopBar(
     onNewChat: () -> Unit,
     onUpdateTitle: (String) -> Unit,
     onVoiceCall: () -> Unit,
+    onVideoCall: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
@@ -555,6 +565,10 @@ private fun TopBar(
             }
         },
         actions = {
+            IconButton(onClick = onVideoCall) {
+                Icon(HugeIcons.Video01, "Video Call")
+            }
+
             IconButton(
                 onClick = {
                     onVoiceCall()
