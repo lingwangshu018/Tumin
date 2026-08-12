@@ -53,13 +53,13 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(HugeIcons.Camera01, null, tint = Color(0xFFFFB7C5), modifier = Modifier.size(72.dp))
-                Text("鍓ф儏瑙嗛閫氳瘽", color = Color.White, fontSize = 28.sp, modifier = Modifier.padding(top = 20.dp))
+                Text("Story Video Call", color = Color.White, fontSize = 28.sp, modifier = Modifier.padding(top = 20.dp))
                 Text(
-                    "寮€濮嬪悗浼氫娇鐢ㄩ害鍏嬮杩涜璇煶瀵硅瘽锛涚寮€椤甸潰鏃堕€氳瘽鍙湪鍚庡彴缁х画锛屽彧鏈夋寕鏂墠浼氬仠姝€傚墠缃憚鍍忓ご榛樿鍏抽棴銆?,
+                    "Microphone stays active during the call and may continue in the background until you hang up. The front camera is off by default.",
                     color = Color.White.copy(.7f), textAlign = TextAlign.Center, modifier = Modifier.padding(vertical = 20.dp)
                 )
-                Button(onClick = { joined = true }) { Text("寮€濮嬮€氳瘽") }
-                TextButton(onClick = onBack) { Text("鍙栨秷") }
+                Button(onClick = { joined = true }) { Text("Start call") }
+                TextButton(onClick = onBack) { Text("Cancel") }
             }
         }
         return
@@ -112,13 +112,13 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
         )
     ) {
         Column(Modifier.fillMaxSize().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("鍓ф儏瑙嗛閫氳瘽", color = Color.White.copy(.75f), modifier = Modifier.padding(top = 24.dp))
+            Text("Story Video Call", color = Color.White.copy(.75f), modifier = Modifier.padding(top = 24.dp))
             Spacer(Modifier.height(28.dp))
             val displayName = conversation?.title.orEmpty().ifBlank { "TA" }
             AutoAIIcon(name = displayName, modifier = Modifier.size(132.dp))
             Text(displayName, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
             Text(
-                listOf(companion.character.emotion, companion.character.location).filter { it.isNotBlank() }.joinToString(" 路 "),
+                listOf(companion.character.emotion, companion.character.location).filter { it.isNotBlank() }.joinToString(" / "),
                 color = Color(0xFFFFB7C5), modifier = Modifier.padding(top = 6.dp)
             )
             Surface(
@@ -131,28 +131,28 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
                         Text(story.dialogue, color = Color.White, fontSize = 18.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 14.dp))
                     }
                     if (uiState.userTranscript.isNotBlank() && uiState.status != VoiceCallStatus.Speaking) {
-                        Text("浣狅細${uiState.userTranscript}", color = Color.White.copy(.72f), modifier = Modifier.padding(top = 14.dp))
+                        Text("You: ${uiState.userTranscript}", color = Color.White.copy(.72f), modifier = Modifier.padding(top = 14.dp))
                     }
                 }
             }
             Spacer(Modifier.weight(1f))
             if (cameraEnabled) {
                 Surface(color = Color.Black.copy(.45f), shape = RoundedCornerShape(18.dp), modifier = Modifier.align(Alignment.End)) {
-                    Text("鍓嶇疆鎽勫儚澶村凡寮€鍚?, color = Color.White, modifier = Modifier.padding(horizontal = 18.dp, vertical = 28.dp))
+                    Text("Front camera enabled", color = Color.White, modifier = Modifier.padding(horizontal = 18.dp, vertical = 28.dp))
                 }
             }
             Row(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-                CallButton(if (uiState.isMuted) HugeIcons.MicOff01 else HugeIcons.Mic01, "闈欓煶") { service?.toggleMute() }
-                CallButton(HugeIcons.Camera01, if (cameraEnabled) "鍏抽棴鐢婚潰" else "鍓嶇疆鐢婚潰") {
+                CallButton(if (uiState.isMuted) HugeIcons.MicOff01 else HugeIcons.Mic01, "Mute") { service?.toggleMute() }
+                CallButton(HugeIcons.Camera01, if (cameraEnabled) "Camera off" else "Front camera") {
                     if (!cameraPermission.allRequiredPermissionsGranted) cameraPermission.requestPermissions()
                     else cameraEnabled = !cameraEnabled
                 }
-                CallButton(HugeIcons.VolumeHigh, "鎵０鍣?) {
+                CallButton(HugeIcons.VolumeHigh, "Speaker") {
                     speakerEnabled = !speakerEnabled
                     val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
                     audio.isSpeakerphoneOn = speakerEnabled
                 }
-                CallButton(HugeIcons.Cancel01, "鎸傛柇", Color(0xFFE5484D)) {
+                CallButton(HugeIcons.Cancel01, "Hang up", Color(0xFFE5484D)) {
                     service?.endCall(); VoiceCallService.stop(context); onBack()
                 }
             }
@@ -163,9 +163,9 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
 private data class StoryPresentation(val action: String, val dialogue: String)
 
 private fun storyPresentation(text: String, fallbackAction: String): StoryPresentation {
-    val actionRegex = Regex("[\\*锛?]([^*锛堬級()]{2,80})[\\*锛?]")
+    val actionRegex = Regex("\\*([^*]{2,80})\\*|\\(([^()]{2,80})\\)")
     val action = actionRegex.find(text)?.groupValues?.getOrNull(1)?.trim()
-        ?: fallbackAction.ifBlank { "TA 姝ｅ湪灞忓箷鍙︿竴绔櫔鐫€浣? }
+        ?: fallbackAction.ifBlank { "TA is here with you" }
     return StoryPresentation(action, text.replace(actionRegex, "").trim())
 }
 
