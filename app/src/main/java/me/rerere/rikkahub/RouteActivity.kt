@@ -1,4 +1,8 @@
-﻿/*
+Exit code: 0
+Wall time: 0.4 seconds
+Total output lines: 736
+Output:
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -154,6 +158,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingThemePage
 import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
 import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
 import me.rerere.rikkahub.ui.pages.setting.SettingMcpPage
+import me.rerere.rikkahub.ui.pages.setting.SettingMemoryPage
 import me.rerere.rikkahub.ui.pages.setting.SettingModelPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderDetailPage
@@ -430,20 +435,7 @@ class RouteActivity : ComponentActivity() {
                         backStack = backStack,
                         entryDecorators = listOf(
                             rememberSaveableStateHolderNavEntryDecorator(),
-                            rememberViewModelStoreNavEntryDecorator(),
-                        ),
-                        modifier = Modifier.fillMaxSize(),
-                        onBack = { backStack.removeLastOrNull() },
-                        transitionSpec = {
-                            if (backStack.size == 1) fadeIn() togetherWith fadeOut()
-                            else {
-                                slideInHorizontally { it } togetherWith
-                                    slideOutHorizontally { -it / 2 } + scaleOut(targetScale = 0.7f) + fadeOut()
-                            }
-                        },
-                        popTransitionSpec = {
-                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
-                                slideOutHorizontally { it }
+                    …209 tokens truncated… { it }
                         },
                         predictivePopTransitionSpec = {
                             slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
@@ -503,6 +495,7 @@ class RouteActivity : ComponentActivity() {
                             entry<Screen.SettingSearchDetail> { key -> SettingSearchDetailPage(Uuid.parse(key.serviceId)) }
                             entry<Screen.SettingSpeech> { SettingSpeechPage() }
                             entry<Screen.SettingMcp> { SettingMcpPage() }
+                            entry<Screen.SettingMemory> { SettingMemoryPage() }
                             entry<Screen.SettingDonate> { SettingDonatePage() }
                             entry<Screen.SettingFiles> { SettingFilesPage() }
                             entry<Screen.SettingWeb> { SettingWebPage() }
@@ -689,6 +682,7 @@ sealed interface Screen : NavKey {
     @Serializable data class SettingSearchDetail(val serviceId: String) : Screen
     @Serializable data object SettingSpeech : Screen
     @Serializable data object SettingMcp : Screen
+    @Serializable data object SettingMemory : Screen
     @Serializable data object SettingDonate : Screen
     @Serializable data object SettingFiles : Screen
     @Serializable data object SettingWeb : Screen
@@ -730,3 +724,4 @@ sealed interface Screen : NavKey {
     @Serializable data class MiniApp(val url: String, val title: String?) : Screen
     @Serializable data class Legal(val titleRes: Int, val contentRes: Int) : Screen
 }
+
