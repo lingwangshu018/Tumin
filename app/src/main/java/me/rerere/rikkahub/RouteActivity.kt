@@ -176,6 +176,7 @@ import me.rerere.rikkahub.ui.pages.stats.StatsPage
 import me.rerere.rikkahub.ui.pages.translator.TranslatorPage
  import me.rerere.rikkahub.ui.pages.voice.IncomingCallPage
  import me.rerere.rikkahub.ui.pages.voice.VoiceCallPage
+import me.rerere.rikkahub.ui.pages.voice.VideoCallPage
 import me.rerere.rikkahub.service.VoiceCallService
 import me.rerere.rikkahub.ui.pages.webview.WebViewPage
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
@@ -576,6 +577,7 @@ class RouteActivity : ComponentActivity() {
                             entry<Screen.MemoryBank> { MemoryBankPage(onBack = { backStack.removeLastOrNull() }) }
                             entry<Screen.EmojiPicker> { EmojiPickerPage(onBack = { backStack.removeLastOrNull() }) }
                             entry<Screen.VoiceCall> { key -> VoiceCallPage(conversationId = Uuid.parse(key.conversationId), onBack = { backStack.removeLastOrNull() }) }
+                            entry<Screen.VideoCall> { key -> VideoCallPage(conversationId = Uuid.parse(key.conversationId), onBack = { backStack.removeLastOrNull() }) }
                             entry<Screen.IncomingCall> { key ->
                                 val conversationRepo = koinInject<ConversationRepository>()
                                 val chatService = koinInject<ChatService>()
@@ -727,6 +729,7 @@ sealed interface Screen : NavKey {
     @Serializable data object EmojiPicker : Screen
     @Serializable data object ExternalMemories : Screen
     @Serializable data class VoiceCall(val conversationId: String) : Screen
+    @Serializable data class VideoCall(val conversationId: String) : Screen
     @Serializable data class IncomingCall(val conversationId: String) : Screen
     @Serializable data object MiniAppManager : Screen
     @Serializable data class MiniAppEdit(val id: String?) : Screen
