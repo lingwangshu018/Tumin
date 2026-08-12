@@ -44,7 +44,7 @@ import java.text.DateFormat
 import java.util.Date
 
 private enum class MemoryStrategy(val label: String) {
-    NATURAL("鑷劧锛堟帹鑽愶級"), SAVER("鐪?Token"), STRONG("寮鸿蹇?), CUSTOM("鑷畾涔?)
+    NATURAL("自然（推荐）"), SAVER("省 Token"), STRONG("强记忆"), CUSTOM("自定义")
 }
 
 @Composable
@@ -71,23 +71,23 @@ fun SettingMemoryPage(vm: SettingVM = koinViewModel()) {
     if (confirmClear && assistant != null) {
         AlertDialog(
             onDismissRequest = { confirmClear = false },
-            title = { Text("娓呯┖杩戞湡鐢熸椿娴侊紵") },
-            text = { Text("鍙細娓呴櫎姝よ鑹茬殑璺ㄧ獥鍙ｈ繎鏈熷唴瀹逛笌鍘嬬缉鎽樿锛屼笉浼氬垹闄ゆ牳蹇冭韩浠藉拰闀挎湡璁板繂銆?) },
+            title = { Text("清空近期生活流？") },
+            text = { Text("只会清除此角色的跨窗口近期内容与压缩摘要，不会删除核心身份和长期记忆。") },
             confirmButton = {
                 TextButton(onClick = {
                     store.clearAssistant(assistant.id.toString())
                     recentRefresh++
                     confirmClear = false
-                }) { Text("娓呯┖") }
+                }) { Text("清空") }
             },
-            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("鍙栨秷") } },
+            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("取消") } },
         )
     }
 
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
-                title = { Text("璁板繂") },
+                title = { Text("记忆") },
                 navigationIcon = { BackButton() },
                 scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors,
@@ -97,7 +97,7 @@ fun SettingMemoryPage(vm: SettingVM = koinViewModel()) {
         containerColor = CustomColors.topBarColors.containerColor,
     ) { padding ->
         if (assistant == null) {
-            Column(Modifier.padding(padding).padding(24.dp)) { Text("璇峰厛鍒涘缓涓€涓鑹层€?) }
+            Column(Modifier.padding(padding).padding(24.dp)) { Text("请先创建一个角色。") }
             return@Scaffold
         }
         val strategy = detectStrategy(assistant)
@@ -108,23 +108,23 @@ fun SettingMemoryPage(vm: SettingVM = koinViewModel()) {
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item {
-                Text("璁板繂鎺у埗涓績", style = MaterialTheme.typography.headlineSmall)
-                Text("AI 甯綘璁帮紝浣嗘渶缁堣В閲婃潈濮嬬粓鍦ㄤ綘鎵嬮噷銆?, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("记忆控制中心", style = MaterialTheme.typography.headlineSmall)
+                Text("AI 帮你记，但最终解释权始终在你手里。", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             item {
                 Select(
                     options = assistants,
                     selectedOption = assistant,
                     onOptionSelected = { selectedId = it.id.toString() },
-                    optionToString = { it.name.ifBlank { "鏈懡鍚嶈鑹? } },
+                    optionToString = { it.name.ifBlank { "未命名角色" } },
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
             item {
-                CardGroup(title = { Text("璁板繂绛栫暐") }) {
+                CardGroup(title = { Text("记忆策略") }) {
                     item(
                         headlineContent = { Text(strategy.label) },
-                        supportingContent = { Text("鑷劧锛氫笁灞傚钩琛★紱鐪?Token锛氭洿鏃╁帇缂┿€佹洿灏戝彫鍥烇紱寮鸿蹇嗭細淇濈暀鍜屽彫鍥炴洿澶氥€?) },
+                        supportingContent = { Text("自然：三层平衡；省 Token：更早压缩、更少召回；强记忆：保留和召回更多。") },
                         trailingContent = {
                             Select(
                                 options = MemoryStrategy.entries,
@@ -137,10 +137,10 @@ fun SettingMemoryPage(vm: SettingVM = koinViewModel()) {
                 }
             }
             item {
-                CardGroup(title = { Text("鏍稿績韬唤 路 甯搁┗") }) {
+                CardGroup(title = { Text("核心身份 · 常驻") }) {
                     item(
-                        headlineContent = { Text("瑙掕壊鏍稿績韬唤") },
-                        supportingContent = { Text("姣忚疆甯搁┗锛屽彧鏈変綘鑳藉湪杩欓噷淇敼銆備繚瀛樺悗浼氫紭鍏堜簬鑷姩璁板繂銆?) },
+                        headlineContent = { Text("角色核心身份") },
+                        supportingContent = { Text("每轮常驻，只有你能在这里修改。保存后会优先于自动记忆。") },
                     )
                 }
                 OutlinedTextField(
@@ -148,19 +148,19 @@ fun SettingMemoryPage(vm: SettingVM = koinViewModel()) {
                     onValueChange = { identityDraft = it },
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     minLines = 5,
-                    label = { Text("韬唤銆佸叧绯汇€侀噸瑕佺害瀹氫笌涓嶅彲杩濊儗鐨勫亸濂?) },
+                    label = { Text("身份、关系、重要约定与不可违背的偏好") },
                 )
                 Button(
                     onClick = { updateAssistant { it.copy(systemPrompt = identityDraft.trim()) } },
                     enabled = identityDraft.trim() != assistant.systemPrompt,
                     modifier = Modifier.padding(top = 8.dp),
-                ) { Text("淇濆瓨鏍稿績韬唤") }
+                ) { Text("保存核心身份") }
             }
             item {
-                CardGroup(title = { Text("杩戞湡鐢熸椿娴?路 澧為噺娉ㄥ叆") }) {
+                CardGroup(title = { Text("近期生活流 · 增量注入") }) {
                     item(
-                        headlineContent = { Text("璺ㄧ獥鍙ｈ繎鏈熻蹇?) },
-                        supportingContent = { Text("鏈帇缂╁熬宸翠細鐩存帴娉ㄥ叆锛屽洜姝ゅ垰鍙戠敓鐨勫唴瀹逛笉浼氱瓑寰呮憳瑕併€?) },
+                        headlineContent = { Text("跨窗口近期记忆") },
+                        supportingContent = { Text("未压缩尾巴会直接注入，因此刚发生的内容不会等待摘要。") },
                         trailingContent = {
                             Switch(
                                 checked = assistant.enableCrossWindowMemory,
@@ -169,8 +169,8 @@ fun SettingMemoryPage(vm: SettingVM = koinViewModel()) {
                         },
                     )
                     item(
-                        headlineContent = { Text("鍚庡彴鑷姩鍘嬬缉") },
-                        supportingContent = { Text("鍙帇鐢ㄦ埛涓庡姪鎵嬫鏂囷紝涓嶅彂閫佸伐鍏疯皟鐢ㄣ€佹帹鐞嗘垨鎶€鏈瓧娈点€?) },
+                        headlineContent = { Text("后台自动压缩") },
+                        supportingContent = { Text("只压用户与助手正文，不发送工具调用、推理或技术字段。") },
                         trailingContent = {
                             Switch(
                                 checked = assistant.enableCrossWindowMemoryCompression,
@@ -180,7 +180,7 @@ fun SettingMemoryPage(vm: SettingVM = koinViewModel()) {
                     )
                 }
                 if (recent.isEmpty()) {
-                    Text("杩樻病鏈夎繎鏈熺敓娲绘祦銆傚紑濮嬭亰澶╁悗浼氭寜瑙掕壊鑷姩璁板綍銆?, modifier = Modifier.padding(12.dp))
+                    Text("还没有近期生活流。开始聊天后会按角色自动记录。", modifier = Modifier.padding(12.dp))
                 } else {
                     recent.take(8).forEach { entry ->
                         Card(
@@ -190,7 +190,7 @@ fun SettingMemoryPage(vm: SettingVM = koinViewModel()) {
                             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(entry.text, maxLines = 4)
                                 Text(
-                                    "涓轰粈涔?TA 璁板緱锛氭潵婧愪簬鑱婂ぉ 路 ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(entry.timestamp))} 路 杩戞湡鐢熸椿娴?,
+                                    "为什么 TA 记得：来源于聊天 · ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(entry.timestamp))} · 近期生活流",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -198,17 +198,17 @@ fun SettingMemoryPage(vm: SettingVM = koinViewModel()) {
                         }
                     }
                 }
-                TextButton(onClick = { confirmClear = true }, enabled = recent.isNotEmpty()) { Text("娓呯┖姝よ鑹茬殑杩戞湡鐢熸椿娴?) }
+                TextButton(onClick = { confirmClear = true }, enabled = recent.isNotEmpty()) { Text("清空此角色的近期生活流") }
             }
             item {
-                CardGroup(title = { Text("闀挎湡璁板繂 路 鐩稿叧鍙洖") }) {
+                CardGroup(title = { Text("长期记忆 · 相关召回") }) {
                     item(
                         onClick = { nav.navigate(Screen.AssistantMemory(assistant.id.toString())) },
-                        headlineContent = { Text("绠＄悊闀挎湡璁板繂") },
-                        supportingContent = { Text("鏂板銆佷慨鏀规垨鍒犻櫎璁板繂锛涗笁灞傛ā寮忎笅鍙彫鍥炰笌褰撳墠鑱婂ぉ鐩稿叧鐨勫唴瀹广€?) },
+                        headlineContent = { Text("管理长期记忆") },
+                        supportingContent = { Text("新增、修改或删除记忆；三层模式下只召回与当前聊天相关的内容。") },
                     )
                     item(
-                        headlineContent = { Text("鍚敤闀挎湡璁板繂") },
+                        headlineContent = { Text("启用长期记忆") },
                         trailingContent = {
                             Switch(
                                 checked = assistant.enableMemory,
@@ -219,10 +219,10 @@ fun SettingMemoryPage(vm: SettingVM = koinViewModel()) {
                 }
             }
             item {
-                CardGroup(title = { Text("楂樼骇璁剧疆") }) {
+                CardGroup(title = { Text("高级设置") }) {
                     item(
-                        headlineContent = { Text("涓夊眰璁板繂") },
-                        supportingContent = { Text("鏍稿績甯搁┗ + 杩戞湡澧為噺 + 闀挎湡鐩稿叧鍙洖") },
+                        headlineContent = { Text("三层记忆") },
+                        supportingContent = { Text("核心常驻 + 近期增量 + 长期相关召回") },
                         trailingContent = {
                             Switch(
                                 checked = assistant.enableThreeLayerMemory,
@@ -231,20 +231,20 @@ fun SettingMemoryPage(vm: SettingVM = koinViewModel()) {
                         },
                     )
                     item(
-                        headlineContent = { Text("鍘嬬缉闃堝€?) },
-                        supportingContent = { Text("${assistant.crossWindowMemoryCompressionThresholdChars} 瀛楃") },
+                        headlineContent = { Text("压缩阈值") },
+                        supportingContent = { Text("${assistant.crossWindowMemoryCompressionThresholdChars} 字符") },
                     )
                     item(
-                        headlineContent = { Text("鏈帇缂╁熬宸?) },
-                        supportingContent = { Text("淇濈暀 ${assistant.crossWindowMemoryTailEntries} 鏉?) },
+                        headlineContent = { Text("未压缩尾巴") },
+                        supportingContent = { Text("保留 ${assistant.crossWindowMemoryTailEntries} 条") },
                     )
                     item(
-                        headlineContent = { Text("闀挎湡鍙洖") },
-                        supportingContent = { Text("鏈€澶?${assistant.longTermMemoryRecallCount} 鏉?/ ${assistant.longTermMemoryMaxChars} 瀛楃") },
+                        headlineContent = { Text("长期召回") },
+                        supportingContent = { Text("最多 ${assistant.longTermMemoryRecallCount} 条 / ${assistant.longTermMemoryMaxChars} 字符") },
                     )
                     item(
-                        headlineContent = { Text("Recent Chats Reference 鍥為€€") },
-                        supportingContent = { Text("浠呭湪璺ㄧ獥鐢熸椿娴佸叧闂椂鎵嶄娇鐢紝閬垮厤姣忚疆閲嶅濉炴渶杩戣亰澶┿€?) },
+                        headlineContent = { Text("Recent Chats Reference 回退") },
+                        supportingContent = { Text("仅在跨窗生活流关闭时才使用，避免每轮重复塞最近聊天。") },
                         trailingContent = {
                             Switch(
                                 checked = assistant.useRecentChatsAsFallback,
@@ -271,4 +271,3 @@ private fun applyStrategy(a: Assistant, strategy: MemoryStrategy): Assistant = w
     MemoryStrategy.STRONG -> a.copy(enableThreeLayerMemory = true, enableCrossWindowMemory = true, enableCrossWindowMemoryCompression = true, crossWindowMemoryCompressionThresholdChars = 20000, crossWindowMemoryTailEntries = 24, longTermMemoryRecallCount = 10, longTermMemoryMaxChars = 5000)
     MemoryStrategy.CUSTOM -> a
 }
-
