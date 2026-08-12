@@ -13,12 +13,15 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -73,6 +76,7 @@ private const val TAG = "GenerationHandler"
 // animateContentSize 的尺寸补间动画被不断打断重启），表现为打字机效果的"抖动/掉帧"。
 // 这里把推送频率限制在这个间隔以内，肉眼完全感知不到延迟，但能大幅降低重组频率。
 private const val STREAM_UI_THROTTLE_MS = 50L
+private val CROSS_WINDOW_COMPRESSION_SCOPE = CoroutineScope(SupervisorJob() + Dispatchers.IO)
  
 @Serializable
 sealed interface GenerationChunk {
@@ -125,7 +129,7 @@ class GenerationHandler(
                     conversationId = conversationId,
                     messageId = userMessage.id.toString(),
                     role = "user",
-                    text = userMessage.toText(),
+                    text = userMessage.visibleBodyText(),
                 )
             }
             crossWindowMemoryStore.consumeForeignDelta(
@@ -412,7 +416,14 @@ class GenerationHandler(
                     conversationId = conversationId,
                     messageId = assistantMessage.id.toString(),
                     role = "assistant",
-                    text = assistantMessage.toText(),
+                    text = assistantMessage.visibleBodyText(),
+                )
+            }
+            if (assistant.enableCrossWindowMemoryCompression) {
+                launchCrossWindowCompression(
+                    store = crossWindowMemoryStore,
+                    assistant = assistant,
+                    settings = settings,
                 )
             }
         }
@@ -778,7 +789,59 @@ class GenerationHandler(
             }
         }
     }.flowOn(Dispatchers.IO)
+
+    private fun launchCrossWindowCompression(
+        store: CrossWindowMemoryStore,
+        assistant: Assistant,
+        settings: Settings,
+    ) {
+        val work = store.claimCompression(
+            assistantId = assistant.id.toString(),
+            thresholdChars = assistant.crossWindowMemoryCompressionThresholdChars,
+            tailEntries = assistant.crossWindowMemoryTailEntries,
+        ) ?: return
+
+        CROSS_WINDOW_COMPRESSION_SCOPE.launch {
+            runCatching {
+                val compressionModel = settings.providers.findModelById(settings.compressModelId)
+                    ?: assistant.chatModelId?.let { settings.providers.findModelById(it) }
+                    ?: error("No model available for cross-window memory compression")
+                val compressionProvider = compressionModel.findProvider(settings.providers)
+                    ?: error("Compression provider not found")
+                val prompt = buildString {
+                    appendLine("Compress this continuous relationship context into a concise factual memory.")
+                    appendLine("Keep decisions, commitments, preferences, emotions, and unresolved threads.")
+                    appendLine("Use the source language. Do not mention compression, logs, tools, reasoning, or chat windows.")
+                    appendLine("Output only the memory summary.")
+                    appendLine()
+                    append(work.plainText())
+                }
+                val result = providerManager.getProviderByType(compressionProvider).generateText(
+                    providerSetting = compressionProvider,
+                    messages = listOf(UIMessage.user(prompt)),
+                    params = TextGenerationParams(
+                        model = compressionModel,
+                        reasoningLevel = ReasoningLevel.OFF,
+                    ),
+                )
+                result.choices.firstOrNull()?.message?.visibleBodyText()?.trim()
+                    ?.takeIf { it.isNotBlank() }
+                    ?: error("Compression model returned no visible text")
+            }.onSuccess { summary ->
+                store.completeCompression(work, summary)
+                Log.d(TAG, "Cross-window memory compressed through ${work.throughEntryId}")
+            }.onFailure { error ->
+                store.failCompression(work)
+                Log.w(TAG, "Cross-window memory compression failed; raw tail remains available", error)
+            }
+        }
+    }
 }
+
+internal fun UIMessage.visibleBodyText(): String = parts
+    .filterIsInstance<UIMessagePart.Text>()
+    .joinToString("\n") { it.text }
+    .trim()
  
 /**
  * 把原始 Flow 的高频发射节流成"每 periodMillis 毫秒最多发一次最新值"。
@@ -825,4 +888,3 @@ private fun buildCodeBlockPrompt(): String = buildString {
     appendLine("   - The `edits` mode applies search/replace to the files from your previous `write_files` call. Files not mentioned in `edits` keep their content unchanged.")
     appendLine("   - Always use actual filenames (e.g. `MainActivity.kt`) as code block language tags, not just language names (e.g. `kotlin`).")
 }
- 
