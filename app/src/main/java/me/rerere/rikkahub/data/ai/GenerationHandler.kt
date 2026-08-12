@@ -58,6 +58,7 @@ import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
+import me.rerere.rikkahub.data.memory.CrossWindowMemoryStore
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.utils.applyPlaceholders
@@ -113,6 +114,27 @@ class GenerationHandler(
                 part is UIMessagePart.Tool && (part.toolName.isBlank() || part.toolCallId.isBlank())
             })
         }.filterNot { it.parts.isEmpty() }
+
+        // Cross-window memory v1: log the current user turn, then consume only unseen
+        // events from other windows of the same assistant. No model call is used here.
+        val crossWindowMemoryStore = CrossWindowMemoryStore(context)
+        val crossWindowMemoryPrompt = if (assistant.enableCrossWindowMemory && !conversationId.isNullOrBlank()) {
+            messages.lastOrNull { it.role == MessageRole.USER }?.let { userMessage ->
+                crossWindowMemoryStore.append(
+                    assistantId = assistant.id.toString(),
+                    conversationId = conversationId,
+                    messageId = userMessage.id.toString(),
+                    role = "user",
+                    text = userMessage.toText(),
+                )
+            }
+            crossWindowMemoryStore.consumeForeignDelta(
+                assistantId = assistant.id.toString(),
+                conversationId = conversationId,
+            ).prompt
+        } else {
+            ""
+        }
 
         val companionHardRouteToolNames = setOf(
             "read_couple_space",
@@ -184,6 +206,7 @@ class GenerationHandler(
                     processingStatus = processingStatus,
                     conversationSystemPrompt = conversationSystemPrompt,
                     workspaceCwd = workspaceCwd,
+                    crossWindowMemoryPrompt = crossWindowMemoryPrompt,
                 )
                 messages = messages.visualTransforms(
                     transformers = outputTransformers,
@@ -380,6 +403,19 @@ class GenerationHandler(
                 )
             )
         }
+
+        // Persist the final visible assistant reply once the whole generation/tool loop finishes.
+        if (assistant.enableCrossWindowMemory && !conversationId.isNullOrBlank()) {
+            messages.lastOrNull { it.role == MessageRole.ASSISTANT && it.toText().isNotBlank() }?.let { assistantMessage ->
+                crossWindowMemoryStore.append(
+                    assistantId = assistant.id.toString(),
+                    conversationId = conversationId,
+                    messageId = assistantMessage.id.toString(),
+                    role = "assistant",
+                    text = assistantMessage.toText(),
+                )
+            }
+        }
  
     }.throttleLatest(STREAM_UI_THROTTLE_MS)
         .flowOn(Dispatchers.IO)
@@ -400,6 +436,7 @@ class GenerationHandler(
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
         conversationSystemPrompt: String? = null,
         workspaceCwd: String? = null,
+        crossWindowMemoryPrompt: String = "",
     ) {
         val internalMessages = buildList {
             val system = buildString {
@@ -518,6 +555,12 @@ class GenerationHandler(
                 if (assistant.enableRecentChatsReference) {
                     appendLine()
                     append(buildRecentChatsPrompt(assistant, conversationRepo))
+                }
+
+                if (crossWindowMemoryPrompt.isNotBlank()) {
+                    appendLine()
+                    appendLine()
+                    append(crossWindowMemoryPrompt)
                 }
  
                 // 代码文件命名和ZIP打包功能说明
