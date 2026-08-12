@@ -5,6 +5,15 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.media.AudioManager
+import android.hardware.camera2.CameraCaptureSession
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraDevice
+import android.hardware.camera2.CameraManager
+import android.hardware.camera2.CaptureRequest
+import android.os.Handler
+import android.os.HandlerThread
+import android.view.Surface
+import android.view.TextureView
 import android.os.IBinder
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -17,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -136,10 +146,12 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
                 }
             }
             Spacer(Modifier.weight(1f))
-            if (cameraEnabled) {
-                Surface(color = Color.Black.copy(.45f), shape = RoundedCornerShape(18.dp), modifier = Modifier.align(Alignment.End)) {
-                    Text("Front camera enabled", color = Color.White, modifier = Modifier.padding(horizontal = 18.dp, vertical = 28.dp))
-                }
+            if (cameraEnabled && cameraPermission.allRequiredPermissionsGranted) {
+                FrontCameraPreview(
+                    modifier = Modifier
+                        .align(Alignment.End)
+                        .size(width = 120.dp, height = 168.dp)
+                )
             }
             Row(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
                 CallButton(if (uiState.isMuted) HugeIcons.MicOff01 else HugeIcons.Mic01, "Mute") { service?.toggleMute() }
@@ -156,6 +168,93 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
                     service?.endCall(); VoiceCallService.stop(context); onBack()
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun FrontCameraPreview(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val textureView = remember { TextureView(context) }
+
+    AndroidView(
+        factory = { textureView },
+        modifier = modifier,
+    )
+
+    DisposableEffect(textureView) {
+        val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+        val cameraThread = HandlerThread("story-video-camera").apply { start() }
+        val cameraHandler = Handler(cameraThread.looper)
+        var cameraDevice: CameraDevice? = null
+        var captureSession: CameraCaptureSession? = null
+        var previewSurface: Surface? = null
+
+        fun closeCamera() {
+            runCatching { captureSession?.close() }
+            runCatching { cameraDevice?.close() }
+            runCatching { previewSurface?.release() }
+            captureSession = null
+            cameraDevice = null
+            previewSurface = null
+        }
+
+        fun openCamera() {
+            if (!textureView.isAvailable) return
+            val cameraId = cameraManager.cameraIdList.firstOrNull { id ->
+                cameraManager.getCameraCharacteristics(id)
+                    .get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
+            } ?: return
+            try {
+                cameraManager.openCamera(cameraId, object : CameraDevice.StateCallback() {
+                    override fun onOpened(camera: CameraDevice) {
+                        cameraDevice = camera
+                        val texture = textureView.surfaceTexture ?: return
+                        previewSurface = Surface(texture)
+                        val surface = previewSurface ?: return
+                        camera.createCaptureSession(
+                            listOf(surface),
+                            object : CameraCaptureSession.StateCallback() {
+                                override fun onConfigured(session: CameraCaptureSession) {
+                                    captureSession = session
+                                    val request = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
+                                        addTarget(surface)
+                                        set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
+                                    }.build()
+                                    runCatching { session.setRepeatingRequest(request, null, cameraHandler) }
+                                }
+
+                                override fun onConfigureFailed(session: CameraCaptureSession) = Unit
+                            },
+                            cameraHandler,
+                        )
+                    }
+
+                    override fun onDisconnected(camera: CameraDevice) = closeCamera()
+                    override fun onError(camera: CameraDevice, error: Int) = closeCamera()
+                }, cameraHandler)
+            } catch (_: SecurityException) {
+                closeCamera()
+            } catch (_: Exception) {
+                closeCamera()
+            }
+        }
+
+        textureView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+            override fun onSurfaceTextureAvailable(surface: android.graphics.SurfaceTexture, width: Int, height: Int) = openCamera()
+            override fun onSurfaceTextureSizeChanged(surface: android.graphics.SurfaceTexture, width: Int, height: Int) = Unit
+            override fun onSurfaceTextureDestroyed(surface: android.graphics.SurfaceTexture): Boolean {
+                closeCamera()
+                return true
+            }
+            override fun onSurfaceTextureUpdated(surface: android.graphics.SurfaceTexture) = Unit
+        }
+        if (textureView.isAvailable) openCamera()
+
+        onDispose {
+            textureView.surfaceTextureListener = null
+            closeCamera()
+            cameraThread.quitSafely()
         }
     }
 }
