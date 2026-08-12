@@ -15,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import me.rerere.rikkahub.data.model.RelationshipState
 import me.rerere.rikkahub.data.repository.CompanionStateRepository
 import org.koin.compose.koinInject
 import kotlin.uuid.Uuid
@@ -31,7 +32,7 @@ fun RelationshipFileSheet(
 ) {
     val repository: CompanionStateRepository = koinInject()
     val relationshipFlow = remember(assistantId) { PetRelationshipSource(repository).observe(assistantId) }
-    val relationship by relationshipFlow.collectAsState(initial = null)
+    val relationship by relationshipFlow.collectAsState(initial = RelationshipState().toPetRelationshipSnapshot())
 
     ModalBottomSheet(onDismissRequest = onDismissRequest) {
         Column(
@@ -39,33 +40,26 @@ fun RelationshipFileSheet(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("$characterName · Relationship File", style = MaterialTheme.typography.headlineSmall)
-
-            if (relationship == null) {
-                Text("正在读取关系记录……", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                return@Column
-            }
-
-            val snapshot = requireNotNull(relationship)
-            Text(snapshot.stage.label, style = MaterialTheme.typography.titleMedium)
-            Text(snapshot.summary, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(relationship.stage.label, style = MaterialTheme.typography.titleMedium)
+            Text(relationship.summary, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
             HorizontalDivider()
             Text("关系维度", style = MaterialTheme.typography.titleMedium)
-            RelationshipMetric("亲密", snapshot.intimacy)
-            RelationshipMetric("信任", snapshot.trust)
-            RelationshipMetric("吸引", snapshot.attraction)
-            RelationshipMetric("安全感", snapshot.security)
-            RelationshipMetric("冲突", snapshot.conflict)
+            RelationshipMetric("亲密", relationship.intimacy)
+            RelationshipMetric("信任", relationship.trust)
+            RelationshipMetric("吸引", relationship.attraction)
+            RelationshipMetric("安全感", relationship.security)
+            RelationshipMetric("冲突", relationship.conflict)
 
-            RelationshipSection("里程碑", snapshot.milestones)
+            RelationshipSection("里程碑", relationship.milestones)
             RelationshipSection(
                 "最近变化",
-                snapshot.recentChanges.map { change ->
+                relationship.recentChanges.map { change ->
                     if (change.effects.isEmpty()) change.summary
                     else "${change.summary} · ${change.effects.joinToString(" / ")}"
                 },
             )
-            RelationshipSection("未解决的问题", snapshot.unresolvedIssues)
+            RelationshipSection("未解决的问题", relationship.unresolvedIssues)
         }
     }
 }
