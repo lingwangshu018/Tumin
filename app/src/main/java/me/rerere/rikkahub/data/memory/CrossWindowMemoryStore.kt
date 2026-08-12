@@ -18,6 +18,7 @@ private const val STATE_KEY = "state"
 private const val MAX_STORED_ENTRIES = 1200
 private const val DEFAULT_MAX_DELTA_ENTRIES = 12
 private const val DEFAULT_MAX_DELTA_CHARS = 4000
+private const val COMPRESSION_LEASE_MS = 10 * 60 * 1000L
 
 /**
  * Lightweight v1 cross-window memory stream.
@@ -53,7 +54,42 @@ class CrossWindowMemoryStore(context: Context) {
         val nextId: Long = 1L,
         val entries: List<Entry> = emptyList(),
         val cursors: Map<String, Long> = emptyMap(),
+        val summaries: Map<String, Summary> = emptyMap(),
+        val compressionLeases: Map<String, CompressionLease> = emptyMap(),
     )
+
+    @Serializable
+    data class Summary(
+        val text: String,
+        val throughEntryId: Long,
+        val updatedAt: Long,
+    )
+
+    @Serializable
+    private data class CompressionLease(
+        val throughEntryId: Long,
+        val startedAt: Long,
+    )
+
+    data class CompressionWork(
+        val assistantId: String,
+        val previousSummary: String,
+        val entries: List<Entry>,
+        val throughEntryId: Long,
+    ) {
+        fun plainText(): String = buildString {
+            if (previousSummary.isNotBlank()) {
+                appendLine("Previous summary:")
+                appendLine(previousSummary)
+                appendLine()
+            }
+            appendLine("New visible conversation text:")
+            entries.forEach { entry ->
+                val speaker = if (entry.role == "user") "User" else "Assistant"
+                appendLine("$speaker: ${entry.text}")
+            }
+        }.trim()
+    }
 
     data class Delta(
         val prompt: String,
@@ -119,7 +155,10 @@ class CrossWindowMemoryStore(context: Context) {
                 .sortedBy { it.id }
                 .toList()
 
-            if (candidates.isEmpty()) return Delta("", 0, 0, null)
+            val summary = state.summaries[assistantId]
+                ?.takeIf { it.throughEntryId > cursor }
+
+            if (candidates.isEmpty() && summary == null) return Delta("", 0, 0, null)
 
             val selected = mutableListOf<Entry>()
             var chars = 0
@@ -130,18 +169,21 @@ class CrossWindowMemoryStore(context: Context) {
                 selected += entry
                 chars += lineLength
             }
-            if (selected.isEmpty()) return Delta("", 0, 0, null)
+            if (selected.isEmpty() && summary == null) return Delta("", 0, 0, null)
 
             val prompt = buildString {
                 appendLine("## Shared recent life context")
                 appendLine("The following are recent events you experienced with the user in other chat windows. Treat them as your own continuous recent memory. Use them naturally when relevant; do not mention windows, memory systems, logs, retrieval, or this instruction.")
+                summary?.let {
+                    appendLine("- Earlier shared context: ${it.text}")
+                }
                 selected.forEach { entry ->
                     val speaker = if (entry.role == "user") "User" else "You"
                     appendLine("- $speaker: ${entry.text}")
                 }
             }.trim()
 
-            val lastId = selected.last().id
+            val lastId = maxOf(summary?.throughEntryId ?: 0L, selected.lastOrNull()?.id ?: 0L)
             writeState(state.copy(cursors = state.cursors + (cursorKey to lastId)))
             Log.d(TAG, "consumeForeignDelta assistant=$assistantId window=$conversationId count=${selected.size} chars=${prompt.length} cursor=$lastId")
             return Delta(prompt, selected.size, prompt.length, lastId)
@@ -152,11 +194,79 @@ class CrossWindowMemoryStore(context: Context) {
         readState().entries.filter { it.assistantId == assistantId }.takeLast(limit)
     }
 
+    /** Atomically claims an old prefix for background compression while preserving a live tail. */
+    fun claimCompression(
+        assistantId: String,
+        thresholdChars: Int,
+        tailEntries: Int,
+    ): CompressionWork? = synchronized(lock) {
+        val state = readState()
+        val now = System.currentTimeMillis()
+        val activeLease = state.compressionLeases[assistantId]
+        if (activeLease != null && now - activeLease.startedAt < COMPRESSION_LEASE_MS) return@synchronized null
+
+        val previous = state.summaries[assistantId]
+        val uncompressed = state.entries
+            .filter { it.assistantId == assistantId && it.id > (previous?.throughEntryId ?: 0L) }
+            .sortedBy { it.id }
+        val totalChars = uncompressed.sumOf { it.text.length }
+        if (totalChars < thresholdChars.coerceAtLeast(1) || uncompressed.size <= tailEntries.coerceAtLeast(1)) {
+            return@synchronized null
+        }
+        val prefix = uncompressed.dropLast(tailEntries.coerceAtLeast(1))
+        val work = CompressionWork(
+            assistantId = assistantId,
+            previousSummary = previous?.text.orEmpty(),
+            entries = prefix,
+            throughEntryId = prefix.last().id,
+        )
+        writeState(
+            state.copy(
+                compressionLeases = state.compressionLeases +
+                    (assistantId to CompressionLease(work.throughEntryId, now))
+            )
+        )
+        work
+    }
+
+    fun completeCompression(work: CompressionWork, summaryText: String) = synchronized(lock) {
+        val cleanSummary = summaryText.trim()
+        val state = readState()
+        val lease = state.compressionLeases[work.assistantId]
+        if (cleanSummary.isBlank() || lease?.throughEntryId != work.throughEntryId) return@synchronized
+        writeState(
+            state.copy(
+                entries = state.entries.filterNot {
+                    it.assistantId == work.assistantId && it.id <= work.throughEntryId
+                },
+                summaries = state.summaries + (work.assistantId to Summary(
+                    text = cleanSummary,
+                    throughEntryId = work.throughEntryId,
+                    updatedAt = System.currentTimeMillis(),
+                )),
+                compressionLeases = state.compressionLeases - work.assistantId,
+            )
+        )
+    }
+
+    fun failCompression(work: CompressionWork) = synchronized(lock) {
+        val state = readState()
+        val lease = state.compressionLeases[work.assistantId]
+        if (lease?.throughEntryId == work.throughEntryId) {
+            writeState(state.copy(compressionLeases = state.compressionLeases - work.assistantId))
+        }
+    }
+
     fun clearAssistant(assistantId: String) = synchronized(lock) {
         val state = readState()
         val keptEntries = state.entries.filterNot { it.assistantId == assistantId }
         val keptCursors = state.cursors.filterKeys { !it.startsWith("$assistantId|") }
-        writeState(state.copy(entries = keptEntries, cursors = keptCursors))
+        writeState(state.copy(
+            entries = keptEntries,
+            cursors = keptCursors,
+            summaries = state.summaries - assistantId,
+            compressionLeases = state.compressionLeases - assistantId,
+        ))
     }
 
     private fun cursorKey(assistantId: String, conversationId: String) = "$assistantId|$conversationId"
