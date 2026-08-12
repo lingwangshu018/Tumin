@@ -1,7 +1,7 @@
 /*
- * 橘瓣 OrangeChat
- * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
- * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
+ * 姗樼摚 OrangeChat
+ * 琛嶇敓鑷?RikkaHub (https://github.com/rikkahub/rikkahub)锛屽師浣滆€?RE
+ * 鏈」鐩熀浜?GNU AGPL v3 寮€婧愶紝璇﹁鏍圭洰褰?LICENSE 鏂囦欢
  */
 
 package me.rerere.rikkahub.ui.pages.chat
@@ -58,6 +58,7 @@ import me.rerere.hugeicons.stroke.LeftToRightListBullet
 import me.rerere.hugeicons.stroke.Menu03
 import me.rerere.hugeicons.stroke.MessageAdd01
 import me.rerere.hugeicons.stroke.Voice
+import me.rerere.hugeicons.stroke.Video01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
@@ -295,8 +296,16 @@ private fun ChatPageContent(
                                     Screen.VoiceCall(conversation.id.toString())
                                 )
                                 else -> {
-                                    toaster.show("当前有通话进行中，请先挂断", type = ToastType.Warning)
+                                    toaster.show("褰撳墠鏈夐€氳瘽杩涜涓紝璇峰厛鎸傛柇", type = ToastType.Warning)
                                 }
+                            }
+                        },
+                        onVideoCall = {
+                            val activeId = VoiceCallService.activeConversationId.value
+                            if (activeId == null || activeId == conversation.id.toString()) {
+                                navController.navigate(Screen.VideoCall(conversation.id.toString()))
+                            } else {
+                                toaster.show("褰撳墠鏈夐€氳瘽杩涜涓紝璇峰厛鎸傛柇", type = ToastType.Warning)
                             }
                         },
                     )
@@ -321,7 +330,7 @@ private fun ChatPageContent(
                     },
                     onSendClick = {
                         if (currentChatModel == null) {
-                            toaster.show("请先选择模型", type = ToastType.Error)
+                            toaster.show("璇峰厛閫夋嫨妯″瀷", type = ToastType.Error)
                             return@ChatInput
                         }
                         if (inputState.isEditing()) {
@@ -340,7 +349,7 @@ private fun ChatPageContent(
                     },
                     onVoiceMessage = { url, duration, transcript ->
                         if (currentChatModel == null) {
-                            toaster.show("请先选择模型", type = ToastType.Error)
+                            toaster.show("璇峰厛閫夋嫨妯″瀷", type = ToastType.Error)
                             return@ChatInput
                         }
                         vm.handleMessageSend(
@@ -498,6 +507,7 @@ private fun TopBar(
     onNewChat: () -> Unit,
     onUpdateTitle: (String) -> Unit,
     onVoiceCall: () -> Unit,
+    onVideoCall: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
@@ -555,6 +565,9 @@ private fun TopBar(
             }
         },
         actions = {
+            IconButton(onClick = onVideoCall) {
+                Icon(HugeIcons.Video01, "Video Call")
+            }
             IconButton(
                 onClick = {
                     onVoiceCall()
