@@ -78,6 +78,7 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
     val cameraPermission = rememberPermissionState(PermissionCamera)
     var service by remember { mutableStateOf<VoiceCallService?>(null) }
     var cameraEnabled by remember { mutableStateOf(false) }
+    var cameraRequested by remember { mutableStateOf(false) }
     var speakerEnabled by remember { mutableStateOf(true) }
 
     val connection = remember {
@@ -97,6 +98,9 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
     }
     LaunchedEffect(Unit) {
         if (!audioPermission.allRequiredPermissionsGranted) audioPermission.requestPermissions()
+    }
+    LaunchedEffect(cameraPermission.allRequiredPermissionsGranted, cameraRequested) {
+        if (cameraRequested && cameraPermission.allRequiredPermissionsGranted) cameraEnabled = true
     }
     LaunchedEffect(audioPermission.allRequiredPermissionsGranted) {
         if (audioPermission.allRequiredPermissionsGranted && VoiceCallService.activeConversationId.value == null) {
@@ -156,8 +160,12 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
             Row(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
                 CallButton(if (uiState.isMuted) HugeIcons.MicOff01 else HugeIcons.Mic01, "Mute") { service?.toggleMute() }
                 CallButton(HugeIcons.Camera01, if (cameraEnabled) "Camera off" else "Front camera") {
-                    if (!cameraPermission.allRequiredPermissionsGranted) cameraPermission.requestPermissions()
-                    else cameraEnabled = !cameraEnabled
+                    if (!cameraPermission.allRequiredPermissionsGranted) {
+                        cameraRequested = true
+                        cameraPermission.requestPermissions()
+                    } else {
+                        cameraEnabled = !cameraEnabled
+                    }
                 }
                 CallButton(HugeIcons.VolumeHigh, "Speaker") {
                     speakerEnabled = !speakerEnabled
