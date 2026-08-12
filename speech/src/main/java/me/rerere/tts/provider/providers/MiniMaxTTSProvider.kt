@@ -56,20 +56,7 @@ class MiniMaxTTSProvider : TTSProvider<TTSProviderSetting.MiniMax> {
         providerSetting: TTSProviderSetting.MiniMax,
         request: TTSRequest
     ): Flow<AudioChunk> = flow {
-        val requestBody = buildJsonObject {
-            put("model", providerSetting.model)
-            put("text", request.text)
-            put("stream", true)
-            put("output_format", "hex")
-            put("stream_options", buildJsonObject {
-                put("exclude_aggregated_audio", true)
-            })
-            put("voice_setting", buildJsonObject {
-                put("voice_id", providerSetting.voiceId)
-                put("emotion", providerSetting.emotion)
-                put("speed", providerSetting.speed)
-            })
-        }
+        val requestBody = buildMiniMaxRequestBody(providerSetting, request.text)
 
         Log.i(TAG, "generateSpeech: $requestBody")
 
@@ -136,6 +123,26 @@ class MiniMaxTTSProvider : TTSProvider<TTSProviderSetting.MiniMax> {
             }
         }
     }
+}
+
+internal fun buildMiniMaxRequestBody(
+    providerSetting: TTSProviderSetting.MiniMax,
+    text: String,
+) = buildJsonObject {
+    put("model", providerSetting.model)
+    put("text", text)
+    put("stream", true)
+    put("output_format", "hex")
+    put("stream_options", buildJsonObject {
+        put("exclude_aggregated_audio", true)
+    })
+    put("voice_setting", buildJsonObject {
+        put("voice_id", providerSetting.voiceId)
+        put("speed", providerSetting.speed)
+        providerSetting.emotion.trim().takeIf { it.isNotEmpty() }?.let {
+            put("emotion", it)
+        }
+    })
 }
 
 private fun hexStringToBytes(hexString: String): ByteArray {
