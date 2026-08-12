@@ -13,26 +13,26 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.RelationshipState
 import me.rerere.rikkahub.data.repository.CompanionStateRepository
-import me.rerere.rikkahub.ui.components.ui.UIAvatar
+import me.rerere.rikkahub.ui.hooks.rememberSharedPreferenceBoolean
 import org.koin.compose.koinInject
 
 /**
- * First in-app pet surface backed by the selected assistant's read-only Relationship snapshot.
- *
- * Tapping the surface opens Relationship File. The surface does not receive any mutation API.
+ * Relationship-driven preview and control surface for the official Tumin bunny.
+ * Relationship remains read-only; this surface only controls presentation and visibility.
  */
 @Composable
 fun PetSurface(
@@ -46,6 +46,7 @@ fun PetSurface(
     )
     val presentation = remember(relationship) { relationship.toPetPresentation() }
     var showRelationshipFile by remember { mutableStateOf(false) }
+    var petEnabled by rememberSharedPreferenceBoolean("in_app_pet_enabled", false)
 
     Card(
         modifier = modifier
@@ -59,19 +60,19 @@ fun PetSurface(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 18.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(horizontal = 18.dp, vertical = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            UIAvatar(
-                name = assistant.name.ifBlank { "TA" },
-                value = assistant.avatar,
-                modifier = Modifier.size(76.dp),
+            OfficialBunnyPet(
+                presentation = presentation,
+                modifier = Modifier.size(112.dp),
+                onClick = { showRelationshipFile = true },
             )
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = assistant.name.ifBlank { "TA" },
+                    text = "兔眠兔 · ${assistant.name.ifBlank { "TA" }}",
                     style = MaterialTheme.typography.titleLarge,
                 )
                 Spacer(Modifier.height(4.dp))
@@ -80,20 +81,41 @@ fun PetSurface(
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(6.dp))
                 Text(
                     text = presentation.actionText,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.height(8.dp))
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("在 App 内显示桌宠", style = MaterialTheme.typography.titleSmall)
                 Text(
-                    text = presentation.interactionHint,
-                    style = MaterialTheme.typography.labelMedium,
+                    "开启后会在兔眠页面里陪着你，语音/视频通话时自动隐藏。",
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            Switch(
+                checked = petEnabled,
+                onCheckedChange = { petEnabled = it },
+            )
         }
+        Text(
+            text = presentation.interactionHint,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 
     if (showRelationshipFile) {
