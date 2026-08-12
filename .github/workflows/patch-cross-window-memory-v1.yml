@@ -20,7 +20,9 @@ jobs:
         run: python3 .github/scripts/patch_cross_window_memory_v1.py
 
       - name: Validate compile
-        run: ./gradlew :app:compileDebugKotlin --no-daemon
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:compileDebugKotlin --no-daemon
 
       - name: Commit sources
         run: |
