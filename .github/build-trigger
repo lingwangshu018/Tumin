@@ -1,4 +1,4 @@
-build: 2026-08-12T20:10+08:00
+build: 2026-08-12T22:00+08:00
 source: latest master
-revision: a49fcd3
-purpose: build v2.3.6 with three-layer cross-window memory
+revision: de68a7a
+purpose: build v2.3.7 with memory control center
