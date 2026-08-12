@@ -1,4 +1,4 @@
-/*
+﻿/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -357,6 +357,7 @@ private fun MiniMaxTTSConfiguration(
             onCheckedChange = { onValueChange(setting.copy(useCharacterStateEmotion = it)) }
         )
     }
+
     // API Key
     FormItem(
         label = { Text(stringResource(R.string.setting_tts_page_api_key)) },
@@ -501,7 +502,59 @@ private fun MiniMaxTTSConfiguration(
                     )
                 }
             }
-   …444 tokens truncated…der = { Text(stringResource(R.string.setting_tts_page_base_url_placeholder)) }
+        }
+    }
+
+    // Speed
+    FormItem(
+        label = { Text(stringResource(R.string.setting_tts_page_speed)) },
+        description = { Text(stringResource(R.string.setting_tts_page_speed_description)) }
+    ) {
+        OutlinedNumberInput(
+            value = setting.speed,
+            onValueChange = { newSpeed ->
+                if (newSpeed in 0.25f..4.0f) {
+                    onValueChange(setting.copy(speed = newSpeed))
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            label = stringResource(R.string.setting_tts_page_speed)
+        )
+    }
+}
+
+@Composable
+private fun GeminiTTSConfiguration(
+    setting: TTSProviderSetting.Gemini,
+    onValueChange: (TTSProviderSetting) -> Unit
+) {
+    // API Key
+    FormItem(
+        label = { Text(stringResource(R.string.setting_tts_page_api_key)) },
+        description = { Text(stringResource(R.string.setting_tts_page_api_key_description)) }
+    ) {
+        OutlinedTextField(
+            value = setting.apiKey,
+            onValueChange = { newApiKey ->
+                onValueChange(setting.copy(apiKey = newApiKey))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text(stringResource(R.string.setting_tts_page_api_key_placeholder_gemini)) },
+        )
+    }
+
+    // Base URL
+    FormItem(
+        label = { Text(stringResource(R.string.setting_tts_page_base_url)) },
+        description = { Text(stringResource(R.string.setting_tts_page_base_url_description)) }
+    ) {
+        OutlinedTextField(
+            value = setting.baseUrl,
+            onValueChange = { newBaseUrl ->
+                onValueChange(setting.copy(baseUrl = newBaseUrl))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text(stringResource(R.string.setting_tts_page_base_url_placeholder)) }
         )
     }
 
