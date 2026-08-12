@@ -1,4 +1,4 @@
-build: 2026-08-12T16:43+08:00
+build: 2026-08-12T20:10+08:00
 source: latest master
-revision: 45711d9
-purpose: build v2.3.5 after fragmented tool-call merge and incomplete-tool execution guard
+revision: a49fcd3
+purpose: build v2.3.6 with three-layer cross-window memory
