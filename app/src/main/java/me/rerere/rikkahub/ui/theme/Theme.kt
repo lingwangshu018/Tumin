@@ -10,6 +10,8 @@ import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MotionScheme
@@ -19,18 +21,24 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import kotlinx.serialization.Serializable
+import me.rerere.rikkahub.data.datastore.getCurrentAssistant
+import me.rerere.rikkahub.service.VoiceCallService
 import me.rerere.rikkahub.ui.components.ui.toComposeColor
 import me.rerere.rikkahub.ui.hooks.rememberAmoledDarkMode
 import me.rerere.rikkahub.ui.hooks.rememberColorMode
+import me.rerere.rikkahub.ui.hooks.rememberSharedPreferenceBoolean
 import me.rerere.rikkahub.ui.hooks.rememberUserSettingsState
+import me.rerere.rikkahub.ui.pet.InAppPetHost
 
 private val ExtendLightColors = lightExtendColors()
 private val ExtendDarkColors = darkExtendColors()
@@ -153,9 +161,23 @@ fun RikkahubTheme(
         MaterialExpressiveTheme(
             colorScheme = finalColorScheme,
             typography = Typography,
-            content = content,
             motionScheme = MotionScheme.expressive()
-        )
+        ) {
+            val petEnabled by rememberSharedPreferenceBoolean("in_app_pet_enabled", false)
+            val activeCall by VoiceCallService.activeConversationId.collectAsState()
+            val currentAssistant = settings.getCurrentAssistant()
+
+            Box(modifier = Modifier.fillMaxSize()) {
+                content()
+                if (petEnabled && currentAssistant != null && activeCall == null) {
+                    InAppPetHost(
+                        assistant = currentAssistant,
+                        visible = true,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            }
+        }
     }
 }
 
