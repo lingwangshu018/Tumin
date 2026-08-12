@@ -11,6 +11,7 @@ import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.repository.ConversationRepository
+import me.rerere.rikkahub.data.repository.CompanionStateRepository
 import me.rerere.rikkahub.data.repository.CoupleRepository
 import me.rerere.rikkahub.data.repository.FavoriteRepository
 import me.rerere.rikkahub.data.repository.FilesRepository
@@ -27,6 +28,7 @@ import org.koin.dsl.module
 import java.io.File
 
 val repositoryModule = module {
+    single { CompanionStateRepository(get()) }
     single { CoupleRepository(get()) }
     single {
         ConversationRepository(get(), get(), get(), get(), get(), get())

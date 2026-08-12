@@ -8,6 +8,7 @@ package me.rerere.rikkahub.ui.components.message
 
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,7 +20,11 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -35,11 +40,14 @@ import me.rerere.ai.ui.isEmptyUIMessage
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
+import me.rerere.rikkahub.data.repository.CompanionStateRepository
+import me.rerere.rikkahub.ui.components.companion.CharacterStateSheet
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.utils.toLocalString
 import java.io.File
+import org.koin.compose.koinInject
 
 @Composable
 private fun AvatarFrameOverlay(
@@ -131,6 +139,10 @@ fun ChatMessageAssistantAvatar(
     modifier: Modifier = Modifier,
 ) {
     val settings = LocalSettings.current
+    val companionRepository: CompanionStateRepository = koinInject()
+    val stateFlow = remember(assistant?.id) { assistant?.id?.let(companionRepository::observe) }
+    val companionState = stateFlow?.collectAsState()?.value
+    var showCharacterState by remember { mutableStateOf(false) }
     val showIcon = settings.displaySetting.showModelIcon
     val useAssistantAvatar = assistant?.useAssistantAvatar == true
     if (message.role == MessageRole.ASSISTANT && (model != null || useAssistantAvatar)) {
@@ -141,7 +153,10 @@ fun ChatMessageAssistantAvatar(
         ) {
             if (useAssistantAvatar) {
                 if (showIcon) {
-                    Box(contentAlignment = Alignment.Center) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.clickable { showCharacterState = true },
+                    ) {
                         UIAvatar(
                             name = assistant.name,
                             modifier = Modifier.size(32.dp),
@@ -212,5 +227,12 @@ fun ChatMessageAssistantAvatar(
                 }
             }
         }
+    }
+    if (showCharacterState && assistant != null && companionState != null) {
+        CharacterStateSheet(
+            characterName = assistant.name.ifBlank { "TA" },
+            state = companionState.character,
+            onDismissRequest = { showCharacterState = false },
+        )
     }
 }
