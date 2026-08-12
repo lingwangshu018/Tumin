@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -13,11 +13,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -45,6 +47,7 @@ import me.rerere.rikkahub.ui.components.companion.CharacterStateSheet
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.context.LocalSettings
+import me.rerere.rikkahub.ui.pet.PetSurface
 import me.rerere.rikkahub.utils.toLocalString
 import java.io.File
 import org.koin.compose.koinInject
@@ -143,6 +146,7 @@ fun ChatMessageAssistantAvatar(
     val stateFlow = remember(assistant?.id) { assistant?.id?.let(companionRepository::observe) }
     val companionState = stateFlow?.collectAsState()?.value
     var showCharacterState by remember { mutableStateOf(false) }
+    var showPet by remember { mutableStateOf(false) }
     val showIcon = settings.displaySetting.showModelIcon
     val useAssistantAvatar = assistant?.useAssistantAvatar == true
     if (message.role == MessageRole.ASSISTANT && (model != null || useAssistantAvatar)) {
@@ -233,6 +237,20 @@ fun ChatMessageAssistantAvatar(
             characterName = assistant.name.ifBlank { "TA" },
             state = companionState.character,
             onDismissRequest = { showCharacterState = false },
+            onOpenPet = {
+                showCharacterState = false
+                showPet = true
+            },
         )
+    }
+    if (showPet && assistant != null) {
+        ModalBottomSheet(onDismissRequest = { showPet = false }) {
+            PetSurface(
+                assistant = assistant,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+            )
+        }
     }
 }
