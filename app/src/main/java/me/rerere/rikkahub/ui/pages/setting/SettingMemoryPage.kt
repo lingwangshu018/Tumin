@@ -123,15 +123,22 @@ fun SettingMemoryPage(vm: SettingVM = koinViewModel()) {
             item {
                 CardGroup(title = { Text("记忆策略") }) {
                     item(
-                        headlineContent = { Text(strategy.label) },
-                        supportingContent = { Text("自然：三层平衡；省 Token：更早压缩、更少召回；强记忆：保留和召回更多。") },
-                        trailingContent = {
-                            Select(
-                                options = MemoryStrategy.entries,
-                                selectedOption = strategy,
-                                onOptionSelected = { chosen -> updateAssistant { applyStrategy(it, chosen) } },
-                                optionToString = { it.label },
-                            )
+                        headlineContent = {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text("选择记忆策略")
+                                Text(
+                                    "自然：三层平衡；省 Token：更早压缩、更少召回；强记忆：保留和召回更多。",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Select(
+                                    options = MemoryStrategy.entries,
+                                    selectedOption = strategy,
+                                    onOptionSelected = { chosen -> updateAssistant { applyStrategy(it, chosen) } },
+                                    optionToString = { it.label },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
                         },
                     )
                 }
