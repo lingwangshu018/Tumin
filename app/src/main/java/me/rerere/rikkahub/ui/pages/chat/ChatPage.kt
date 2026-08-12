@@ -325,12 +325,13 @@ private fun ChatPageContent(
                             return@ChatInput
                         }
                         if (inputState.isEditing()) {
-                            vm.handleMessageEdit(
-                                parts = inputState.getContents(),
-                                messageId = inputState.editingMessage!!,
-                            )
+                            if (inputState.regenerateAfterEdit) {
+                                vm.handleMessageEditAndRegenerate(inputState.getContents(), inputState.editingMessage!!)
+                            } else {
+                                vm.handleMessageEdit(inputState.getContents(), inputState.editingMessage!!)
+                            }
                         } else {
-                            vm.handleMessageSend(inputState.getContents())
+                            vm.handleMessageSend(inputState.getContents(), quote = inputState.quote)
                             scope.launch {
                                 chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
                             }
@@ -357,12 +358,17 @@ private fun ChatPageContent(
                     },
                     onLongSendClick = {
                         if (inputState.isEditing()) {
-                            vm.handleMessageEdit(
-                                parts = inputState.getContents(),
-                                messageId = inputState.editingMessage!!,
-                            )
+                            if (inputState.regenerateAfterEdit) {
+                                vm.handleMessageEditAndRegenerate(inputState.getContents(), inputState.editingMessage!!)
+                            } else {
+                                vm.handleMessageEdit(inputState.getContents(), inputState.editingMessage!!)
+                            }
                         } else {
-                            vm.handleMessageSend(content = inputState.getContents(), answer = false)
+                            vm.handleMessageSend(
+                                content = inputState.getContents(),
+                                answer = false,
+                                quote = inputState.quote,
+                            )
                             scope.launch {
                                 chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
                             }
@@ -415,9 +421,12 @@ private fun ChatPageContent(
                     vm.regenerateAtMessage(it)
                 },
                 onEdit = {
-                    inputState.editingMessage = it.id
-                    inputState.setContents(it.parts)
+                    inputState.startEditing(it.id, it.parts, regenerate = false)
                 },
+                onEditAndRegenerate = {
+                    inputState.startEditing(it.id, it.parts, regenerate = true)
+                },
+                onQuote = { inputState.quote = it },
                 onForkMessage = {
                     scope.launch {
                         val fork = vm.forkMessage(message = it)
@@ -608,3 +617,4 @@ private fun TopBar(
         )
     }
 }
+

@@ -33,7 +33,9 @@ data class UIMessage(
     val finishedAt: LocalDateTime? = null,
     val modelId: Uuid? = null,
     val usage: TokenUsage? = null,
-    val translation: String? = null
+    val translation: String? = null,
+    val quote: MessageQuote? = null,
+    val edited: Boolean = false,
 ) {
     private fun appendChunk(chunk: MessageChunk): UIMessage {
         val choice = chunk.choices.getOrNull(0)
@@ -227,6 +229,15 @@ data class UIMessage(
         )
     }
 }
+
+/** A stable, user-visible snapshot of the message being replied to. */
+@Serializable
+data class MessageQuote(
+    val messageId: Uuid,
+    val role: MessageRole,
+    val author: String,
+    val text: String,
+)
 
 /**
  * 处理MessageChunk合并
@@ -821,3 +832,4 @@ data class UIMessageChoice(
     val message: UIMessage?,
     val finishReason: String?
 )
+

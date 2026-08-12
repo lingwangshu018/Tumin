@@ -870,6 +870,28 @@ private fun TextInputRow(
             }
         }
 
+        state.quote?.let { quote ->
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("引用 ${quote.author}", style = MaterialTheme.typography.labelMedium)
+                        Text(quote.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    Icon(
+                        imageVector = HugeIcons.Cancel01,
+                        contentDescription = "取消引用",
+                        modifier = Modifier.clickable { state.quote = null },
+                    )
+                }
+            }
+        }
+
         var isFocused by remember { mutableStateOf(false) }
         var isFullScreen by remember { mutableStateOf(false) }
         val receiveContentListener = remember(

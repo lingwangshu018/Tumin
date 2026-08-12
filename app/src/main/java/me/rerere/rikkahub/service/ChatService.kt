@@ -56,6 +56,7 @@ import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.MessageQuote
 import me.rerere.ai.ui.canResumeToolExecution
 import me.rerere.ai.ui.finishPendingTools
 import me.rerere.ai.ui.finishReasoning
@@ -401,7 +402,12 @@ class ChatService(
 
     // ---- 发送消息 ----
 
-    fun sendMessage(conversationId: Uuid, content: List<UIMessagePart>, answer: Boolean = true) {
+    fun sendMessage(
+        conversationId: Uuid,
+        content: List<UIMessagePart>,
+        answer: Boolean = true,
+        quote: MessageQuote? = null,
+    ) {
         if (content.isEmptyInputMessage()) return
 
         val session = getOrCreateSession(conversationId)
@@ -433,6 +439,7 @@ class ChatService(
                         messageNodes = latestConversation.messageNodes + UIMessage(
                             role = MessageRole.USER,
                             parts = processedContent,
+                            quote = quote,
                         ).toMessageNode(),
                     )
                     saveConversation(conversationId, newConversation)
@@ -870,6 +877,12 @@ class ChatService(
                     } else {
                         it
                     }
+                }.map { message ->
+                    val quote = message.quote ?: return@map message
+                    val quoteContext = UIMessagePart.Text(
+                        "[Replying to ${quote.author}: ${quote.text.take(600)}]"
+                    )
+                    message.copy(parts = listOf(quoteContext) + message.parts, quote = null)
                 },
                 assistant = assistant,
                 conversationSystemPrompt = conversation.customSystemPrompt,
@@ -1608,34 +1621,38 @@ class ChatService(
         conversationId: Uuid,
         messageId: Uuid,
         parts: List<UIMessagePart>
-    ) {
-        if (parts.isEmptyInputMessage()) return
+    ): UIMessage? {
+        if (parts.isEmptyInputMessage()) return null
 
         val currentConversation = getConversationFlow(conversationId).value
         val settings = settingsStore.settingsFlow.first()
         val assistant = settings.getAssistantById(currentConversation.assistantId)
             ?: settings.getCurrentAssistant()
         val processedParts = preprocessUserInputParts(parts, assistant)
-        var edited = false
+        var editedMessage: UIMessage? = null
 
         val updatedNodes = currentConversation.messageNodes.map { node ->
             if (!node.messages.any { it.id == messageId }) {
                 return@map node
             }
-            edited = true
+            val original = node.messages.first { it.id == messageId }
+            val replacement = original.copy(
+                id = Uuid.random(),
+                parts = processedParts,
+                edited = true,
+            )
+            editedMessage = replacement
 
             node.copy(
-                messages = node.messages + UIMessage(
-                    role = node.role,
-                    parts = processedParts,
-                ),
+                messages = node.messages + replacement,
                 selectIndex = node.messages.size
             )
         }
 
-        if (!edited) return
+        if (editedMessage == null) return null
 
         saveConversation(conversationId, currentConversation.copy(messageNodes = updatedNodes))
+        return editedMessage
     }
 
     suspend fun forkConversationAtMessage(

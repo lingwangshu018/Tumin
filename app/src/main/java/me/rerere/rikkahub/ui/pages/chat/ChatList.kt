@@ -95,6 +95,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.MessageQuote
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findModelById
@@ -131,6 +132,8 @@ fun ChatList(
     onClearAllErrors: () -> Unit = {},
     onRegenerate: (UIMessage) -> Unit = {},
     onEdit: (UIMessage) -> Unit = {},
+    onEditAndRegenerate: (UIMessage) -> Unit = {},
+    onQuote: (MessageQuote) -> Unit = {},
     onForkMessage: (UIMessage) -> Unit = {},
     onDelete: (UIMessage) -> Unit = {},
     onUpdateMessage: (MessageNode) -> Unit = {},
@@ -173,6 +176,8 @@ fun ChatList(
                 onClearAllErrors = onClearAllErrors,
                 onRegenerate = onRegenerate,
                 onEdit = onEdit,
+                onEditAndRegenerate = onEditAndRegenerate,
+                onQuote = onQuote,
                 onForkMessage = onForkMessage,
                 onDelete = onDelete,
                 onUpdateMessage = onUpdateMessage,
@@ -203,6 +208,8 @@ private fun ChatListNormal(
     onClearAllErrors: () -> Unit,
     onRegenerate: (UIMessage) -> Unit,
     onEdit: (UIMessage) -> Unit,
+    onEditAndRegenerate: (UIMessage) -> Unit,
+    onQuote: (MessageQuote) -> Unit,
     onForkMessage: (UIMessage) -> Unit,
     onDelete: (UIMessage) -> Unit,
     onUpdateMessage: (MessageNode) -> Unit,
@@ -346,6 +353,10 @@ private fun ChatListNormal(
                             onEdit = {
                                 onEdit(node.currentMessage)
                             },
+                            onEditAndRegenerate = {
+                                onEditAndRegenerate(node.currentMessage)
+                            },
+                            onQuote = onQuote,
                             onFork = {
                                 onForkMessage(node.currentMessage)
                             },

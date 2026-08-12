@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -235,6 +235,8 @@ fun ChatMessageActionsSheet(
     model: Model?,
     onDelete: () -> Unit,
     onEdit: () -> Unit,
+    onEditAndRegenerate: () -> Unit,
+    onQuote: () -> Unit,
     onShare: () -> Unit,
     onFork: () -> Unit,
     onSelectAndCopy: () -> Unit,
@@ -254,6 +256,20 @@ fun ChatMessageActionsSheet(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            Card(
+                onClick = { onDismissRequest(); onQuote() },
+                shape = MaterialTheme.shapes.medium,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                ) {
+                    Icon(HugeIcons.Copy01, contentDescription = null, modifier = Modifier.padding(4.dp))
+                    Text("引用", style = MaterialTheme.typography.titleMedium)
+                }
+            }
+
             // Select and Copy
             Card(
                 onClick = {
@@ -337,6 +353,22 @@ fun ChatMessageActionsSheet(
                         text = stringResource(R.string.edit),
                         style = MaterialTheme.typography.titleMedium,
                     )
+                }
+            }
+
+            if (message.role == MessageRole.USER) {
+                Card(
+                    onClick = { onDismissRequest(); onEditAndRegenerate() },
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                    ) {
+                        Icon(HugeIcons.Refresh03, contentDescription = null, modifier = Modifier.padding(4.dp))
+                        Text("编辑并重试", style = MaterialTheme.typography.titleMedium)
+                    }
                 }
             }
 
@@ -465,3 +497,4 @@ fun ChatMessageActionsSheet(
         }
     }
 }
+

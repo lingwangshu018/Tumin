@@ -19,6 +19,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -85,6 +86,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.MessageQuote
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.isEmptyUIMessage
@@ -134,6 +136,8 @@ fun ChatMessage(
     onFork: () -> Unit,
     onRegenerate: () -> Unit,
     onEdit: () -> Unit,
+    onEditAndRegenerate: () -> Unit,
+    onQuote: (MessageQuote) -> Unit,
     onShare: () -> Unit,
     onDelete: () -> Unit,
     onUpdate: (MessageNode) -> Unit,
@@ -170,7 +174,12 @@ fun ChatMessage(
     val context = LocalContext.current
     val colorScheme = MaterialTheme.colorScheme
     Column(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = {},
+                onLongClick = { if (!loading) showActionsSheet = true },
+            ),
         horizontalAlignment = if (message.role == MessageRole.USER) Alignment.End else Alignment.Start,
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
@@ -197,6 +206,18 @@ fun ChatMessage(
             }
         }
         ProvideTextStyle(textStyle) {
+            message.quote?.let { quote ->
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier.padding(bottom = 4.dp),
+                ) {
+                    Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                        Text(quote.author, style = MaterialTheme.typography.labelMedium)
+                        Text(quote.text, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
             MessagePartsBlock(
                 assistant = assistant,
                 role = message.role,
@@ -247,12 +268,33 @@ fun ChatMessage(
  
         ProvideTextStyle(textStyle) {
             ChatMessageNerdLine(message = message)
+            if (message.edited) {
+                Text(
+                    text = "已编辑",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
     if (showActionsSheet) {
         ChatMessageActionsSheet(
             message = message,
             onEdit = onEdit,
+            onEditAndRegenerate = onEditAndRegenerate,
+            onQuote = {
+                onQuote(
+                    MessageQuote(
+                        messageId = message.id,
+                        role = message.role,
+                        author = if (message.role == MessageRole.USER) {
+                            settings.userNickname.ifBlank { "我" }
+                        } else assistant?.name?.ifBlank { "TA" } ?: "TA",
+                        text = message.parts.filterIsInstance<UIMessagePart.Text>()
+                            .joinToString("\n") { it.text }.take(600),
+                    )
+                )
+            },
             onDelete = onDelete,
             onShare = onShare,
             onFork = onFork,
