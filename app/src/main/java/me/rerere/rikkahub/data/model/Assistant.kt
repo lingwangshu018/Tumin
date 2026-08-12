@@ -33,6 +33,9 @@ data class Assistant(
     val useGlobalMemory: Boolean = false, // 使用全局共享记忆而非助手隔离记忆
     val enableRecentChatsReference: Boolean = false,
     val enableCrossWindowMemory: Boolean = true, // 同人格跨窗口近期生活流（v1）
+    val enableCrossWindowMemoryCompression: Boolean = true,
+    val crossWindowMemoryCompressionThresholdChars: Int = 12000,
+    val crossWindowMemoryTailEntries: Int = 16,
     val messageTemplate: String = "{{ message }}",
     val presetMessages: List<UIMessage> = emptyList(),
     val quickMessageIds: Set<Uuid> = emptySet(),
