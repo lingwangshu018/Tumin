@@ -1,4 +1,4 @@
-build: 2026-08-11T16:29+08:00
+build: 2026-08-12T16:43+08:00
 source: latest master
-revision: fb304ea
-purpose: build v2.3.5 with companion tools removed from ordinary chat surface
+revision: 45711d9
+purpose: build v2.3.5 after fragmented tool-call merge and incomplete-tool execution guard
