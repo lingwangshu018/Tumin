@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -53,6 +53,7 @@ class TtsController(
     private var currentProvider: TTSProviderSetting? = null
     private var workerJob: Job? = null
     private var isPaused = false
+    private var emotionHint: String? = null
 
     // 队列与缓存（基于稳定 ID）
     private val queue: java.util.concurrent.ConcurrentLinkedQueue<TtsChunk> = java.util.concurrent.ConcurrentLinkedQueue()
@@ -104,6 +105,10 @@ class TtsController(
         currentProvider = provider
         _isAvailable.update { provider != null }
         if (provider == null) stop()
+    }
+
+    fun setEmotionHint(emotion: String?) {
+        emotionHint = emotion?.trim()?.takeIf { it.isNotEmpty() }
     }
 
     /**
@@ -297,7 +302,7 @@ class TtsController(
         for (i in begin until endExclusive) {
             val chunk = allChunks.getOrNull(i) ?: continue
             cache.computeIfAbsent(chunk.id) {
-                scope.async(Dispatchers.IO) { synthesizer.synthesize(provider, chunk) }
+                scope.async(Dispatchers.IO) { synthesizer.synthesize(provider, chunk, emotionHint) }
             }
         }
         lastPrefetchedIndex = endExclusive - 1
@@ -305,7 +310,7 @@ class TtsController(
 
     private suspend fun awaitOrCreate(chunk: TtsChunk, provider: TTSProviderSetting): TTSResponse {
         val deferred = cache.computeIfAbsent(chunk.id) {
-            scope.async(Dispatchers.IO) { synthesizer.synthesize(provider, chunk) }
+            scope.async(Dispatchers.IO) { synthesizer.synthesize(provider, chunk, emotionHint) }
         }
         return try {
             deferred.await()
