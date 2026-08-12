@@ -7,8 +7,10 @@
 package me.rerere.rikkahub.ui.pages.setting
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.LargeFlexibleTopAppBar
@@ -25,13 +27,16 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.context.LocalCurrentAssistant
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.ui.pet.PetSurface
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 
 @Composable
 fun SettingDisplayPage() {
     val navController = LocalNavController.current
+    val currentAssistant = LocalCurrentAssistant.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
@@ -100,6 +105,23 @@ fun SettingDisplayPage() {
                         headlineContent = { Text("通知与TTS") },
                         supportingContent = { Text("消息生成通知、TTS 自动朗读") },
                     )
+                }
+            }
+
+            item("petPreview") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("桌宠", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "先预览当前 Character 的关系驱动表现；点击桌宠可查看 Relationship File。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    PetSurface(assistant = currentAssistant)
                 }
             }
         }
