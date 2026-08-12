@@ -583,6 +583,14 @@ class GenerationHandler(
             workspaceCwd = workspaceCwd,
         )
  
+        // Token observation only: measure payload shape without changing chat behavior.
+        val limitedHistoryForObservation = messages.limitContext(assistant.contextMessageSize)
+        val systemCharsForObservation = internalMessages.firstOrNull { it.role == MessageRole.SYSTEM }?.toText()?.length ?: 0
+        val historyCharsForObservation = limitedHistoryForObservation.sumOf { it.toText().length }
+        val pluginPromptCharsForObservation = pluginPromptInjections.sumOf { it.length }
+        val externalMemoryConfigCountForObservation = settings.externalMemories.count { it.enabled && it.id in assistant.externalMemoryIds }
+        Log.i("TokenObserver", "model=${model.id}, systemChars=$systemCharsForObservation, historyMessages=${limitedHistoryForObservation.size}, historyChars=$historyCharsForObservation, memoryItems=${if (assistant.enableMemory) memories.size else 0}, tools=${tools.size}, pluginPrompts=${pluginPromptInjections.size}, pluginPromptChars=$pluginPromptCharsForObservation, recentChats=${assistant.enableRecentChatsReference}, externalMemoryConfigs=$externalMemoryConfigCountForObservation, contextMessageSize=${assistant.contextMessageSize}")
+
         var messages: List<UIMessage> = messages
         val params = TextGenerationParams(
             model = model,
