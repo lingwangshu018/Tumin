@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -56,7 +56,7 @@ class MiniMaxTTSProvider : TTSProvider<TTSProviderSetting.MiniMax> {
         providerSetting: TTSProviderSetting.MiniMax,
         request: TTSRequest
     ): Flow<AudioChunk> = flow {
-        val requestBody = buildMiniMaxRequestBody(providerSetting, request.text)
+        val requestBody = buildMiniMaxRequestBody(providerSetting, request.text, request.emotionHint)
 
         Log.i(TAG, "generateSpeech: $requestBody")
 
@@ -128,6 +128,7 @@ class MiniMaxTTSProvider : TTSProvider<TTSProviderSetting.MiniMax> {
 internal fun buildMiniMaxRequestBody(
     providerSetting: TTSProviderSetting.MiniMax,
     text: String,
+    emotionHint: String? = null,
 ) = buildJsonObject {
     put("model", providerSetting.model)
     put("text", text)
@@ -139,10 +140,30 @@ internal fun buildMiniMaxRequestBody(
     put("voice_setting", buildJsonObject {
         put("voice_id", providerSetting.voiceId)
         put("speed", providerSetting.speed)
-        providerSetting.emotion.trim().takeIf { it.isNotEmpty() }?.let {
+        val effectiveEmotion = if (providerSetting.useCharacterStateEmotion) {
+            mapMiniMaxEmotion(emotionHint)
+        } else {
+            providerSetting.emotion.trim().takeIf { it.isNotEmpty() }
+        }
+        effectiveEmotion?.let {
             put("emotion", it)
         }
     })
+}
+
+internal fun mapMiniMaxEmotion(value: String?): String? {
+    val emotion = value?.trim()?.lowercase().orEmpty()
+    if (emotion.isBlank()) return null
+    return when {
+        listOf("happy", "joy", "开心", "高兴", "愉快", "甜蜜", "安心").any(emotion::contains) -> "happy"
+        listOf("sad", "伤心", "难过", "失落", "委屈").any(emotion::contains) -> "sad"
+        listOf("angry", "生气", "愤怒", "恼火", "吃醋", "嫉妒").any(emotion::contains) -> "angry"
+        listOf("fear", "害怕", "恐惧", "不安", "紧张", "焦虑").any(emotion::contains) -> "fearful"
+        listOf("disgust", "厌恶", "嫌弃", "反感").any(emotion::contains) -> "disgusted"
+        listOf("surprise", "惊讶", "惊喜", "意外").any(emotion::contains) -> "surprised"
+        listOf("calm", "平静", "冷静", "放松", "温柔").any(emotion::contains) -> "calm"
+        else -> null
+    }
 }
 
 private fun hexStringToBytes(hexString: String): ByteArray {
