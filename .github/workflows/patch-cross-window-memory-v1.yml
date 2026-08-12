@@ -50,6 +50,11 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add app/src/main/java/me/rerere/rikkahub/data/model/Assistant.kt app/src/main/java/me/rerere/rikkahub/data/ai/GenerationHandler.kt
+          # Gradle builds the Web UI and leaves generated files in the worktree. Keep the staged
+          # Kotlin patch, but restore/clean all unstaged generated artifacts before rebase/push.
+          git restore --worktree -- .
+          git clean -fd web/src/main/resources/static || true
+          git submodule foreach --recursive git reset --hard || true
           if git diff --cached --quiet; then
             echo 'No source changes needed'
           else
