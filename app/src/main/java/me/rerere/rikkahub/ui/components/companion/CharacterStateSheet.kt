@@ -20,7 +20,12 @@ import androidx.compose.ui.unit.dp
 import me.rerere.rikkahub.data.model.CharacterState
 
 @Composable
-fun CharacterStateSheet(characterName: String, state: CharacterState, onDismissRequest: () -> Unit) {
+fun CharacterStateSheet(
+    characterName: String,
+    state: CharacterState,
+    onDismissRequest: () -> Unit,
+    onOpenPet: (() -> Unit)? = null,
+) {
     var expanded by remember { mutableStateOf(false) }
     ModalBottomSheet(onDismissRequest = onDismissRequest) {
         Column(
@@ -36,7 +41,16 @@ fun CharacterStateSheet(characterName: String, state: CharacterState, onDismissR
             HorizontalDivider()
             Text("此刻心声", style = MaterialTheme.typography.titleMedium)
             Text(state.innerThought, style = MaterialTheme.typography.bodyLarge)
-            TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "收起" else "深入了解") }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                TextButton(onClick = { expanded = !expanded }) {
+                    Text(if (expanded) "收起" else "深入了解")
+                }
+                if (onOpenPet != null) {
+                    TextButton(onClick = onOpenPet) {
+                        Text("看看桌宠")
+                    }
+                }
+            }
             if (expanded) {
                 DeepState("深层内心剖析", state.deepReflection)
                 DeepState("最近最在意什么", state.recentConcern)
