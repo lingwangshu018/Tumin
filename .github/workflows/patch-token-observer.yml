@@ -1,0 +1,82 @@
+name: Patch Token Observer
+
+on:
+  push:
+    paths:
+      - '.github/token-observer-trigger'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Add non-invasive token observation logs
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('app/src/main/java/me/rerere/rikkahub/data/ai/GenerationHandler.kt')
+          text = path.read_text(encoding='utf-8-sig')
+          anchor = '''        var messages: List<UIMessage> = messages
+        val params = TextGenerationParams(
+'''
+          insert = '''        // Token observation only: measure the payload shape without changing chat behavior.
+        // Keep this local-only and lightweight so we can identify the real input-token hotspots
+        // before introducing any optimization that might affect memory quality or response style.
+        val limitedHistoryForObservation = messages.limitContext(assistant.contextMessageSize)
+        val systemCharsForObservation = internalMessages
+            .firstOrNull { it.role == MessageRole.SYSTEM }
+            ?.toText()
+            ?.length ?: 0
+        val historyCharsForObservation = limitedHistoryForObservation.sumOf { it.toText().length }
+        val pluginPromptCharsForObservation = pluginPromptInjections.sumOf { it.length }
+        val externalMemoryConfigCountForObservation = settings.externalMemories.count {
+            it.enabled && it.id in assistant.externalMemoryIds
+        }
+        Log.i(
+            "TokenObserver",
+            buildString {
+                append("model=${model.id}")
+                append(", systemChars=$systemCharsForObservation")
+                append(", historyMessages=${limitedHistoryForObservation.size}")
+                append(", historyChars=$historyCharsForObservation")
+                append(", memoryItems=${if (assistant.enableMemory) memories.size else 0}")
+                append(", tools=${tools.size}")
+                append(", pluginPrompts=${pluginPromptInjections.size}")
+                append(", pluginPromptChars=$pluginPromptCharsForObservation")
+                append(", recentChats=${assistant.enableRecentChatsReference}")
+                append(", externalMemoryConfigs=$externalMemoryConfigCountForObservation")
+                append(", contextMessageSize=${assistant.contextMessageSize}")
+            }
+        )
+
+        var messages: List<UIMessage> = messages
+        val params = TextGenerationParams(
+'''
+          if 'TokenObserver' in text:
+              print('TokenObserver already present')
+          elif anchor not in text:
+              raise SystemExit('expected anchor not found')
+          else:
+              path.write_text(text.replace(anchor, insert, 1), encoding='utf-8')
+              print('TokenObserver inserted')
+          PY
+
+      - name: Commit observer
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add app/src/main/java/me/rerere/rikkahub/data/ai/GenerationHandler.kt
+          if git diff --cached --quiet; then
+            echo 'No source changes needed'
+          else
+            git commit -m 'chore: add non-invasive token usage observer'
+            git pull --rebase origin master
+            git push origin HEAD:master
+          fi
