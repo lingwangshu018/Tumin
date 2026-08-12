@@ -51,6 +51,7 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.rikkahub.data.service.MemoryBankService
+import me.rerere.rikkahub.data.service.CompanionStateUpdater
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.ToolApprovalState
@@ -110,6 +111,7 @@ import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.data.repository.CompanionStateRepository
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
@@ -174,9 +176,15 @@ class ChatService(
     private val workspaceRepository: WorkspaceRepository,
     private val memoryBankService: MemoryBankService,
     private val folderRepository: FolderRepository,
+    companionStateRepository: CompanionStateRepository,
 ) {
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
+    private val companionStateUpdater = CompanionStateUpdater(
+        settingsStore = settingsStore,
+        providerManager = providerManager,
+        repository = companionStateRepository,
+    )
 
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
@@ -1042,6 +1050,15 @@ class ChatService(
             }
             launchWithConversationReference(conversationId) {
                 generateSuggestion(conversationId, finalConversation)
+            }
+
+            // Fire-and-forget: state maintenance must never add latency to the chat response.
+            appScope.launch {
+                val visibleMessages = finalConversation.currentMessages
+                val assistantText = visibleMessages.lastOrNull { it.role == MessageRole.ASSISTANT }?.toText().orEmpty()
+                val userText = visibleMessages.dropLastWhile { it.role != MessageRole.USER }
+                    .lastOrNull { it.role == MessageRole.USER }?.toText().orEmpty()
+                companionStateUpdater.consider(assistant.id, userText, assistantText)
             }
 
             // 保存 AI 回复到外置记忆库

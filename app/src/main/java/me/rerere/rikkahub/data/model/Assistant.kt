@@ -37,6 +37,7 @@ data class Assistant(
     val crossWindowMemoryCompressionThresholdChars: Int = 12000,
     val crossWindowMemoryTailEntries: Int = 16,
     val enableThreeLayerMemory: Boolean = true,
+    val enableCompanionState: Boolean = true,
     val longTermMemoryRecallCount: Int = 6,
     val longTermMemoryMaxChars: Int = 3000,
     val useRecentChatsAsFallback: Boolean = true,
