@@ -446,7 +446,16 @@ private fun MiniMaxTTSConfiguration(
 
     // Emotion
     var emotionExpanded by remember { mutableStateOf(false) }
-    val emotions = listOf("calm", "happy", "sad", "angry", "fearful", "disgusted", "surprised")
+    val emotions = listOf(
+        "" to "Auto",
+        "calm" to "calm",
+        "happy" to "happy",
+        "sad" to "sad",
+        "angry" to "angry",
+        "fearful" to "fearful",
+        "disgusted" to "disgusted",
+        "surprised" to "surprised",
+    )
 
     FormItem(
         label = { Text(stringResource(R.string.setting_tts_page_emotion)) },
@@ -457,7 +466,7 @@ private fun MiniMaxTTSConfiguration(
             onExpandedChange = { emotionExpanded = !emotionExpanded }
         ) {
             OutlinedTextField(
-                value = setting.emotion,
+                value = setting.emotion.ifBlank { "Auto" },
                 onValueChange = { newEmotion ->
                     onValueChange(setting.copy(emotion = newEmotion))
                 },
@@ -472,9 +481,9 @@ private fun MiniMaxTTSConfiguration(
                 expanded = emotionExpanded,
                 onDismissRequest = { emotionExpanded = false }
             ) {
-                emotions.forEach { emotion ->
+                emotions.forEach { (emotion, label) ->
                     DropdownMenuItem(
-                        text = { Text(emotion) },
+                        text = { Text(label) },
                         onClick = {
                             emotionExpanded = false
                             onValueChange(setting.copy(emotion = emotion))
