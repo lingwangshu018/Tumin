@@ -114,6 +114,7 @@ val appModule = module {
             workspaceRepository = get(),
             memoryBankService = get(),
             folderRepository = get(),
+            companionStateRepository = get(),
         )
     }
 
