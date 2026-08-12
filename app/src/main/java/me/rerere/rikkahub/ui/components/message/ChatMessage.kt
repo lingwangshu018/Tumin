@@ -1,4 +1,4 @@
-/*
+﻿/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -455,7 +455,148 @@ private fun MessagePartsBlock(
                                                         color = displaySettings.userBubbleColor?.let { it.toComposeColor() } ?: MaterialTheme.colorScheme.secondaryContainer,
                                                         overlayEnabled = displaySettings.bubbleImageOverlayEnabled,
                                                         bubbleAlpha = bubbleAlpha,
-       …2369 tokens truncated…  voiceMessage = part,
+                                                        onClick = { onUserMessageClick?.invoke() },
+                                                    ) {
+                                                        MarkdownBlock(
+                                                            content = segment.replaceRegexes(
+                                                                assistant = assistant,
+                                                                scope = AssistantAffectScope.USER,
+                                                                visual = true,
+                                                            ),
+                                                            onClickCitation = handleClickCitation
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        BubbleSurface(
+                                            imagePath = displaySettings.userBubbleImagePath,
+                                            cornerRadius = displaySettings.bubbleCornerRadius.dp,
+                                            color = displaySettings.userBubbleColor?.let { it.toComposeColor() } ?: MaterialTheme.colorScheme.secondaryContainer,
+                                            overlayEnabled = displaySettings.bubbleImageOverlayEnabled,
+                                            bubbleAlpha = bubbleAlpha,
+                                            onClick = { onUserMessageClick?.invoke() },
+                                        ) {
+                                            MarkdownBlock(
+                                                content = displayText.replaceRegexes(
+                                                    assistant = assistant,
+                                                    scope = AssistantAffectScope.USER,
+                                                    visual = true,
+                                                ),
+                                                onClickCitation = handleClickCitation
+                                            )
+                                        }
+                                    }
+                                } else if (assistant?.splitBubbleByLine == true) {
+                                    // 分气泡: 按模型自己写的换行 (\n) 拆成多个独立气泡,
+                                    // 拆分逻辑见 splitIntoBubbleSegments (会保护代码块/表格内部的换行)
+                                    val bubbleSegments = remember(displayText) {
+                                        displayText.splitIntoBubbleSegments()
+                                    }
+                                    Column(
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    ) {
+                                        bubbleSegments.fastForEachIndexed { segIndex, segment ->
+                                            key(segIndex) {
+                                                if (displaySettings.showAssistantBubble) {
+                                                    BubbleSurface(
+                                                        imagePath = displaySettings.assistantBubbleImagePath,
+                                                        cornerRadius = displaySettings.bubbleCornerRadius.dp,
+                                                        color = displaySettings.assistantBubbleColor?.let { it.toComposeColor() } ?: MaterialTheme.colorScheme.surfaceContainerHigh,
+                                                        overlayEnabled = displaySettings.bubbleImageOverlayEnabled,
+                                                        bubbleAlpha = bubbleAlpha,
+                                                    ) {
+                                                        MarkdownBlock(
+                                                            content = segment.replaceRegexes(
+                                                                assistant = assistant,
+                                                                scope = AssistantAffectScope.ASSISTANT,
+                                                                visual = true,
+                                                            ),
+                                                            onClickCitation = handleClickCitation,
+                                                        )
+                                                    }
+                                                } else {
+                                                    MarkdownBlock(
+                                                        content = segment.replaceRegexes(
+                                                            assistant = assistant,
+                                                            scope = AssistantAffectScope.ASSISTANT,
+                                                            visual = true,
+                                                        ),
+                                                        onClickCitation = handleClickCitation,
+                                                        modifier = Modifier
+                                                            .animateContentSize()
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    if (displaySettings.showAssistantBubble) {
+                                        BubbleSurface(
+                                            imagePath = displaySettings.assistantBubbleImagePath,
+                                            cornerRadius = displaySettings.bubbleCornerRadius.dp,
+                                            color = displaySettings.assistantBubbleColor?.let { it.toComposeColor() } ?: MaterialTheme.colorScheme.surfaceContainerHigh,
+                                            overlayEnabled = displaySettings.bubbleImageOverlayEnabled,
+                                            bubbleAlpha = bubbleAlpha,
+                                        ) {
+                                            MarkdownBlock(
+                                                content = displayText.replaceRegexes(
+                                                    assistant = assistant,
+                                                    scope = AssistantAffectScope.ASSISTANT,
+                                                    visual = true,
+                                                ),
+                                                onClickCitation = handleClickCitation,
+                                            )
+                                        }
+                                    } else {
+                                        MarkdownBlock(
+                                            content = displayText.replaceRegexes(
+                                                assistant = assistant,
+                                                scope = AssistantAffectScope.ASSISTANT,
+                                                visual = true,
+                                            ),
+                                            onClickCitation = handleClickCitation,
+                                            modifier = Modifier
+                                                .animateContentSize()
+                                        )
+                                    }
+                                }
+                                
+                            }
+                        }
+                    }
+ 
+                    is UIMessagePart.Video -> {
+                        Surface(
+                            tonalElevation = 2.dp,
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW)
+                                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                intent.data = FileProvider.getUriForFile(
+                                    context,
+                                    "${context.packageName}.fileprovider",
+                                    part.url.toUri().toFile()
+                                )
+                                val chooserIndent = Intent.createChooser(intent, null)
+                                context.startActivity(chooserIndent)
+                            },
+                            modifier = Modifier,
+                            shape = RoundedCornerShape(8.dp),
+                        ) {
+                            Box(modifier = Modifier.size(72.dp), contentAlignment = Alignment.Center) {
+                                Icon(HugeIcons.Video01, null)
+                            }
+                        }
+                    }
+ 
+                    is UIMessagePart.Audio -> {
+                        AudioPlayerBubble(url = part.url)
+                    }
+ 
+                    is UIMessagePart.VoiceMessage -> {
+                        VoiceMessageBubble(
+                            voiceMessage = part,
                             isUser = role == MessageRole.USER,
                         )
                     }
@@ -938,4 +1079,3 @@ internal fun VoiceMessageBubble(
     }
 }
  
-

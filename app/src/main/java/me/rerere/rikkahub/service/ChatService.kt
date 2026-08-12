@@ -459,7 +459,944 @@ class ChatService(
                         mapOf(
                             "assistant_id" to JsonPrimitive(assistant.id.toString()),
                             "conversation_id" to JsonPrimitive(conversationId.toString()),
-                            "message" to JsonPrimiti…10915 tokens truncated…D,
+                            "message" to JsonPrimitive(processedContent.mapNotNull { part ->
+                                if (part is UIMessagePart.Text) part.text else null
+                            }.joinToString("\n")),
+                            "role" to JsonPrimitive("user"),
+                            "timestamp" to JsonPrimitive(System.currentTimeMillis())
+                        )
+                    )
+                    appScope.launch {
+                        try {
+                            pluginLoader.callEvent("message_sent", eventData)
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to trigger message_sent event", e)
+                        }
+                    }
+                }.onFailure { e ->
+                    Log.w(TAG, "Failed to trigger message_sent event", e)
+                }
+
+                // 保存用户消息到外置记忆库（fire-and-forget，不阻塞后续生成流程）
+                try {
+                    val settingsRaw = settingsStore.settingsFlowRaw.first()
+                    val externalMemoryConfigs = settingsRaw.externalMemories.filter {
+                        it.enabled && it.id in assistant.externalMemoryIds && it.autoSaveMessages
+                    }
+                    if (externalMemoryConfigs.isNotEmpty()) {
+                        val messageText = processedContent.mapNotNull { part ->
+                            if (part is UIMessagePart.Text) part.text else null
+                        }.joinToString("\n")
+                        externalMemoryConfigs.forEach { config ->
+                            appScope.launch {
+                                runCatching {
+                                    val service = me.rerere.rikkahub.data.service.ExternalMemoryService(config)
+                                    service.saveMessage(
+                                        assistantId = assistant.id.toString(),
+                                        conversationId = conversationId.toString(),
+                                        role = "user",
+                                        content = messageText,
+                                    )
+                                }.onFailure {
+                                    Log.w(TAG, "Failed to save user message to external memory ${config.name}", it)
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to save user message to external memory", e)
+                }
+
+                // 开始补全
+                if (answer) {
+                    handleMessageComplete(conversationId)
+                }
+
+                _generationDoneFlow.emit(conversationId)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Log.e(TAG, "sendMessage failed, conversationId=$conversationId", e)
+                addError(e, conversationId, title = context.getString(R.string.error_title_send_message))
+            }
+        }
+        session.setJob(job)
+    }
+
+    // ---- 添加主动消息 ----
+
+    fun addProactiveMessage(conversationId: Uuid, aiMessage: UIMessage) {
+        launchWithConversationReference(conversationId) {
+            try {
+                appendProactiveAiMessageUnderLock(conversationId, aiMessage)
+            } catch (e: Exception) {
+                Log.e(TAG, "addProactiveMessage failed, conversationId=$conversationId", e)
+            }
+        }
+    }
+
+    /**
+     * 在 saveMutex 保护下，把 AI 主动生成的消息追加到对话并落库。
+     * 与 sendMessage/regenerate 等共享同一把锁，避免 read-modify-write 竞态导致消息被覆盖。
+     */
+    private suspend fun appendProactiveAiMessageUnderLock(
+        conversationId: Uuid,
+        aiMessage: UIMessage,
+    ) {
+        val session = getOrCreateSession(conversationId)
+
+        // 等待当前正在进行的生成任务（如果有）先完全结束，再追加这条主动消息。
+        // 原因：主生成流程会按 index 位置往它自己的消息节点写入流式增量内容
+        // (Conversation.updateCurrentMessages 是按位置对齐的，不认节点归属)。
+        // 如果不等待，这里基于当下状态追加的新节点会占据下一个 index 位置，
+        // 导致主生成流程后续到达的 chunk 被错误地合并进这条主动消息节点里，
+        // 表现为消息分支 <2/2> 错乱、内容被覆盖。
+        session.getJob()?.let { job ->
+            if (job.isActive) {
+                Log.i(TAG, "appendProactiveAiMessageUnderLock: waiting for ongoing generation to finish, conversationId=$conversationId")
+                job.join()
+            }
+        }
+
+        session.saveMutex.withLock {
+            // 优先从数据库读取完整对话，避免 session 被 idle 清除后用空对话覆盖数据库已有数据
+            val currentConversation = conversationRepo.getConversationById(conversationId)
+                ?: session.state.value
+            val updated = currentConversation.copy(
+                messageNodes = currentConversation.messageNodes + aiMessage.toMessageNode(),
+                updateAt = java.time.Instant.now()
+            )
+            updateConversation(conversationId, updated)
+            saveConversation(conversationId, updated)
+        }
+    }
+
+    // ---- 语音通话被拒接通知 ----
+
+    /**
+     * AI 主动发起的语音通话被用户拒接时, 另起一轮轻量文本生成,
+     * 把"电话被挂断"作为新的一条独立 assistant 消息追加进对话.
+     * 不走工具调用循环 / 插件事件钩子 / 外置记忆库 / 标题建议生成,
+     * 参考 generateTitle / generateSuggestion 的轻量调用方式.
+     */
+    fun notifyVoiceCallDeclined(conversationId: Uuid) {
+        appScope.launch(Dispatchers.IO) {
+            try {
+                val session = getOrCreateSession(conversationId)
+
+                // 等待当前正在进行的主生成任务（如果有）先完全结束，再读取历史、生成反馈。
+                // 1) 保证读到的对话历史是完整、最新的，不会读到 AI 还没说完那半句话的旧状态；
+                // 2) 保证后面 addProactiveMessage 追加反馈时不会跟还在跑的流式生成发生位置错位。
+                session.getJob()?.let { job ->
+                    if (job.isActive) {
+                        Log.i(TAG, "notifyVoiceCallDeclined: waiting for ongoing generation to finish, conversationId=$conversationId")
+                        job.join()
+                    }
+                }
+
+                val settings = settingsStore.settingsFlow.first()
+                // 优先从数据库取完整对话, 避免 session 被 idle 清除后用空对话覆盖
+                val currentConversation = conversationRepo.getConversationById(conversationId)
+                    ?: getConversationFlow(conversationId).value
+                val assistant = settings.getAssistantById(currentConversation.assistantId)
+                    ?: settings.getCurrentAssistant()
+                val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId)
+                if (model == null) {
+                    Log.e(TAG, "notifyVoiceCallDeclined: no model found, conversationId=$conversationId")
+                    return@launch
+                }
+                val provider = model.findProvider(settings.providers)
+                if (provider == null) {
+                    Log.e(TAG, "notifyVoiceCallDeclined: no provider found, conversationId=$conversationId, modelId=${model.id}")
+                    return@launch
+                }
+                val providerHandler = providerManager.getProviderByType(provider)
+
+                val historyMessages = currentConversation.currentMessages.let {
+                    if (assistant.contextMessageSize > 0) it.takeLast(assistant.contextMessageSize) else it
+                }
+
+                // 记录生成开始前的消息节点数量，作为"生成期间是否有新消息插入"的判断基准
+                val nodeCountBeforeGeneration = currentConversation.messageNodes.size
+
+                val eventDescription = "[系统事件] 你刚刚主动发起的语音通话邀请被用户直接挂断了（拒接，未接听）。请用你自己的语气自然地回应这件事，简短即可，不要提及\"系统事件\"\"工具\"等技术词汇，不要用引号或标注包裹，就当作正常聊天说一句话。"
+
+                val messages = buildList {
+                    if (assistant.systemPrompt.isNotEmpty()) {
+                        add(UIMessage(role = MessageRole.SYSTEM, parts = listOf(UIMessagePart.Text(assistant.systemPrompt))))
+                    }
+                    addAll(historyMessages)
+                    add(UIMessage.user(eventDescription))
+                }
+
+                val result = providerHandler.generateText(
+                    providerSetting = provider,
+                    messages = messages,
+                    params = TextGenerationParams(
+                        model = model,
+                        temperature = assistant.temperature ?: 0.8f,
+                        topP = assistant.topP,
+                        maxTokens = assistant.maxTokens,
+                        reasoningLevel = ReasoningLevel.OFF,
+                        customHeaders = buildList {
+                            addAll(assistant.customHeaders)
+                            addAll(model.customHeaders)
+                        },
+                        customBody = buildList {
+                            addAll(assistant.customBodies)
+                            addAll(model.customBodies)
+                        },
+                    ),
+                )
+
+                val replyText = result.choices[0].message?.toText()?.trim().orEmpty()
+                if (replyText.isBlank()) {
+                    Log.w(TAG, "notifyVoiceCallDeclined: empty reply, conversationId=$conversationId")
+                    return@launch
+                }
+
+                // 生成耗时期间，用户可能已经发了新消息 —— 这种情况下这句"被挂断了"的抱怨已经不合语境，直接放弃写入
+                val latestConversation = conversationRepo.getConversationById(conversationId)
+                    ?: getConversationFlow(conversationId).value
+                val newNodesSinceStart = if (latestConversation.messageNodes.size > nodeCountBeforeGeneration) {
+                    latestConversation.messageNodes.subList(nodeCountBeforeGeneration, latestConversation.messageNodes.size)
+                } else {
+                    emptyList()
+                }
+                val userSentNewMessage = newNodesSinceStart.any { node ->
+                    node.messages.any { it.role == MessageRole.USER }
+                }
+                if (userSentNewMessage) {
+                    Log.i(TAG, "notifyVoiceCallDeclined: user already sent a new message during generation, skip. conversationId=$conversationId")
+                    return@launch
+                }
+
+                val aiMessage = UIMessage(
+                    role = MessageRole.ASSISTANT,
+                    parts = listOf(UIMessagePart.Text(replyText))
+                )
+                addProactiveMessage(conversationId, aiMessage)
+
+                if (!isForeground.value) {
+                    val senderName = if (assistant.useAssistantAvatar) {
+                        assistant.name.ifEmpty { context.getString(R.string.assistant_page_default_assistant) }
+                    } else {
+                        model.displayName
+                    }
+                    sendGenerationDoneNotification(conversationId, senderName)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "notifyVoiceCallDeclined failed, conversationId=$conversationId", e)
+            }
+        }
+    }
+
+    private fun preprocessUserInputParts(parts: List<UIMessagePart>, assistant: Assistant): List<UIMessagePart> {
+        return parts.map { part ->
+            when (part) {
+                is UIMessagePart.Text -> {
+                    part.copy(
+                        text = part.text.replaceRegexes(
+                            assistant = assistant,
+                            scope = AssistantAffectScope.USER,
+                            visual = false
+                        )
+                    )
+                }
+
+                else -> part
+            }
+        }
+    }
+
+    // ---- 重新生成消息 ----
+
+    fun regenerateAtMessage(
+        conversationId: Uuid,
+        message: UIMessage,
+        regenerateAssistantMsg: Boolean = true
+    ) {
+        val session = getOrCreateSession(conversationId)
+        session.getJob()?.cancel()
+
+        val job = appScope.launch {
+            try {
+                if (message.role == MessageRole.USER) {
+                    // 如果是用户消息，则截止到当前消息
+                    session.saveMutex.withLock {
+                        val conversation = session.state.value
+                        val node = conversation.getMessageNodeByMessage(message)
+                        val indexAt = conversation.messageNodes.indexOf(node)
+                        val newConversation = conversation.copy(
+                            messageNodes = conversation.messageNodes.subList(0, indexAt + 1)
+                        )
+                        saveConversation(conversationId, newConversation)
+                    }
+                    handleMessageComplete(conversationId)
+                } else {
+                    if (regenerateAssistantMsg) {
+                        val conversation = session.state.value
+                        val node = conversation.getMessageNodeByMessage(message)
+                        val nodeIndex = conversation.messageNodes.indexOf(node)
+                        handleMessageComplete(conversationId, messageRange = 0..<nodeIndex)
+                    } else {
+                        session.saveMutex.withLock {
+                            saveConversation(conversationId, session.state.value)
+                        }
+                    }
+                }
+
+                _generationDoneFlow.emit(conversationId)
+            } catch (e: Exception) {
+                Log.e(TAG, "regenerateAtMessage failed, conversationId=$conversationId", e)
+                addError(e, conversationId, title = context.getString(R.string.error_title_regenerate_message))
+            }
+        }
+
+        session.setJob(job)
+    }
+
+    // ---- 处理工具调用审批 ----
+
+    fun handleToolApproval(
+        conversationId: Uuid,
+        toolCallId: String,
+        approved: Boolean,
+        reason: String = "",
+        answer: String? = null,
+    ) {
+        val session = getOrCreateSession(conversationId)
+        session.getJob()?.cancel()
+
+        val job = appScope.launch {
+            try {
+                val newApprovalState = when {
+                    answer != null -> ToolApprovalState.Answered(answer)
+                    approved -> ToolApprovalState.Approved
+                    else -> ToolApprovalState.Denied(reason)
+                }
+
+                val updatedNodes = session.saveMutex.withLock {
+                    val conversation = session.state.value
+                    val updatedNodes = conversation.messageNodes.map { node ->
+                        node.copy(
+                            messages = node.messages.map { msg ->
+                                msg.copy(
+                                    parts = msg.parts.map { part ->
+                                        when {
+                                            part is UIMessagePart.Tool && part.toolCallId == toolCallId -> {
+                                                part.copy(approvalState = newApprovalState)
+                                            }
+
+                                            else -> part
+                                        }
+                                    }
+                                )
+                            }
+                        )
+                    }
+                    val updatedConversation = conversation.copy(messageNodes = updatedNodes)
+                    saveConversation(conversationId, updatedConversation)
+                    updatedNodes
+                }
+
+                // Check if there are still pending tools
+                val hasPendingTools = updatedNodes.any { node ->
+                    node.currentMessage.parts.any { part ->
+                        part is UIMessagePart.Tool && part.isPending
+                    }
+                }
+
+                // Only continue generation when all pending tools are handled
+                if (!hasPendingTools) {
+                    handleMessageComplete(conversationId)
+                }
+
+                _generationDoneFlow.emit(conversationId)
+            } catch (e: Exception) {
+                Log.e(TAG, "handleToolApproval failed, conversationId=$conversationId, toolCallId=$toolCallId", e)
+                addError(e, conversationId, title = context.getString(R.string.error_title_tool_approval))
+            }
+        }
+
+        session.setJob(job)
+    }
+
+    // ---- 处理消息补全 ----
+
+    private suspend fun handleMessageComplete(
+        conversationId: Uuid,
+        messageRange: ClosedRange<Int>? = null
+    ) {
+        val settings = settingsStore.settingsFlow.first()
+        val initialConversation = getConversationFlow(conversationId).value
+        val assistant = settings.getAssistantById(initialConversation.assistantId)
+            ?: settings.getCurrentAssistant()
+        val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId) ?: return
+
+        val senderName = if (assistant.useAssistantAvatar) {
+            assistant.name.ifEmpty { context.getString(R.string.assistant_page_default_assistant) }
+        } else {
+            model.displayName
+        }
+
+        // session 需要在 runCatching 外声明，以便 .onSuccess 中也能访问 saveMutex
+        val session = getOrCreateSession(conversationId)
+
+        runCatching {
+
+            // reset suggestions
+            updateConversation(conversationId, initialConversation.copy(chatSuggestions = emptyList()))
+
+            // memory tool
+            if (!model.abilities.contains(ModelAbility.TOOL)) {
+                if (settings.enableWebSearch || mcpManager.getAllAvailableTools().isNotEmpty()) {
+                    addError(
+                        IllegalStateException(context.getString(R.string.tools_warning)),
+                        conversationId,
+                        title = context.getString(R.string.error_title_tool_unavailable)
+                    )
+                }
+            }
+
+            // check invalid messages, including corrupt historical Tool parts.
+            checkInvalidMessages(conversationId)
+            val conversation = getConversationFlow(conversationId).value
+            // Persist sanitization immediately so corrupted tool history cannot return after restart.
+            session.saveMutex.withLock {
+                saveConversation(conversationId, conversation)
+            }
+
+            // start generating
+            generationHandler.generateText(
+                settings = settings,
+                model = model,
+                processingStatus = session.processingStatus,
+                messages = conversation.currentMessages.let {
+                    if (messageRange != null) {
+                        it.subList(messageRange.start, messageRange.endInclusive + 1)
+                    } else {
+                        it
+                    }
+                }.map { message ->
+                    val quote = message.quote ?: return@map message
+                    val quoteContext = UIMessagePart.Text(
+                        "[Replying to ${quote.author}: ${quote.text.take(600)}]"
+                    )
+                    message.copy(parts = listOf(quoteContext) + message.parts, quote = null)
+                },
+                assistant = assistant,
+                conversationSystemPrompt = conversation.customSystemPrompt,
+                workspaceCwd = conversation.workspaceCwd,
+                memories = if (assistant.useGlobalMemory) {
+                    memoryRepository.getGlobalMemories()
+                } else {
+                    memoryRepository.getMemoriesOfAssistant(assistant.id.toString())
+                },
+                inputTransformers = buildList {
+                    addAll(inputTransformers)
+                    add(templateTransformer)
+                    add(workspaceReminderTransformer)
+                },
+                outputTransformers = outputTransformers,
+                tools = toolSurfaceBuilder.build(
+                    assistant = assistant,
+                    settings = settings,
+                    invocationContext = ToolInvocationContext(
+                        callerAssistantId = assistant.id.toString(),
+                        callerConversationId = conversationId.toString(),
+                    ),
+                    recentMessages = conversation.currentMessages,
+                    workspaceCwd = conversation.workspaceCwd,
+                ),
+                pluginPromptInjections = pluginToolProvider.getPluginPromptInjections(),
+                conversationId = conversationId.toString(),
+            ).onCompletion {
+                // 取消 Live Update 通知
+                cancelLiveUpdateNotification(conversationId)
+
+                // 可能被取消了，或者意外结束，兜底更新
+                val updatedConversation = getConversationFlow(conversationId).value.copy(
+                    messageNodes = getConversationFlow(conversationId).value.messageNodes.map { node ->
+                        node.copy(messages = node.messages.map { it.finishReasoning() })
+                    },
+                    updateAt = Instant.now()
+                )
+                updateConversation(conversationId, updatedConversation)
+
+                // Show notification if app is not in foreground
+                if (!isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration) {
+                    sendGenerationDoneNotification(conversationId, senderName)
+                }
+            }.collect { chunk ->
+                when (chunk) {
+                    is GenerationChunk.Messages -> {
+                        val updatedConversation = getConversationFlow(conversationId).value
+                            .updateCurrentMessages(chunk.messages)
+                        updateConversation(conversationId, updatedConversation)
+
+                        // 如果应用不在前台，发送 Live Update 通知
+                        if (!isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration && settings.displaySetting.enableLiveUpdateNotification) {
+                            sendLiveUpdateNotification(conversationId, chunk.messages, senderName)
+                        }
+                    }
+                }
+            }
+        }.onFailure {
+            // 取消 Live Update 通知
+            cancelLiveUpdateNotification(conversationId)
+
+            it.printStackTrace()
+            addError(it, conversationId, title = context.getString(R.string.error_title_generation))
+            Logging.log(TAG, "handleMessageComplete: $it")
+            Logging.log(TAG, it.stackTraceToString())
+        }.onSuccess {
+            val finalConversation = session.saveMutex.withLock {
+                val latest = getConversationFlow(conversationId).value
+                saveConversation(conversationId, latest)
+                latest
+            }
+
+            // 自动唤起网易云音乐：扫描刚完成的 assistant 文本中的 orpheus:// scheme
+            try {
+                val lastAssistantMessage = finalConversation.currentMessages.lastOrNull { it.role == MessageRole.ASSISTANT }
+                val messageText = lastAssistantMessage?.toText() ?: ""
+                launchNeteaseCloudMusic(messageText)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to launch NetEase Cloud Music", e)
+            }
+
+            // 检测并执行 [JUMP] 标记 - 正常聊天中的切屏（AI总是可以跳转，不需要开关）
+            try {
+                val lastAssistantMessage = finalConversation.currentMessages.lastOrNull { it.role == MessageRole.ASSISTANT }
+                val rawText = lastAssistantMessage?.parts?.filterIsInstance<UIMessagePart.Text>()
+                    ?.joinToString("\n") { it.text } ?: ""
+                if (rawText.contains("[JUMP]", ignoreCase = true)) {
+                    // 从展示给用户的消息文本中移除 [JUMP] 标记
+                    val cleanedText = rawText.replace("\\[JUMP]".toRegex(RegexOption.IGNORE_CASE), "").trim()
+                    if (lastAssistantMessage != null && cleanedText != rawText) {
+                        val cleanedMessage = lastAssistantMessage.copy(
+                            parts = lastAssistantMessage.parts.map { part ->
+                                if (part is UIMessagePart.Text) {
+                                    UIMessagePart.Text(part.text.replace("\\[JUMP]".toRegex(RegexOption.IGNORE_CASE), "").trim())
+                                } else {
+                                    part
+                                }
+                            }
+                        )
+                        // 更新对话状态并持久化
+                        val cleanedConversation = finalConversation.copy(
+                            messageNodes = finalConversation.messageNodes.map { node ->
+                                node.copy(
+                                    messages = node.messages.map { msg ->
+                                        if (msg.id == cleanedMessage.id) cleanedMessage else msg
+                                    }
+                                )
+                            }
+                        )
+                        updateConversation(conversationId, cleanedConversation)
+                        saveConversation(conversationId, cleanedConversation)
+                    }
+                    // 拉起 RouteActivity 切屏（正常聊天中不受时间阈值限制）
+                    val jumpIntent = Intent(context, RouteActivity::class.java).apply {
+                        addFlags(
+                            Intent.FLAG_ACTIVITY_NEW_TASK or
+                                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                                Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        )
+                        putExtra("conversationId", conversationId.toString())
+                    }
+                    context.startActivity(jumpIntent)
+                    Log.d(TAG, "[JUMP] detected in normal chat, force jump to conversation $conversationId")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to handle [JUMP] in normal chat", e)
+            }
+
+            // 触发 message_received 事件钩子
+            // 同 message_sent: 用 appScope.launch 提交独立协程, 不阻塞 handleMessageComplete
+            // 后续的标题生成/建议生成等流程, 也不随上一条消息的 job 取消而中断。
+            runCatching {
+                val lastAssistantMessage = finalConversation.currentMessages.lastOrNull { it.role == MessageRole.ASSISTANT }
+                val eventData = JsonObject(
+                    mapOf(
+                        "assistant_id" to JsonPrimitive(assistant.id.toString()),
+                        "conversation_id" to JsonPrimitive(conversationId.toString()),
+                        "message" to JsonPrimitive(lastAssistantMessage?.toText() ?: ""),
+                        "role" to JsonPrimitive("assistant"),
+                        "timestamp" to JsonPrimitive(System.currentTimeMillis())
+                    )
+                )
+                appScope.launch {
+                    try {
+                        pluginLoader.callEvent("message_received", eventData)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to trigger message_received event", e)
+                    }
+                }
+            }.onFailure { e ->
+                Log.w(TAG, "Failed to trigger message_received event", e)
+            }
+
+            launchWithConversationReference(conversationId) {
+                generateTitle(conversationId, finalConversation)
+            }
+            launchWithConversationReference(conversationId) {
+                generateSuggestion(conversationId, finalConversation)
+            }
+
+            // 保存 AI 回复到外置记忆库
+            try {
+                val externalMemoryConfigs = settings.externalMemories.filter {
+                    it.enabled && it.id in assistant.externalMemoryIds && it.autoSaveMessages
+                }
+                if (externalMemoryConfigs.isNotEmpty()) {
+                    val lastAssistantMessage = finalConversation.currentMessages.lastOrNull { it.role == MessageRole.ASSISTANT }
+                    val messageText = lastAssistantMessage?.toText() ?: ""
+                    if (messageText.isNotBlank()) {
+                        kotlinx.coroutines.coroutineScope {
+                            externalMemoryConfigs.forEach { config ->
+                                launch {
+                                    runCatching {
+                                        val service = me.rerere.rikkahub.data.service.ExternalMemoryService(config)
+                                        service.saveMessage(
+                                            assistantId = assistant.id.toString(),
+                                            conversationId = conversationId.toString(),
+                                            role = "assistant",
+                                            content = messageText,
+                                        )
+                                    }.onFailure {
+                                        Log.w(TAG, "Failed to save assistant message to external memory ${config.name}", it)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to save assistant message to external memory", e)
+            }
+        }
+    }
+
+    private suspend fun createWorkspaceToolsIfReady(workspaceId: String?, cwd: String? = null): List<Tool> {
+        if (workspaceId.isNullOrBlank()) return emptyList()
+        val workspace = workspaceRepository.getById(workspaceId) ?: return emptyList()
+        if (workspace.shellStatus != WorkspaceShellStatus.READY.name) {
+            Log.d(
+                TAG,
+                "createWorkspaceToolsIfReady: skip workspace tools, workspace=$workspaceId, status=${workspace.shellStatus}"
+            )
+            return emptyList()
+        }
+        return createWorkspaceTools(workspaceId, workspaceRepository, cwd)
+    }
+
+    // ---- 检查无效消息 ----
+
+    private fun checkInvalidMessages(conversationId: Uuid) {
+        val conversation = getConversationFlow(conversationId).value
+        var messagesNodes = conversation.messageNodes
+
+        // 先清理已损坏的 Tool part：空 toolName/toolCallId 会让 Gemini function_response proto 直接失效。
+        messagesNodes = messagesNodes.map { node ->
+            val cleanedMessages = node.messages.map { msg ->
+                msg.copy(parts = msg.parts.filterNot { part ->
+                    part is UIMessagePart.Tool && (part.toolName.isBlank() || part.toolCallId.isBlank())
+                })
+            }.filterNot { it.parts.isEmpty() }
+            val safeIndex = when {
+                cleanedMessages.isEmpty() -> 0
+                node.selectIndex in cleanedMessages.indices -> node.selectIndex
+                else -> 0
+            }
+            node.copy(messages = cleanedMessages, selectIndex = safeIndex)
+        }.filter { it.messages.isNotEmpty() }
+
+        // 移除无效 tool (未执行的 Tool)
+        messagesNodes = messagesNodes.mapIndexed { _, node ->
+            // Check for Tool type with non-executed tools
+            val hasPendingTools = node.currentMessage.getTools().any { !it.isExecuted }
+
+            if (hasPendingTools) {
+                // Keep messages that are ready to resume, such as approved/denied/answered tools.
+                val hasResumableTool = node.currentMessage.getTools().any {
+                    !it.isExecuted && it.approvalState.canResumeToolExecution()
+                }
+                if (hasResumableTool) {
+                    return@mapIndexed node
+                }
+
+
+                // Remove messages that still have unresolved tool approvals.
+                return@mapIndexed node.copy(
+                    messages = node.messages.filter { it.id != node.currentMessage.id },
+                    selectIndex = node.selectIndex - 1
+                )
+            }
+            node
+        }
+
+        // 更新index
+        messagesNodes = messagesNodes.map { node ->
+            if (node.messages.isNotEmpty() && node.selectIndex !in node.messages.indices) {
+                node.copy(selectIndex = 0)
+            } else {
+                node
+            }
+        }
+
+        // 移除无效消息
+        messagesNodes = messagesNodes.filter { it.messages.isNotEmpty() }
+
+        updateConversation(conversationId, conversation.copy(messageNodes = messagesNodes))
+    }
+
+    private fun cancelToolByUser(tool: UIMessagePart.Tool): UIMessagePart.Tool {
+        return tool.copy(
+            output = listOf(
+                UIMessagePart.Text(
+                    """{"status":"cancelled","error":"Generation cancelled by user before tool execution completed."}"""
+                )
+            ),
+            approvalState = ToolApprovalState.Denied("Generation cancelled by user")
+        )
+    }
+
+    // ---- 生成标题 ----
+
+    suspend fun generateTitle(
+        conversationId: Uuid,
+        conversation: Conversation,
+        force: Boolean = false
+    ) {
+        val shouldGenerate = when {
+            force -> true
+            conversation.title.isBlank() -> true
+            else -> false
+        }
+        if (!shouldGenerate) return
+
+        runCatching {
+            val settings = settingsStore.settingsFlow.first()
+            val model = settings.findModelById(settings.titleModelId) ?: return
+            val provider = model.findProvider(settings.providers) ?: return
+
+            val providerHandler = providerManager.getProviderByType(provider)
+            val result = providerHandler.generateText(
+                providerSetting = provider,
+                messages = listOf(
+                    UIMessage.user(
+                        prompt = settings.titlePrompt.applyPlaceholders(
+                            "locale" to Locale.getDefault().displayName,
+                            "content" to conversation.currentMessages
+                                .takeLast(4).joinToString("\n\n") { it.summaryAsText() })
+                    ),
+                ),
+                params = TextGenerationParams(
+                    model = model,
+                    reasoningLevel = ReasoningLevel.OFF,
+                ),
+            )
+
+            val session = getOrCreateSession(conversationId)
+            session.saveMutex.withLock {
+                // 生成完，conversation可能不是最新了，因此需要重新获取
+                conversationRepo.getConversationById(conversation.id)?.let {
+                    saveConversation(
+                        conversationId,
+                        it.copy(title = result.choices[0].message?.toText()?.trim() ?: "")
+                    )
+                }
+            }
+        }.onFailure {
+            it.printStackTrace()
+            Log.e(TAG, "generateTitle failed, conversationId=$conversationId", it)
+            addError(
+                error = it,
+                conversationId = conversationId,
+                title = context.getString(R.string.error_title_generate_title),
+                solution = ChatErrorSolution.CheckTitleModelSettings,
+            )
+        }
+    }
+
+    // ---- 生成建议 ----
+
+    suspend fun generateSuggestion(conversationId: Uuid, conversation: Conversation) {
+        runCatching {
+            val settings = settingsStore.settingsFlow.first()
+            val model = settings.findModelById(settings.suggestionModelId) ?: return
+            val provider = model.findProvider(settings.providers) ?: return
+
+            val session = getOrCreateSession(conversationId)
+            session.saveMutex.withLock {
+                updateConversation(
+                    conversationId,
+                    session.state.value.copy(chatSuggestions = emptyList())
+                )
+            }
+
+            val providerHandler = providerManager.getProviderByType(provider)
+            val result = providerHandler.generateText(
+                providerSetting = provider,
+                messages = listOf(
+                    UIMessage.user(
+                        settings.suggestionPrompt.applyPlaceholders(
+                            "locale" to Locale.getDefault().displayName,
+                            "content" to conversation.currentMessages
+                                .takeLast(8).joinToString("\n\n") { it.summaryAsText() }),
+                    )
+                ),
+                params = TextGenerationParams(
+                    model = model,
+                    reasoningLevel = ReasoningLevel.OFF,
+                ),
+            )
+            val suggestions =
+                result.choices[0].message?.toText()?.split("\n")?.map { it.trim() }
+                    ?.filter { it.isNotBlank() } ?: emptyList()
+
+            session.saveMutex.withLock {
+                val latestConversation = conversationRepo.getConversationById(conversationId)
+                    ?: session.state.value
+                saveConversation(
+                    conversationId,
+                    latestConversation.copy(
+                        chatSuggestions = suggestions.take(10)
+                    )
+                )
+            }
+        }.onFailure {
+            it.printStackTrace()
+            Log.e(TAG, "generateSuggestion failed, conversationId=$conversationId", it)
+        }
+    }
+
+    // ---- 压缩对话历史 ----
+
+    suspend fun compressConversation(
+        conversationId: Uuid,
+        conversation: Conversation,
+        additionalPrompt: String,
+        targetTokens: Int,
+        keepRecentMessages: Int = 32
+    ): Result<Unit> = runCatching {
+        val settings = settingsStore.settingsFlow.first()
+        val model = settings.findModelById(settings.compressModelId)
+            ?: settings.getCurrentChatModel()
+            ?: throw IllegalStateException("No model available for compression")
+        val provider = model.findProvider(settings.providers)
+            ?: throw IllegalStateException("Provider not found")
+
+        val providerHandler = providerManager.getProviderByType(provider)
+
+        val maxMessagesPerChunk = 256
+        val allMessages = conversation.currentMessages
+
+        // Split messages into those to compress and those to keep
+        val messagesToCompress: List<UIMessage>
+        val messagesToKeep: List<UIMessage>
+
+        if (keepRecentMessages > 0 && allMessages.size > keepRecentMessages) {
+            messagesToCompress = allMessages.dropLast(keepRecentMessages)
+            messagesToKeep = allMessages.takeLast(keepRecentMessages)
+        } else if (keepRecentMessages > 0) {
+            // Not enough messages to compress while keeping recent ones
+            throw IllegalStateException(context.getString(R.string.chat_page_compress_not_enough_messages))
+        } else {
+            messagesToCompress = allMessages
+            messagesToKeep = emptyList()
+        }
+
+        fun splitMessages(messages: List<UIMessage>): List<List<UIMessage>> {
+            if (messages.size <= maxMessagesPerChunk) return listOf(messages)
+            val mid = messages.size / 2
+            val left = splitMessages(messages.subList(0, mid))
+            val right = splitMessages(messages.subList(mid, messages.size))
+            return left + right
+        }
+
+        suspend fun compressMessages(messages: List<UIMessage>): String {
+            val contentToCompress = messages.joinToString("\n\n") { it.summaryAsText() }
+            val prompt = settings.compressPrompt.applyPlaceholders(
+                "content" to contentToCompress,
+                "target_tokens" to targetTokens.toString(),
+                "additional_context" to if (additionalPrompt.isNotBlank()) {
+                    "Additional instructions from user: $additionalPrompt"
+                } else "",
+                "locale" to Locale.getDefault().displayName
+            )
+
+            val result = providerHandler.generateText(
+                providerSetting = provider,
+                messages = listOf(UIMessage.user(prompt)),
+                params = TextGenerationParams(
+                    model = model,
+                ),
+            )
+
+            return result.choices[0].message?.toText()?.trim()
+                ?: throw IllegalStateException("Failed to generate compressed summary")
+        }
+
+        val compressedSummaries = coroutineScope {
+            splitMessages(messagesToCompress)
+                .map { chunk -> async { compressMessages(chunk) } }
+                .awaitAll()
+        }
+
+        // Create new conversation with compressed history as multiple user messages + kept messages
+        val newMessageNodes = buildList {
+            compressedSummaries.forEach { summary ->
+                add(UIMessage.user(summary).toMessageNode())
+            }
+            addAll(messagesToKeep.map { it.toMessageNode() })
+        }
+        val newConversation = conversation.copy(
+            messageNodes = newMessageNodes,
+            chatSuggestions = emptyList(),
+        )
+
+        saveConversation(conversationId, newConversation)
+    }
+
+    // ---- 通知 ----
+
+    private fun sendGenerationDoneNotification(conversationId: Uuid, senderName: String) {
+        // 先取消 Live Update 通知
+        cancelLiveUpdateNotification(conversationId)
+
+        val conversation = getConversationFlow(conversationId).value
+        context.sendNotification(
+            channelId = CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID,
+            notificationId = 1
+        ) {
+            title = senderName
+            content = conversation.currentMessages.lastOrNull()?.toText()?.take(50)?.trim() ?: ""
+            autoCancel = true
+            useDefaults = true
+            category = NotificationCompat.CATEGORY_MESSAGE
+            contentIntent = getPendingIntent(context, conversationId)
+        }
+    }
+
+    private fun getLiveUpdateNotificationId(conversationId: Uuid): Int {
+        return conversationId.hashCode() + 10000
+    }
+
+    private fun sendLiveUpdateNotification(
+        conversationId: Uuid,
+        messages: List<UIMessage>,
+        senderName: String
+    ) {
+        val lastMessage = messages.lastOrNull() ?: return
+        val parts = lastMessage.parts
+
+        // 确定当前状态
+        val (chipText, statusText, contentText) = determineNotificationContent(parts)
+
+        context.sendNotification(
+            channelId = CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID,
             notificationId = getLiveUpdateNotificationId(conversationId)
         ) {
             title = senderName
@@ -963,4 +1900,3 @@ class ChatService(
         return null
     }
 }
-

@@ -1,4 +1,4 @@
-/*
+﻿/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -430,7 +430,210 @@ fun ChatInput(
                             fileName.endsWith(".c", ignoreCase = true) ||
                             fileName.endsWith(".h", ignoreCase = true) ||
                             fileName.endsWith(".cpp", ignoreCase = true) ||
-                            fileName.endsWith("…2672 tokens truncated…   asr.stop()
+                            fileName.endsWith(".cc", ignoreCase = true) ||
+                            fileName.endsWith(".cxx", ignoreCase = true) ||
+                            fileName.endsWith(".hpp", ignoreCase = true) ||
+                            fileName.endsWith(".hh", ignoreCase = true) ||
+                            fileName.endsWith(".hxx", ignoreCase = true) ||
+                            fileName.endsWith(".rs", ignoreCase = true) ||
+                            fileName.endsWith(".cs", ignoreCase = true) ||
+                            fileName.endsWith(".markdown", ignoreCase = true) ||
+                            fileName.endsWith(".mdx", ignoreCase = true) ||
+                            fileName.endsWith(".toml", ignoreCase = true) ||
+                            fileName.endsWith(".ini", ignoreCase = true) ||
+                            fileName.endsWith(".env", ignoreCase = true) ||
+                            fileName.endsWith(".gradle", ignoreCase = true) ||
+                            fileName.endsWith(".kts", ignoreCase = true) ||
+                            fileName.endsWith(".properties", ignoreCase = true) ||
+                            fileName.endsWith(".proto", ignoreCase = true) ||
+                            fileName.endsWith(".graphql", ignoreCase = true) ||
+                            fileName.endsWith(".gql", ignoreCase = true) ||
+                            fileName.endsWith(".yml", ignoreCase = true) ||
+                            fileName.endsWith(".yaml", ignoreCase = true)
+                        if (isAllowed) {
+                            val localUri = filesManager.createChatFilesByContents(listOf(uri))[0]
+                            allDocuments.add(UIMessagePart.Document(url = localUri.toString(), fileName = fileName, mime = mime))
+                        } else {
+                            toaster.show(
+                                context.getString(R.string.chat_input_unsupported_file_type, fileName),
+                                type = ToastType.Error
+                            )
+                        }
+                    }
+                }
+                if (allDocuments.isNotEmpty()) {
+                    state.addFiles(allDocuments)
+                }
+                if (allImageUris.isNotEmpty()) {
+                    state.addImages(allImageUris)
+                }
+                if (allDocuments.isNotEmpty() || allImageUris.isNotEmpty()) {
+                    dismissExpand()
+                }
+            }
+        }
+
+    // Collapse when ime is visible
+    val imeVisile = WindowInsets.isImeVisible
+    LaunchedEffect(imeVisile, showInjectionSheet, showCompressDialog) {
+        if (imeVisile && !showInjectionSheet && !showCompressDialog) {
+            dismissExpand()
+        }
+    }
+
+    // Load input background image
+    val inputBgPath = settings.displaySetting.inputBackgroundPath
+    val inputBgBitmap = remember(inputBgPath) {
+        if (inputBgPath.isNotBlank() && File(inputBgPath).exists()) {
+            android.graphics.BitmapFactory.decodeFile(inputBgPath)?.asImageBitmap()
+        } else null
+    }
+
+    Surface(
+        color = Color.Transparent,
+    ) {
+        Column(
+            modifier = modifier
+                .imePadding()
+                .navigationBarsPadding()
+                .padding(horizontal = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Input area with optional background image
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(MaterialTheme.shapes.largeIncreased)
+                    .then(
+                        if (settings.displaySetting.enableBlurEffect) Modifier.hazeEffect(
+                            state = hazeState,
+                            style = HazeMaterials.ultraThin(containerColor = hazeTintColor)
+                        )
+                        else Modifier
+                    ),
+                shape = MaterialTheme.shapes.largeIncreased,
+                tonalElevation = 0.dp,
+                // When background image is set, make surface transparent so image is visible
+                color = if (inputBgBitmap != null) Color.Transparent
+                    else if (settings.displaySetting.enableBlurEffect) Color.Transparent
+                    else settings.displaySetting.inputFieldColor?.let { it.toComposeColor() } ?: hazeTintColor,
+            ) {
+                // Use Box so background image can match parent size
+                Box {
+                    // Background image inside input area (matches content size exactly)
+                    if (inputBgBitmap != null) {
+                        Image(
+                            bitmap = inputBgBitmap,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .matchParentSize()
+                                .clip(MaterialTheme.shapes.largeIncreased),
+                            contentScale = ContentScale.Crop,
+                            alpha = 1f,
+                        )
+                    }
+                    Column(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        if (state.messageContent.isNotEmpty()) {
+                            MediaFileInputRow(state = state)
+                        }
+
+                        TextInputRow(
+                            state = state,
+                            onSendMessage = { sendMessage() }
+                        )
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                // Model Picker
+                                ModelSelector(
+                                    modelId = assistant.chatModelId ?: settings.chatModelId,
+                                    providers = settings.providers,
+                                    onSelect = {
+                                        onUpdateChatModel(it)
+                                        dismissExpand()
+                                    },
+                                    type = ModelType.CHAT,
+                                    onlyIcon = true,
+                                    modifier = Modifier,
+                                )
+
+                                // Search
+                                val enableSearchMsg = stringResource(R.string.web_search_enabled)
+                                val disableSearchMsg = stringResource(R.string.web_search_disabled)
+                                val chatModel = settings.getCurrentChatModel()
+                                SearchPickerButton(
+                                    enableSearch = enableSearch,
+                                    settings = settings,
+                                    onToggleSearch = { enabled ->
+                                        onToggleSearch(enabled)
+                                        toaster.show(
+                                            message = if (enabled) enableSearchMsg else disableSearchMsg,
+                                            duration = 1.seconds,
+                                            type = if (enabled) {
+                                                ToastType.Success
+                                            } else {
+                                                ToastType.Normal
+                                            }
+                                        )
+                                    },
+                                    onUpdateSearchService = onUpdateSearchService,
+                                    model = chatModel,
+                                )
+
+                                ActionIconButton(onClick = { expandToggle(ExpandState.Emoji) }) {
+                                    Text(if (expand == ExpandState.Emoji) "×" else "😊", fontSize = 18.sp)
+                                }
+
+                                ActionIconButton(onClick = { expandToggle(ExpandState.LifeCards) }) {
+                                    Text(if (expand == ExpandState.LifeCards) "×" else "♡", fontSize = 20.sp)
+                                }
+
+                                // Reasoning
+                                val model = settings.getCurrentChatModel()
+                                if (model?.abilities?.contains(ModelAbility.REASONING) == true) {
+                                    ReasoningButton(
+                                        reasoningLevel = assistant.reasoningLevel,
+                                        onUpdateReasoningLevel = {
+                                            onUpdateAssistant(assistant.copy(reasoningLevel = it))
+                                        },
+                                        onlyIcon = true,
+                                    )
+                                }
+
+                            }
+
+                            ActionIconButton(
+                                onClick = {
+                                    expandToggle(ExpandState.Files)
+                                }) {
+                                Icon(
+                                    imageVector = if (expand == ExpandState.Files) HugeIcons.Cancel01 else HugeIcons.Add01,
+                                    contentDescription = stringResource(R.string.more_options)
+                                )
+                            }
+
+                            // Voice button: click to record, click again to stop and send
+                            // 通话进行中禁用, 避免两路麦克风冲突
+                            if ((asrState.isAvailable || asrState.isRecording) && !isVoiceCallActive) {
+                                ActionIconButton(
+                                    onClick = {
+                                        when (asrState.status) {
+                                            ASRStatus.Listening -> {
+                                                asr.stop()
                                             }
                                             ASRStatus.Idle, ASRStatus.Error -> {
                                                 if (!asrPermission.allRequiredPermissionsGranted) {
@@ -887,4 +1090,3 @@ private fun FullScreenEditor(
         }
     }
 }
-
