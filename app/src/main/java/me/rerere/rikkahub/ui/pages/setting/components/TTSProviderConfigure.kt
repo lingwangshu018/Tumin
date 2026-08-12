@@ -16,6 +16,7 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -347,6 +348,16 @@ private fun MiniMaxTTSConfiguration(
     setting: TTSProviderSetting.MiniMax,
     onValueChange: (TTSProviderSetting) -> Unit
 ) {
+    FormItem(
+        label = { Text("Character State 驱动情绪") },
+        description = { Text("开启后优先使用当前角色状态；无法识别时回退到 MiniMax Auto。") }
+    ) {
+        Switch(
+            checked = setting.useCharacterStateEmotion,
+            onCheckedChange = { onValueChange(setting.copy(useCharacterStateEmotion = it)) }
+        )
+    }
+
     // API Key
     FormItem(
         label = { Text(stringResource(R.string.setting_tts_page_api_key)) },

@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -92,6 +92,8 @@ sealed class TTSProviderSetting {
         val voiceId: String = "female-shaonv",
         /** Empty means MiniMax decides the emotion from the text. */
         val emotion: String = "",
+        /** Prefer the current Character State emotion when a caller supplies it. */
+        val useCharacterStateEmotion: Boolean = false,
         val speed: Float = 1.0f
     ) : TTSProviderSetting() {
         override fun copyProvider(
