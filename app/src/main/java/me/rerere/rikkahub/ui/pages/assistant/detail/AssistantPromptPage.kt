@@ -360,6 +360,8 @@ private fun AssistantPromptContent(
                             onFork = {},
                             onRegenerate = {},
                             onEdit = {},
+                            onEditAndRegenerate = {},
+                            onQuote = {},
                             onShare = {},
                             onDelete = {},
                             onUpdate = {},
