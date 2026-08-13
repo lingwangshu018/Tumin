@@ -15,6 +15,12 @@ object LifeContextTransformer : InputMessageTransformer {
     private const val CONTEXT_BUDGET_CHARS = 5600
 
     override suspend fun transform(ctx: TransformerContext, messages: List<UIMessage>): List<UIMessage> {
+        // GenerationHandler has already assembled durable memories, Recent Chats fallback, and
+        // cross-window summary/tail into the system prompt by the time input transformers run.
+        // Put one final shared cap over those existing sources without changing their persistence
+        // or recall/compression behavior.
+        val memoryBudgetedMessages = UnifiedMemoryBudget.apply(messages)
+
         val prefs = ctx.context.getSharedPreferences("tumin_life_hub", Context.MODE_PRIVATE)
         val raw = prefs.getString("entries", "[]") ?: "[]"
         val lifeContext = runCatching {
@@ -92,13 +98,13 @@ object LifeContextTransformer : InputMessageTransformer {
             ),
             maxChars = CONTEXT_BUDGET_CHARS,
         )
-        if (budgeted.text.isBlank()) return messages
+        if (budgeted.text.isBlank()) return memoryBudgetedMessages
 
         Log.d(
             "CompanionContext",
             "assistant=${ctx.assistant.id} chars=${budgeted.charCount} kept=${budgeted.keptSections} dropped=${budgeted.droppedSections}",
         )
-        return listOf(UIMessage.user(budgeted.text)) + messages
+        return listOf(UIMessage.user(budgeted.text)) + memoryBudgetedMessages
     }
 
     private fun buildMusicContext(): String {
