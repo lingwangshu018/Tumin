@@ -1,6 +1,25 @@
 name: Android CI
 
 on:
+  push:
+    branches: [master]
+    paths:
+      - "app/**"
+      - "website/**"
+      - "ai/**"
+      - "common/**"
+      - "document/**"
+      - "highlight/**"
+      - "material3/**"
+      - "search/**"
+      - "speech/**"
+      - "web/**"
+      - "workspace/**"
+      - "*.gradle.kts"
+      - "gradle/**"
+      - "gradle.properties"
+      - "settings.gradle.kts"
+      - ".github/workflows/android-ci.yml"
   pull_request:
     branches: [master]
     paths:
