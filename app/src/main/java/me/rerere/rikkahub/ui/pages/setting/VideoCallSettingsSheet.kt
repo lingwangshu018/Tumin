@@ -7,12 +7,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -165,7 +167,7 @@ fun VideoCallSettingsSheet(onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun SettingSection(title: String, content: @Composable Column.() -> Unit) {
+private fun SettingSection(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Card(
@@ -203,12 +205,12 @@ private fun ImageSettingRow(
                 AsyncImage(
                     model = file,
                     contentDescription = null,
-                    modifier = Modifier.fillMaxWidth().height(if (widePreview) 78.dp else 78.dp),
+                    modifier = Modifier.fillMaxWidth().height(78.dp),
                     contentScale = ContentScale.Crop,
                 )
             } else {
                 Box(
-                    modifier = Modifier.fillMaxWidth().height(if (widePreview) 78.dp else 78.dp),
+                    modifier = Modifier.fillMaxWidth().height(78.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text("默认", color = MaterialTheme.colorScheme.onSurfaceVariant)
