@@ -1,9 +1,20 @@
 package me.rerere.rikkahub.ui.pages.voice
 
 import android.content.Context
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
+import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.service.VoiceCallService
 import me.rerere.rikkahub.utils.JsonInstant
 import java.io.File
 import java.time.Instant
@@ -131,5 +142,68 @@ class VideoCallArchiveStore(context: Context) {
         temp.writeText(JsonInstant.encodeToString(entries))
         if (archiveFile.exists()) archiveFile.delete()
         temp.renameTo(archiveFile)
+    }
+}
+
+/**
+ * Keeps the active video-call archive alive even if VideoCallPage leaves composition.
+ * The runtime follows the shared conversation flow and seals the archive when the
+ * foreground call service is actually hung up (including notification-bar hangup).
+ */
+object VideoCallArchiveRuntime {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var archiveJob: Job? = null
+    private var activeConversationId: String? = null
+
+    @Synchronized
+    fun attach(
+        store: VideoCallArchiveStore,
+        conversationId: Uuid,
+        assistantId: Uuid,
+        assistantName: String,
+        conversationFlow: StateFlow<Conversation>,
+    ) {
+        val conversationKey = conversationId.toString()
+        if (activeConversationId == conversationKey && archiveJob?.isActive == true) return
+
+        archiveJob?.cancel()
+        activeConversationId = conversationKey
+        val baselineCount = conversationFlow.value.currentMessages.size
+        val sessionId = store.startSession(
+            conversationId = conversationId,
+            assistantId = assistantId,
+            assistantName = assistantName,
+            messages = emptyList(),
+        )
+
+        archiveJob = scope.launch {
+            val messageJob = launch {
+                conversationFlow.collect { conversation ->
+                    store.updateSession(
+                        sessionId,
+                        conversation.currentMessages.drop(baselineCount),
+                    )
+                }
+            }
+
+            try {
+                VoiceCallService.activeConversationId
+                    .filter { it == conversationKey }
+                    .first()
+                VoiceCallService.activeConversationId
+                    .filter { it != conversationKey }
+                    .first()
+            } finally {
+                messageJob.cancelAndJoin()
+                store.finishSession(
+                    sessionId = sessionId,
+                    messages = conversationFlow.value.currentMessages.drop(baselineCount),
+                    endedNormally = true,
+                )
+                synchronized(this@VideoCallArchiveRuntime) {
+                    if (activeConversationId == conversationKey) activeConversationId = null
+                }
+            }
+        }
     }
 }
