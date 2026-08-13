@@ -194,6 +194,10 @@ class CrossWindowMemoryStore(context: Context) {
         readState().entries.filter { it.assistantId == assistantId }.takeLast(limit)
     }
 
+    fun peekSummary(assistantId: String): Summary? = synchronized(lock) {
+        readState().summaries[assistantId]
+    }
+
     /** Atomically claims an old prefix for background compression while preserving a live tail. */
     fun claimCompression(
         assistantId: String,
