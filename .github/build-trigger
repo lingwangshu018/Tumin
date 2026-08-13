@@ -1,3 +1,3 @@
-build: 2026-08-14
+build: 2026-08-14-video-fix
 source: latest master
-purpose: rebuild Tumin v3.0.1 with startup crash hotfix and update fixes
+purpose: build Tumin v3.0.2 with video call reply and hangup fixes
