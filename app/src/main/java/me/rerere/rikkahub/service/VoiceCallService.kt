@@ -333,10 +333,7 @@ class VoiceCallService : Service(), KoinComponent {
         startConversationMonitor()
     }
 
-    /**
-     * 只切 UI/TTS 状态，不重复 start ASR。
-     * ASR 设计为整场持续运行；真正需要重新 start 的场景只有取消静音或 provider 自己停止。
-     */
+    /** 回到用户回合；若 ASR provider 已在上一轮停止，主动重新启动录音。 */
     private fun startListening() {
         if (::tts.isInitialized) tts.stop()
         ttsSentLength = 0
@@ -348,6 +345,9 @@ class VoiceCallService : Service(), KoinComponent {
             )
         }
         interruptDetectJob?.cancel()
+        if (!isMuted && ::asr.isInitialized && !asr.state.value.isRecording) {
+            restartAsrAfterProviderStop()
+        }
         startVadDetection()
     }
 
@@ -419,6 +419,10 @@ class VoiceCallService : Service(), KoinComponent {
         }
         ttsSentLength = 0
         lastMessageSentAt = System.currentTimeMillis()
+
+        // 每轮发送前重新挂好 Conversation / generationDone / error 监听，避免某个 provider
+        // 或上一轮打断/取消导致 collector 已退出，出现“第一轮能回、第二轮永久思考”。
+        startConversationMonitor()
 
         try {
             chatService.sendMessage(conversationId, listOf(UIMessagePart.Text(transcript)))
