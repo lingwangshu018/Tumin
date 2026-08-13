@@ -66,7 +66,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import me.rerere.ai.core.MessageRole
-import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Camera01
 import me.rerere.hugeicons.stroke.Cancel01
@@ -76,7 +75,6 @@ import me.rerere.hugeicons.stroke.VolumeHigh
 import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.repository.CompanionStateRepository
-import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.VoiceCallService
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionCamera
@@ -97,7 +95,6 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
     val visualSettings = remember { visualStore.read() }
     val archiveStore = remember { VideoCallArchiveStore(context) }
     val companionRepository = koinInject<CompanionStateRepository>()
-    val chatService = koinInject<ChatService>()
     var joined by remember { mutableStateOf(false) }
 
     if (!joined) {
@@ -160,7 +157,6 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
     }
 
     LaunchedEffect(Unit) {
-        archiveStore.recoverInterruptedSessions()
         if (!audioPermission.allRequiredPermissionsGranted) {
             audioPermission.requestPermissions()
         }
@@ -230,16 +226,9 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
 
     fun sendTypedMessage() {
         val text = typedInput.trim()
-        if (text.isBlank()) return
-        if (uiState.status == VoiceCallStatus.Speaking) {
-            service?.interruptSpeaking()
-        }
-        runCatching {
-            chatService.sendMessage(
-                conversationId,
-                listOf(UIMessagePart.Text(text)),
-            )
-        }
+        val activeService = service ?: return
+        if (text.isBlank() || uiState.status == VoiceCallStatus.Processing) return
+        activeService.sendTextMessage(text)
         typedInput = ""
     }
 
@@ -346,7 +335,9 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
                 trailingIcon = {
                     TextButton(
                         onClick = { sendTypedMessage() },
-                        enabled = typedInput.isNotBlank(),
+                        enabled = typedInput.isNotBlank() &&
+                            service != null &&
+                            uiState.status != VoiceCallStatus.Processing,
                     ) { Text("发送") }
                 },
                 maxLines = 3,
