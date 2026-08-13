@@ -17,12 +17,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getSelectedTTSProvider
+import me.rerere.rikkahub.data.repository.CompanionStateRepository
 import me.rerere.rikkahub.utils.stripMarkdown
+import me.rerere.tts.controller.TtsController
 import me.rerere.tts.model.PlaybackState
 import me.rerere.tts.provider.TTSManager
 import me.rerere.tts.provider.TTSProviderSetting
-import me.rerere.tts.controller.TtsController
 import org.koin.compose.koinInject
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -127,10 +129,33 @@ internal class CustomTtsStateImpl(
 
     fun updateProvider(provider: TTSProviderSetting?) {
         controller.setProvider(provider)
+        refreshCharacterEmotionHint()
+    }
+
+    /**
+     * MiniMax 的 Character State Emotion 模式只在真正朗读前读取当前角色状态。
+     * 普通朗读、语音电话和视频电话复用同一个 TTS state 时，都会读取同一份
+     * 持久化 Companion State，而不会把某次读取到的旧情绪缓存整场通话。
+     *
+     * Auto（emotion 为空）和手动 Emotion 不使用这个 hint；它们仍由 provider 自己决定。
+     */
+    private fun refreshCharacterEmotionHint() {
+        val settings = settingsStore.settingsFlow.value
+        val provider = settings.getSelectedTTSProvider()
+        val emotionHint = if (provider is TTSProviderSetting.MiniMax && provider.useCharacterStateEmotion) {
+            val assistant = settings.getCurrentAssistant()
+            CompanionStateRepository(context).observe(assistant.id).value.character.emotion
+                .trim()
+                .takeIf { it.isNotBlank() }
+        } else {
+            null
+        }
+        controller.setEmotionHint(emotionHint)
     }
 
     override fun speak(text: String, flushCalled: Boolean) {
         val processed = text.stripMarkdown()
+        refreshCharacterEmotionHint()
         controller.speak(processed, flushCalled)
     }
 
@@ -168,6 +193,7 @@ internal class CustomTtsStateImpl(
         if (text.isBlank()) return
         val processed = text.stripMarkdown()
         if (processed.isBlank()) return
+        refreshCharacterEmotionHint()
         controller.speak(processed, flush = false)
     }
 
