@@ -7,9 +7,11 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -18,8 +20,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import me.rerere.rikkahub.data.model.Assistant
-import me.rerere.rikkahub.data.model.RelationshipState
+import me.rerere.rikkahub.data.model.CompanionState
 import me.rerere.rikkahub.data.repository.CompanionStateRepository
 import org.koin.compose.koinInject
 import kotlin.math.roundToInt
@@ -37,14 +40,30 @@ fun InAppPetHost(
     if (!visible) return
 
     val repository: CompanionStateRepository = koinInject()
-    val relationshipFlow = remember(assistant.id) { PetRelationshipSource(repository).observe(assistant.id) }
-    val relationship by relationshipFlow.collectAsState(
-        initial = RelationshipState().toPetRelationshipSnapshot(),
-    )
-    val presentation = remember(relationship) { relationship.toPetPresentation() }
+    val companionFlow = remember(assistant.id) { repository.observe(assistant.id) }
+    val companion by companionFlow.collectAsState(initial = CompanionState())
+    val basePresentation = remember(companion) { companion.toFusedPetPresentation() }
+
     var showRelationshipFile by remember(assistant.id) { mutableStateOf(false) }
+    var interactionMotion by remember(assistant.id) { mutableStateOf<PetMotion?>(null) }
+    var interactionNonce by remember(assistant.id) { mutableIntStateOf(0) }
+    var openFileAfterInteraction by remember(assistant.id) { mutableStateOf(false) }
     var dragX by remember(assistant.id) { mutableFloatStateOf(0f) }
     var dragY by remember(assistant.id) { mutableFloatStateOf(0f) }
+
+    val presentation = interactionMotion?.let { motion -> basePresentation.copy(motion = motion) }
+        ?: basePresentation
+
+    LaunchedEffect(interactionNonce) {
+        if (interactionNonce == 0 || interactionMotion == null) return@LaunchedEffect
+        val delayMillis = if (interactionMotion == PetMotion.POKED) 650L else 760L
+        delay(delayMillis)
+        interactionMotion = null
+        if (openFileAfterInteraction) {
+            openFileAfterInteraction = false
+            showRelationshipFile = true
+        }
+    }
 
     Box(
         modifier = modifier.fillMaxSize(),
@@ -66,7 +85,16 @@ fun InAppPetHost(
             OfficialBunnyPet(
                 presentation = presentation,
                 modifier = Modifier.fillMaxSize(),
-                onClick = { showRelationshipFile = true },
+                onClick = {
+                    interactionMotion = PetMotion.TOUCHED
+                    openFileAfterInteraction = true
+                    interactionNonce += 1
+                },
+                onLongClick = {
+                    interactionMotion = PetMotion.POKED
+                    openFileAfterInteraction = false
+                    interactionNonce += 1
+                },
             )
         }
     }
