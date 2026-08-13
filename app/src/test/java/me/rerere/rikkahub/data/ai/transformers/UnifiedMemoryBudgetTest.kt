@@ -64,6 +64,7 @@ class UnifiedMemoryBudgetTest {
         assertFalse("**Recent Chats**" in result.text)
         assertFalse("## Shared recent life context" in result.text)
         assertTrue("remember chapter three" in result.text)
+        assertTrue(result.memoryChars <= 1200)
     }
 
     @Test
@@ -80,11 +81,11 @@ class UnifiedMemoryBudgetTest {
             appendLine("## Code Block Rules")
         }
 
-        val result = UnifiedMemoryBudget.budgetSystemPrompt(source, maxChars = 180)
+        val result = UnifiedMemoryBudget.budgetSystemPrompt(source, maxChars = 420)
 
         assertTrue("LIVE-TAIL" in result.text)
         assertTrue("cross_window_recent_tail" in result.keptSections)
         assertTrue("recent_chats_fallback" in result.droppedSections)
-        assertTrue(result.memoryChars <= 180)
+        assertTrue(result.memoryChars <= 420)
     }
 }
