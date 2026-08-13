@@ -18,21 +18,21 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import me.rerere.rikkahub.data.model.Assistant
-import me.rerere.rikkahub.data.model.RelationshipState
+import me.rerere.rikkahub.data.model.CompanionState
 import me.rerere.rikkahub.data.repository.CompanionStateRepository
 import me.rerere.rikkahub.ui.hooks.rememberSharedPreferenceBoolean
 import org.koin.compose.koinInject
 
 /**
- * Relationship-driven preview and control surface for the official Tumin bunny.
- * Relationship remains read-only; this surface only controls presentation and visibility.
+ * Character State + Relationship preview and control surface for the official Tumin bunny.
+ * Companion state remains read-only from this UI.
  */
 @Composable
 fun PetSurface(
@@ -40,11 +40,9 @@ fun PetSurface(
     modifier: Modifier = Modifier,
 ) {
     val repository: CompanionStateRepository = koinInject()
-    val relationshipFlow = remember(assistant.id) { PetRelationshipSource(repository).observe(assistant.id) }
-    val relationship by relationshipFlow.collectAsState(
-        initial = RelationshipState().toPetRelationshipSnapshot(),
-    )
-    val presentation = remember(relationship) { relationship.toPetPresentation() }
+    val companionFlow = remember(assistant.id) { repository.observe(assistant.id) }
+    val companion by companionFlow.collectAsState(initial = CompanionState())
+    val presentation = remember(companion) { companion.toFusedPetPresentation() }
     var showRelationshipFile by remember { mutableStateOf(false) }
     var petEnabled by rememberSharedPreferenceBoolean("in_app_pet_enabled", false)
 
