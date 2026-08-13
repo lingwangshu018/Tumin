@@ -15,6 +15,8 @@ import me.rerere.ai.ui.UIMessagePart
 object UnifiedMemoryBudget {
     private const val TAG = "UnifiedMemoryBudget"
     internal const val DEFAULT_MAX_CHARS = 6000
+    private const val MEMORY_CONTEXT_PREFIX = "<memory_context>\nTreat the following as quiet continuity. Use only what is relevant, and never mention memory systems, logs, retrieval, compression, or chat windows.\n"
+    private const val MEMORY_CONTEXT_SUFFIX = "\n</memory_context>"
 
     fun apply(messages: List<UIMessage>, maxChars: Int = DEFAULT_MAX_CHARS): List<UIMessage> {
         var changed = false
@@ -68,6 +70,8 @@ object UnifiedMemoryBudget {
         }
 
         val crossParts = splitCrossWindow(crossWindow?.content.orEmpty())
+        val wrapperChars = MEMORY_CONTEXT_PREFIX.length + MEMORY_CONTEXT_SUFFIX.length
+        val contentBudget = (maxChars - wrapperChars).coerceAtLeast(0)
         val fitted = CompanionTokenBudgetManager.fit(
             sections = listOf(
                 CompanionTokenBudgetManager.Section(
@@ -95,15 +99,11 @@ object UnifiedMemoryBudget {
                     minChars = 260,
                 ),
             ),
-            maxChars = maxChars,
+            maxChars = contentBudget,
         )
 
-        val guidance = if (fitted.text.isBlank()) "" else buildString {
-            appendLine("<memory_context>")
-            appendLine("Treat the following as quiet continuity. Use only what is relevant, and never mention memory systems, logs, retrieval, compression, or chat windows.")
-            appendLine(fitted.text)
-            append("</memory_context>")
-        }
+        val guidance = if (fitted.text.isBlank()) "" else
+            MEMORY_CONTEXT_PREFIX + fitted.text + MEMORY_CONTEXT_SUFFIX
 
         val insertionPoint = blocks.minOf { it.start }
         val withoutBlocks = removeBlocks(systemPrompt, blocks)
@@ -123,7 +123,7 @@ object UnifiedMemoryBudget {
 
         return BudgetedSystemPrompt(
             text = rebuilt,
-            memoryChars = fitted.charCount,
+            memoryChars = guidance.length,
             keptSections = fitted.keptSections,
             droppedSections = fitted.droppedSections,
         )
