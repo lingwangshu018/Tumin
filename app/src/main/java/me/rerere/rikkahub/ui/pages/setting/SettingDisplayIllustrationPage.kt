@@ -57,6 +57,7 @@ import org.koin.androidx.compose.koinViewModel
 fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     var displaySetting by remember(settings) { mutableStateOf(settings.displaySetting) }
+    var showVideoCallSettings by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     fun updateDisplaySetting(setting: DisplaySetting) {
@@ -69,7 +70,6 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
     val bgDir = remember { File(context.filesDir, "input_backgrounds").apply { mkdirs() } }
     val drawerBgDir = remember { File(context.filesDir, "drawer_backgrounds").apply { mkdirs() } }
 
-    // Input background picker launcher
     val bgPickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -82,7 +82,6 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
         }
     }
 
-    // Drawer background picker launcher
     val drawerBgPickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -95,7 +94,6 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
         }
     }
 
-    // Avatar Frame launchers
     val frameDir = remember { File(context.filesDir, "avatar_frames").apply { mkdirs() } }
     val userFramePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
@@ -116,7 +114,6 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
         }
     }
 
-    // Bubble background picker launcher
     val bubbleBgDir = remember { File(context.filesDir, "bubble_backgrounds").apply { mkdirs() } }
     val userBubbleBgPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
@@ -154,7 +151,21 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
             contentPadding = contentPadding + PaddingValues(8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Input Background
+            item {
+                CardGroup(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    title = { Text("视频电话") },
+                ) {
+                    item(
+                        headlineContent = { Text("视频设置") },
+                        supportingContent = { Text("用户头像、通话背景、背景透明度与前置摄像头") },
+                        trailingContent = {
+                            TextButton(onClick = { showVideoCallSettings = true }) { Text("设置") }
+                        },
+                    )
+                }
+            }
+
             item {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
@@ -186,7 +197,6 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
                 }
             }
 
-            // Drawer Background
             item {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
@@ -218,7 +228,6 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
                 }
             }
 
-            // 气泡背景图 & 圆角
             item {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
@@ -305,13 +314,11 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
                 }
             }
 
-            // Avatar Frame (QQ-style decoration)
             item {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
                     title = { Text("头像挂件") },
                 ) {
-                    // ===== 用户头像挂件 =====
                     item(
                         headlineContent = { Text("用户头像挂件") },
                         supportingContent = {
@@ -336,7 +343,6 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
                             android.graphics.BitmapFactory.decodeFile(displaySetting.userAvatarFramePath)
                         }
                         if (userFrameBitmap != null) {
-                            // 实时预览：圆形头像 + 挂件叠加
                             item(
                                 headlineContent = { Text("预览") },
                                 supportingContent = {
@@ -346,7 +352,6 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
                                             .height(160.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        // 参考圆形头像
                                         Box(
                                             modifier = Modifier
                                                 .padding(0.dp)
@@ -354,7 +359,6 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
                                                 .clip(CircleShape)
                                                 .background(MaterialTheme.colorScheme.surfaceVariant)
                                         )
-                                        // 挂件叠加层
                                         Box(
                                             modifier = Modifier
                                                 .offset(
@@ -373,7 +377,6 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
                                     }
                                 },
                             )
-                            // 偏移 X
                             item(
                                 headlineContent = { Text("偏移 X") },
                                 supportingContent = {
@@ -388,7 +391,6 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
                                     }
                                 },
                             )
-                            // 偏移 Y
                             item(
                                 headlineContent = { Text("偏移 Y") },
                                 supportingContent = {
@@ -403,7 +405,6 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
                                     }
                                 },
                             )
-                            // 缩放
                             item(
                                 headlineContent = { Text("缩放") },
                                 supportingContent = {
@@ -421,7 +422,6 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
                         }
                     }
 
-                    // ===== AI头像挂件 =====
                     item(
                         headlineContent = { Text("AI头像挂件") },
                         supportingContent = {
@@ -446,7 +446,6 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
                             android.graphics.BitmapFactory.decodeFile(displaySetting.aiAvatarFramePath)
                         }
                         if (aiFrameBitmap != null) {
-                            // 实时预览：圆形头像 + 挂件叠加
                             item(
                                 headlineContent = { Text("预览") },
                                 supportingContent = {
@@ -456,7 +455,6 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
                                             .height(160.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        // 参考圆形头像
                                         Box(
                                             modifier = Modifier
                                                 .padding(0.dp)
@@ -464,7 +462,6 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
                                                 .clip(CircleShape)
                                                 .background(MaterialTheme.colorScheme.surfaceVariant)
                                         )
-                                        // 挂件叠加层
                                         Box(
                                             modifier = Modifier
                                                 .offset(
@@ -483,7 +480,6 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
                                     }
                                 },
                             )
-                            // 偏移 X
                             item(
                                 headlineContent = { Text("偏移 X") },
                                 supportingContent = {
@@ -498,7 +494,6 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
                                     }
                                 },
                             )
-                            // 偏移 Y
                             item(
                                 headlineContent = { Text("偏移 Y") },
                                 supportingContent = {
@@ -513,7 +508,6 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
                                     }
                                 },
                             )
-                            // 缩放
                             item(
                                 headlineContent = { Text("缩放") },
                                 supportingContent = {
@@ -533,5 +527,9 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
                 }
             }
         }
+    }
+
+    if (showVideoCallSettings) {
+        VideoCallSettingsSheet(onDismiss = { showVideoCallSettings = false })
     }
 }
