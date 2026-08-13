@@ -1,4 +1,3 @@
-build: 2026-08-13T23:34+08:00
+build: 2026-08-14
 source: latest master
-revision: 524b92f
-purpose: build Tumin v3.0.1 patch release
+purpose: rebuild Tumin v3.0.1 with startup crash hotfix and update fixes
