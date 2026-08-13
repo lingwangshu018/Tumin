@@ -24,9 +24,9 @@ import me.rerere.rikkahub.BuildConfig
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
-// 更新检查源：橘瓣自己的 GitHub Releases
-private const val GITHUB_OWNER = "sue1231513"
-private const val GITHUB_REPO = "orangechat"
+// 更新检查源：兔眠自己的 GitHub Releases
+private const val GITHUB_OWNER = "lingwangshu018"
+private const val GITHUB_REPO = "Tumin"
 private const val API_URL = "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/releases/latest"
 
 class UpdateChecker(private val client: OkHttpClient) {
@@ -208,7 +208,7 @@ value class Version(val value: String) : Comparable<Version> {
                 val bNum = b[i].toIntOrNull()
 
                 val cmp = when {
-                    // 都是字：按数值比较
+                    // 都是数字：按数值比较
                     aNum != null && bNum != null -> aNum.compareTo(bNum)
                     // 数字优先级低于字符串
                     aNum != null -> -1
