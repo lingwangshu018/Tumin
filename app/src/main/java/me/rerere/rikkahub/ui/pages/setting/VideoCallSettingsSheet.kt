@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import java.io.File
+import me.rerere.rikkahub.ui.pages.voice.VideoCallArchiveStore
 import me.rerere.rikkahub.ui.pages.voice.VideoCallSelfViewMode
 import me.rerere.rikkahub.ui.pages.voice.VideoCallVisualSettings
 import me.rerere.rikkahub.ui.pages.voice.VideoCallVisualSettingsStore
@@ -49,7 +50,9 @@ import me.rerere.rikkahub.ui.pages.voice.VideoCallVisualSettingsStore
 fun VideoCallSettingsSheet(onDismiss: () -> Unit) {
     val context = LocalContext.current
     val store = remember { VideoCallVisualSettingsStore(context) }
+    val archiveStore = remember { VideoCallArchiveStore(context) }
     var settings by remember { mutableStateOf(store.read()) }
+    var showArchives by remember { mutableStateOf(false) }
 
     fun update(next: VideoCallVisualSettings) {
         settings = next
@@ -80,6 +83,20 @@ fun VideoCallSettingsSheet(onDismiss: () -> Unit) {
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
+        if (showArchives) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+            ) {
+                VideoCallArchiveBrowserContent(
+                    store = archiveStore,
+                    onBack = { showArchives = false },
+                )
+            }
+            return@ModalBottomSheet
+        }
+
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
@@ -94,6 +111,25 @@ fun VideoCallSettingsSheet(onDismiss: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium,
                     )
+                }
+            }
+
+            item {
+                SettingSection(title = "视频通话记录") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("查看通话存档", fontWeight = FontWeight.Medium)
+                            Text(
+                                "回看每场视频电话保存的聊天记录",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        TextButton(onClick = { showArchives = true }) { Text("查看") }
+                    }
                 }
             }
 
