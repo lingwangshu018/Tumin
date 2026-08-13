@@ -9,6 +9,8 @@ package me.rerere.rikkahub.utils
 import android.app.DownloadManager
 import android.content.Context
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.widget.Toast
 import androidx.core.net.toUri
 import kotlinx.coroutines.Dispatchers
@@ -21,13 +23,18 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import me.rerere.common.http.await
 import me.rerere.rikkahub.BuildConfig
+import me.rerere.rikkahub.RikkaHubApp
+import me.rerere.rikkahub.data.datastore.SettingsStore
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.koin.android.ext.android.get
 
 // 更新检查源：兔眠自己的 GitHub Releases
 private const val GITHUB_OWNER = "lingwangshu018"
 private const val GITHUB_REPO = "Tumin"
 private const val API_URL = "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/releases/latest"
+private const val UPDATE_PREFS = "app_update_checker"
+private const val LAST_NOTIFIED_VERSION = "last_notified_version"
 
 class UpdateChecker(private val client: OkHttpClient) {
     private val json = Json { ignoreUnknownKeys = true }
@@ -51,7 +58,7 @@ class UpdateChecker(private val client: OkHttpClient) {
                         val release = json.decodeFromString<GithubRelease>(response.body.string())
                         // 将 GitHub Release 映射为 App 使用的 UpdateInfo 结构
                         val version = release.tagName.removePrefix("v").removePrefix("V")
-                        UpdateInfo(
+                        val info = UpdateInfo(
                             version = version,
                             publishedAt = release.publishedAt,
                             changelog = release.body.takeIf { !it.isNullOrBlank() }
@@ -64,6 +71,8 @@ class UpdateChecker(private val client: OkHttpClient) {
                                 )
                             }
                         )
+                        showUpdateHintIfNeeded(info)
+                        info
                     } else {
                         throw Exception("Failed to fetch update info (HTTP ${response.code})")
                     }
@@ -75,6 +84,28 @@ class UpdateChecker(private val client: OkHttpClient) {
     }.catch {
         emit(UiState.Error(it))
     }.flowOn(Dispatchers.IO)
+
+    private fun showUpdateHintIfNeeded(info: UpdateInfo) {
+        if (Version(info.version) <= Version(BuildConfig.VERSION_NAME)) return
+
+        val app = RikkaHubApp.INSTANCE ?: return
+        val showUpdates = runCatching {
+            app.get<SettingsStore>().settingsFlow.value.displaySetting.showUpdates
+        }.getOrDefault(true)
+        if (!showUpdates) return
+
+        val prefs = app.getSharedPreferences(UPDATE_PREFS, Context.MODE_PRIVATE)
+        if (prefs.getString(LAST_NOTIFIED_VERSION, null) == info.version) return
+
+        prefs.edit().putString(LAST_NOTIFIED_VERSION, info.version).apply()
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(
+                app,
+                "发现兔眠新版本 ${info.version}，可前往关于页面查看更新",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
 
     fun downloadUpdate(context: Context, download: UpdateDownload) {
         runCatching {
@@ -94,7 +125,6 @@ class UpdateChecker(private val client: OkHttpClient) {
             // 获取系统的DownloadManager
             val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
             dm.enqueue(request)
-            // 你可以保存返回的downloadId到本地，以便后续查询下载进度或状态
         }.onFailure {
             Toast.makeText(context, "Failed to update", Toast.LENGTH_SHORT).show()
             context.openUrl(download.url) // 跳转到下载页面
