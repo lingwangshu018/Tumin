@@ -61,7 +61,6 @@ private fun AvatarFrameOverlay(
     baseSize: Float,
 ) {
     if (framePath.isNotBlank() && File(framePath).exists()) {
-        val context = LocalContext.current
         val bitmap = remember(framePath) {
             runCatching {
                 BitmapFactory.decodeFile(framePath)?.asImageBitmap()
@@ -95,10 +94,7 @@ fun ChatMessageUserAvatar(
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(
-                modifier = Modifier,
-                horizontalAlignment = Alignment.End,
-            ) {
+            Column(horizontalAlignment = Alignment.End) {
                 Text(
                     text = nickname.ifEmpty { stringResource(R.string.user_default_name) },
                     style = MaterialTheme.typography.titleSmall,
@@ -149,11 +145,12 @@ fun ChatMessageAssistantAvatar(
     var showPet by remember { mutableStateOf(false) }
     val showIcon = settings.displaySetting.showModelIcon
     val useAssistantAvatar = assistant?.useAssistantAvatar == true
+
     if (message.role == MessageRole.ASSISTANT && (model != null || useAssistantAvatar)) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            modifier = modifier
+            modifier = modifier,
         ) {
             if (useAssistantAvatar) {
                 if (showIcon) {
@@ -176,14 +173,13 @@ fun ChatMessageAssistantAvatar(
                         )
                     }
                 }
-                Column(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    if(settings.displaySetting.showModelName) {
+                Column(modifier = Modifier.weight(1f)) {
+                    if (settings.displaySetting.showModelName) {
                         Text(
                             text = assistant.name.ifEmpty { stringResource(R.string.assistant_page_default_assistant) },
                             style = MaterialTheme.typography.titleSmallEmphasized,
                             maxLines = 1,
+                            modifier = Modifier.clickable { showCharacterState = true },
                         )
                         if (settings.displaySetting.showDateBelowName) {
                             Text(
@@ -197,11 +193,18 @@ fun ChatMessageAssistantAvatar(
                 }
             } else if (model != null) {
                 if (showIcon) {
-                    Box(contentAlignment = Alignment.Center) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = if (assistant != null) {
+                            Modifier.clickable { showCharacterState = true }
+                        } else {
+                            Modifier
+                        },
+                    ) {
                         AutoAIIcon(
                             name = model.modelId,
                             modifier = Modifier.size(32.dp),
-                            loading = loading
+                            loading = loading,
                         )
                         AvatarFrameOverlay(
                             framePath = settings.displaySetting.aiAvatarFramePath,
@@ -212,19 +215,22 @@ fun ChatMessageAssistantAvatar(
                         )
                     }
                 }
-                Column(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    if(settings.displaySetting.showModelName) {
+                Column(modifier = Modifier.weight(1f)) {
+                    if (settings.displaySetting.showModelName) {
                         Text(
                             text = model.displayName,
                             style = MaterialTheme.typography.titleSmallEmphasized,
+                            modifier = if (assistant != null) {
+                                Modifier.clickable { showCharacterState = true }
+                            } else {
+                                Modifier
+                            },
                         )
                         if (settings.displaySetting.showDateBelowName) {
                             Text(
                                 text = message.createdAt.toJavaLocalDateTime().toLocalString(),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = LocalContentColor.current.copy(alpha = 0.8f)
+                                color = LocalContentColor.current.copy(alpha = 0.8f),
                             )
                         }
                     }
@@ -232,6 +238,7 @@ fun ChatMessageAssistantAvatar(
             }
         }
     }
+
     if (showCharacterState && assistant != null && companionState != null) {
         CharacterStateSheet(
             characterName = assistant.name.ifBlank { "TA" },
