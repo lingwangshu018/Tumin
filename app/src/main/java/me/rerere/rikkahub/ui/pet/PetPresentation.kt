@@ -18,6 +18,13 @@ enum class PetMotion {
     AFFECTIONATE,
     STAY_CLOSE,
     CAUTIOUS,
+    LOOK,
+    SLEEP,
+    SHY,
+    ANGRY,
+    TOUCHED,
+    POKED,
+    RECONCILE,
 }
 
 fun PetRelationshipSnapshot.toPetPresentation(): PetPresentation = when (behavior) {
