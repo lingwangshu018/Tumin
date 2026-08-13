@@ -1,4 +1,4 @@
-build: 2026-08-13T20:30+08:00
+build: 2026-08-13T23:34+08:00
 source: latest master
-revision: fddbec6
-purpose: build Tumin v3.0.0 major release
+revision: 524b92f
+purpose: build Tumin v3.0.1 patch release
