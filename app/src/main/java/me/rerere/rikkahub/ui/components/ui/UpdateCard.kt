@@ -45,22 +45,26 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.useThrottle
-import me.rerere.rikkahub.ui.pages.chat.ChatVM
+import me.rerere.rikkahub.utils.UiState
+import me.rerere.rikkahub.utils.UpdateChecker
 import me.rerere.rikkahub.utils.UpdateDownload
 import me.rerere.rikkahub.utils.Version
 import me.rerere.rikkahub.utils.onError
 import me.rerere.rikkahub.utils.onSuccess
 import me.rerere.rikkahub.utils.toLocalDateTime
+import org.koin.compose.koinInject
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 import kotlin.time.toJavaInstant
 
 @OptIn(ExperimentalTime::class)
 @Composable
-fun UpdateCard(vm: ChatVM) {
-    val state by vm.updateState.collectAsStateWithLifecycle()
+fun UpdateCard(updateChecker: UpdateChecker = koinInject()) {
+    val updateFlow = remember(updateChecker) { updateChecker.checkUpdate() }
+    val state by updateFlow.collectAsStateWithLifecycle(initialValue = UiState.Loading)
     val context = LocalContext.current
     val toaster = LocalToaster.current
+
     state.onError {
         Card {
             Column(
@@ -128,7 +132,7 @@ fun UpdateCard(vm: ChatVM) {
         }
         if (showDetail) {
             val downloadHandler = useThrottle<UpdateDownload>(500) { item ->
-                vm.updateChecker.downloadUpdate(context, item)
+                updateChecker.downloadUpdate(context, item)
                 showDetail = false
                 toaster.show(context.getString(R.string.update_card_downloading), type = ToastType.Info)
             }
