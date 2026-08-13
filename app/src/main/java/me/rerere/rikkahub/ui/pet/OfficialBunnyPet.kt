@@ -199,19 +199,31 @@ fun OfficialBunnyPet(
 
     val frame = animation.frames[frameIndex]
     val context = LocalContext.current
-    val atlasBitmap = remember {
-        BitmapFactory.decodeResource(context.resources, R.drawable.pet_bunny_state_atlas).asImageBitmap()
+    val atlasBitmap = if (frame is BunnyFrame.Atlas) {
+        remember(context.resources) {
+            BitmapFactory.decodeResource(context.resources, R.drawable.pet_bunny_state_atlas)
+                ?.asImageBitmap()
+        }
+    } else {
+        null
     }
     val painter = when (frame) {
         is BunnyFrame.Drawable -> painterResource(frame.id)
-        is BunnyFrame.Atlas -> remember(frame.index, atlasBitmap) {
-            val column = frame.index % 5
-            val row = frame.index / 5
-            BitmapPainter(
-                image = atlasBitmap,
-                srcOffset = IntOffset(column * 96, row * 96),
-                srcSize = IntSize(96, 96),
-            )
+        is BunnyFrame.Atlas -> {
+            val bitmap = atlasBitmap
+            if (bitmap == null) {
+                painterResource(R.drawable.pet_bunny_idle_1)
+            } else {
+                remember(frame.index, bitmap) {
+                    val column = frame.index % 5
+                    val row = frame.index / 5
+                    BitmapPainter(
+                        image = bitmap,
+                        srcOffset = IntOffset(column * 96, row * 96),
+                        srcSize = IntSize(96, 96),
+                    )
+                }
+            }
         }
     }
 
