@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.ai.transformers
 
 import android.content.Context
+import android.util.Log
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.ui.pages.life.MusicPlaybackSession
 import me.rerere.rikkahub.utils.StickerAiSupport
@@ -9,8 +10,10 @@ import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import kotlin.math.roundToInt
 
-/** Makes recent life-space, health-cycle, music, shared-reading, and allowed sticker context available to conversations. */
+/** Makes companion state and recent life context available through one bounded injection. */
 object LifeContextTransformer : InputMessageTransformer {
+    private const val CONTEXT_BUDGET_CHARS = 5600
+
     override suspend fun transform(ctx: TransformerContext, messages: List<UIMessage>): List<UIMessage> {
         val prefs = ctx.context.getSharedPreferences("tumin_life_hub", Context.MODE_PRIVATE)
         val raw = prefs.getString("entries", "[]") ?: "[]"
@@ -34,6 +37,7 @@ object LifeContextTransformer : InputMessageTransformer {
             }.trim()
         }.getOrDefault("")
 
+        val companionContext = CompanionContextBuilder.build(ctx.context, ctx.assistant)
         val healthContext = buildHealthContext(ctx.context)
         val musicContext = buildMusicContext()
         val readingContext = buildReadingContext(ctx.context)
@@ -41,38 +45,60 @@ object LifeContextTransformer : InputMessageTransformer {
             context = ctx.context,
             assistantId = ctx.assistant.id.toString(),
         )
-        if (
-            lifeContext.isBlank() &&
-            healthContext.isBlank() &&
-            musicContext.isBlank() &&
-            readingContext.isBlank() &&
-            stickerContext.isBlank()
-        ) return messages
-
-        val injected = buildString {
-            if (lifeContext.isNotBlank()) {
-                append("<life_context>Recent records from our shared life:\n")
-                append(lifeContext)
-                append("\nUse them naturally when relevant; do not recite this block.</life_context>")
-            }
-            if (healthContext.isNotBlank()) {
-                if (isNotEmpty()) appendLine().appendLine()
-                append(healthContext)
-            }
-            if (musicContext.isNotBlank()) {
-                if (isNotEmpty()) appendLine().appendLine()
-                append(musicContext)
-            }
-            if (readingContext.isNotBlank()) {
-                if (isNotEmpty()) appendLine().appendLine()
-                append(readingContext)
-            }
-            if (stickerContext.isNotBlank()) {
-                if (isNotEmpty()) appendLine().appendLine()
-                append(stickerContext)
-            }
+        val wrappedLifeContext = if (lifeContext.isBlank()) "" else buildString {
+            append("<life_context>Recent records from our shared life:\n")
+            append(lifeContext)
+            append("\nUse them naturally when relevant; do not recite this block.</life_context>")
         }
-        return listOf(UIMessage.user(injected)) + messages
+
+        val budgeted = CompanionTokenBudgetManager.fit(
+            sections = listOf(
+                CompanionTokenBudgetManager.Section(
+                    name = "companion_state",
+                    content = companionContext,
+                    priority = 100,
+                    minChars = 650,
+                ),
+                CompanionTokenBudgetManager.Section(
+                    name = "health_cycle",
+                    content = healthContext,
+                    priority = 80,
+                    minChars = 650,
+                ),
+                CompanionTokenBudgetManager.Section(
+                    name = "shared_music",
+                    content = musicContext,
+                    priority = 70,
+                    minChars = 350,
+                ),
+                CompanionTokenBudgetManager.Section(
+                    name = "shared_reading",
+                    content = readingContext,
+                    priority = 65,
+                    minChars = 650,
+                ),
+                CompanionTokenBudgetManager.Section(
+                    name = "life_context",
+                    content = wrappedLifeContext,
+                    priority = 55,
+                    minChars = 450,
+                ),
+                CompanionTokenBudgetManager.Section(
+                    name = "sticker_context",
+                    content = stickerContext,
+                    priority = 40,
+                    minChars = 220,
+                ),
+            ),
+            maxChars = CONTEXT_BUDGET_CHARS,
+        )
+        if (budgeted.text.isBlank()) return messages
+
+        Log.d(
+            "CompanionContext",
+            "assistant=${ctx.assistant.id} chars=${budgeted.charCount} kept=${budgeted.keptSections} dropped=${budgeted.droppedSections}",
+        )
+        return listOf(UIMessage.user(budgeted.text)) + messages
     }
 
     private fun buildMusicContext(): String {
