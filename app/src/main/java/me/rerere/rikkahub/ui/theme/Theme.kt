@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -92,7 +92,6 @@ fun RikkahubTheme(
     }
     val extendColors = if (darkTheme) ExtendDarkColors else ExtendLightColors
 
-    // 颜色自定义覆盖
     val finalColorScheme = remember(
         colorSchemeConverted,
         settings.displaySetting.primaryColor,
@@ -118,12 +117,6 @@ fun RikkahubTheme(
             )
         }
         if (settings.themeId == "pearltide") {
-            // 珍珠潮汐主题专属:统一让默认读取这几个 token 的容器变透明/半透明,
-            // 这样 Scaffold、Card、TopAppBar、ModalDrawerSheet、ModalBottomSheet 等
-            // 全部自动生效,不需要逐个页面单独改。
-            // 这个 if 分支只在 themeId 精确等于 "pearltide" 时才会执行,
-            // 其余六个官方预设(id 分别是 ocean/sakura/spring/autumn/black/claude)
-            // 以及用户自定义主题(id 是随机 UUID,不会等于这个字符串)完全不受影响。
             val glassAlpha = 0.6f
             scheme = scheme.copy(
                 background = scheme.background.copy(alpha = 0f),
@@ -141,7 +134,6 @@ fun RikkahubTheme(
         scheme
     }
 
-    // 更新状态栏图标颜色
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
@@ -163,7 +155,7 @@ fun RikkahubTheme(
             typography = Typography,
             motionScheme = MotionScheme.expressive()
         ) {
-            val petEnabled by rememberSharedPreferenceBoolean("in_app_pet_enabled", false)
+            val petEnabled by rememberSharedPreferenceBoolean("in_app_pet_enabled", true)
             val activeCall by VoiceCallService.activeConversationId.collectAsState()
             val currentAssistant = settings.getCurrentAssistant()
 
