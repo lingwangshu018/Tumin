@@ -12,6 +12,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.AudioManager
 import android.os.Binder
 import android.os.IBinder
 import android.util.Log
@@ -42,6 +43,7 @@ import me.rerere.rikkahub.ui.hooks.CustomTtsState
 import me.rerere.rikkahub.ui.hooks.createCustomAsrState
 import me.rerere.rikkahub.ui.hooks.createCustomTtsState
 import me.rerere.rikkahub.ui.pages.voice.VoiceCallStatus
+import me.rerere.rikkahub.ui.pages.voice.VoiceCallSurface
 import me.rerere.rikkahub.ui.pages.voice.VoiceCallUiState
 import okhttp3.OkHttpClient
 import org.koin.core.component.KoinComponent
@@ -51,14 +53,10 @@ import kotlin.uuid.Uuid
 private const val TAG = "VoiceCallService"
 
 /**
- * 语音通话后台服务
+ * 语音 / 剧情视频通话后台服务。
  *
- * 把原来 VoiceCallVM 里的业务逻辑迁移成"独立运行、跟随 Service 生命周期"的形式.
- * 用户在 VoiceCallPage 手动开始通话后, 切到后台/退出页面, 通话依然继续跑,
- * 有持续通知栏, 点通知能回到通话页面. 只有用户主动点"挂断"才真正结束.
- *
- * 同一时刻只允许存在一路通话 (由 _activeConversationId 这个 companion object 级别的
- * StateFlow 做单例保护).
+ * ASR、AI 生成与 TTS 都跟随 Service 生命周期，页面只负责 bind + UI。返回聊天页或切到
+ * 后台时通话继续；只有主动挂断才真正结束。
  */
 class VoiceCallService : Service(), KoinComponent {
     private val chatService: ChatService by inject()
@@ -74,6 +72,14 @@ class VoiceCallService : Service(), KoinComponent {
     private lateinit var conversationId: Uuid
     private lateinit var asr: CustomAsrState
     private lateinit var tts: CustomTtsState
+
+    private val audioManager by lazy {
+        getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    }
+    private var previousAudioMode: Int? = null
+    private var previousSpeakerphoneOn: Boolean? = null
+    private var audioRoutePrepared = false
+    private var callSurface: VoiceCallSurface = VoiceCallSurface.Voice
 
     private val _uiState = MutableStateFlow(VoiceCallUiState())
     val uiState: StateFlow<VoiceCallUiState> = _uiState.asStateFlow()
@@ -103,19 +109,25 @@ class VoiceCallService : Service(), KoinComponent {
         private val _activeConversationId = MutableStateFlow<String?>(null)
         val activeConversationId: StateFlow<String?> = _activeConversationId.asStateFlow()
 
+        private val _activeCallSurface = MutableStateFlow<VoiceCallSurface?>(null)
+        val activeCallSurface: StateFlow<VoiceCallSurface?> = _activeCallSurface.asStateFlow()
+
         fun isRunning(): Boolean = _activeConversationId.value != null
 
-        /**
-         * 启动服务: 调用方 (VoiceCallPage) 负责在自己判断"没有冲突"之后才调这个方法.
-         */
-        fun start(context: Context, conversationId: String) {
+        /** 启动后台通话。语音页保持默认 Voice；视频页显式传 Video。 */
+        fun start(
+            context: Context,
+            conversationId: String,
+            surface: VoiceCallSurface = VoiceCallSurface.Voice,
+        ) {
             val intent = Intent(context, VoiceCallService::class.java).apply {
                 putExtra(EXTRA_CONVERSATION_ID, conversationId)
+                putExtra(EXTRA_CALL_SURFACE, surface.name)
             }
             try {
                 ContextCompat.startForegroundService(context, intent)
             } catch (e: Exception) {
-                Log.e(TAG, "启动 VoiceCallService 失败, conversationId=$conversationId", e)
+                Log.e(TAG, "启动 VoiceCallService 失败, conversationId=$conversationId, surface=$surface", e)
             }
         }
 
@@ -128,11 +140,11 @@ class VoiceCallService : Service(), KoinComponent {
         }
 
         const val EXTRA_CONVERSATION_ID = "conversationId"
+        const val EXTRA_CALL_SURFACE = "callSurface"
         const val ACTION_HANG_UP = "me.rerere.rikkahub.VOICE_CALL_HANG_UP"
         const val NOTIFICATION_ID = 40001
     }
 
-    // Binder, 供 VoiceCallPage bindService 用
     inner class LocalBinder : Binder() {
         fun getService(): VoiceCallService = this@VoiceCallService
     }
@@ -142,7 +154,6 @@ class VoiceCallService : Service(), KoinComponent {
     override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // 用户点了通知栏上的"挂断"按钮
         if (intent?.action == ACTION_HANG_UP) {
             endCall()
             stopSelf()
@@ -155,18 +166,18 @@ class VoiceCallService : Service(), KoinComponent {
             stopSelf()
             return START_NOT_STICKY
         }
+        val requestedSurface = intent.getStringExtra(EXTRA_CALL_SURFACE)
+            ?.let { value -> runCatching { VoiceCallSurface.valueOf(value) }.getOrNull() }
+            ?: VoiceCallSurface.Voice
 
-        // 已经在跑同一个对话的通话: 不要重复 startCall, 只刷新前台通知
+        // 已经在跑同一个对话：不要重复初始化。保留原通话 surface，避免页面误把正在进行的
+        // 语音通话偷偷切成视频（反之亦然）。
         if (_activeConversationId.value == convIdStr) {
             return START_NOT_STICKY
         }
 
-        // 兜底: 已经在跑别的对话的通话, 防御性丢弃
         if (_activeConversationId.value != null && _activeConversationId.value != convIdStr) {
-            Log.w(
-                TAG,
-                "已有通话 ${_activeConversationId.value} 在进行, 忽略新的 start 请求 $convIdStr"
-            )
+            Log.w(TAG, "已有通话 ${_activeConversationId.value} 在进行, 忽略新的 start 请求 $convIdStr")
             return START_NOT_STICKY
         }
 
@@ -178,12 +189,11 @@ class VoiceCallService : Service(), KoinComponent {
             return START_NOT_STICKY
         }
 
+        callSurface = requestedSurface
         _activeConversationId.value = convIdStr
+        _activeCallSurface.value = requestedSurface
 
-        // 关键修复: 必须先同步调用 startForeground, 用一个初始状态的通知占位.
-        // Android 要求 startForegroundService() 调用后 5 秒内必须调用 startForeground(),
-        // 否则触发 ForegroundServiceDidNotStartInTimeException 崩溃.
-        // 不能等 ASR/TTS 异步初始化完成后才调用, 真正的初始化放到下面的协程里做.
+        // startForegroundService 后 5 秒内必须同步进入前台，ASR/TTS 初始化放到后续协程。
         try {
             ServiceCompat.startForeground(
                 this,
@@ -194,25 +204,22 @@ class VoiceCallService : Service(), KoinComponent {
         } catch (e: Exception) {
             Log.e(TAG, "startForeground 失败, conversationId=$conversationId", e)
             _activeConversationId.value = null
+            _activeCallSurface.value = null
             stopSelf()
             return START_NOT_STICKY
         }
 
         serviceScope.launch {
             try {
-                // 关键修复: 两个工厂函数现在是 suspend 函数, 会真正挂起等待
-                // provider 设置完成后才返回实例, 消除了之前 controller 为 null 的竞态.
                 asr = createCustomAsrState(applicationContext, httpClient, settingsStore)
                 tts = createCustomTtsState(applicationContext, settingsStore)
 
                 startCall()
 
-                // 订阅 uiState 变化, 实时刷新通知内容
                 launch {
                     uiState.collect { state ->
                         try {
-                            val manager =
-                                getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                             manager.notify(NOTIFICATION_ID, buildNotification(state))
                         } catch (e: Exception) {
                             Log.e(TAG, "刷新通话通知失败", e)
@@ -220,7 +227,6 @@ class VoiceCallService : Service(), KoinComponent {
                     }
                 }
 
-                // Service 自己订阅 asr.state, 同步振幅数据 + 捕获底层 ASR 错误
                 launch {
                     asr.state.collect { asrState ->
                         updateAmplitudes(asrState.amplitudes)
@@ -237,7 +243,7 @@ class VoiceCallService : Service(), KoinComponent {
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "初始化语音通话失败, conversationId=$conversationId", e)
+                Log.e(TAG, "初始化通话失败, conversationId=$conversationId", e)
                 _uiState.update {
                     it.copy(
                         status = VoiceCallStatus.Error,
@@ -247,16 +253,49 @@ class VoiceCallService : Service(), KoinComponent {
             }
         }
 
-        // 不用 START_STICKY: 通话被系统杀死不应该自动重启接着录音
         return START_NOT_STICKY
     }
 
+    /** 准备通话音频路由，并记住进入通话前的系统状态以便挂断后恢复。 */
+    private fun prepareAudioRoute() {
+        if (!audioRoutePrepared) {
+            previousAudioMode = audioManager.mode
+            previousSpeakerphoneOn = audioManager.isSpeakerphoneOn
+            audioRoutePrepared = true
+        }
+        runCatching { audioManager.mode = AudioManager.MODE_IN_COMMUNICATION }
+            .onFailure { Log.w(TAG, "设置 MODE_IN_COMMUNICATION 失败", it) }
+        setSpeakerEnabled(callSurface == VoiceCallSurface.Video)
+    }
+
+    fun setSpeakerEnabled(enabled: Boolean) {
+        runCatching {
+            audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+            audioManager.isSpeakerphoneOn = enabled
+            _uiState.update { it.copy(isSpeakerEnabled = enabled) }
+        }.onFailure {
+            Log.e(TAG, "切换扬声器失败, enabled=$enabled", it)
+            _uiState.update { state -> state.copy(errorMessage = "音频输出切换失败: ${it.message}") }
+        }
+    }
+
+    fun toggleSpeaker() {
+        setSpeakerEnabled(!_uiState.value.isSpeakerEnabled)
+    }
+
+    private fun restoreAudioRoute() {
+        if (!audioRoutePrepared) return
+        runCatching {
+            previousSpeakerphoneOn?.let { audioManager.isSpeakerphoneOn = it }
+            previousAudioMode?.let { audioManager.mode = it }
+        }.onFailure { Log.w(TAG, "恢复通话前音频路由失败", it) }
+        previousSpeakerphoneOn = null
+        previousAudioMode = null
+        audioRoutePrepared = false
+    }
+
     /**
-     * 开始语音通话
-     *
-     * ASR 在整个通话期间持续录音 (不再像原来那样只在 Listening 状态开启).
-     * 这里只调用一次 asr.start(), 作为整场通话唯一的录音启动点
-     * (除非用户中途静音又取消).
+     * 开始通话。ASR 在整场通话期间持续录音（静音时暂停）。
      */
     fun startCall() {
         if (_uiState.value.status != VoiceCallStatus.Idle) return
@@ -265,6 +304,7 @@ class VoiceCallService : Service(), KoinComponent {
         hasSentCurrentMessage = false
         ttsSentLength = 0
         isMuted = false
+        prepareAudioRoute()
 
         _uiState.update {
             it.copy(
@@ -295,10 +335,6 @@ class VoiceCallService : Service(), KoinComponent {
         startConversationMonitor()
     }
 
-    /**
-     * 从别的状态切回 Listening 时复位状态 + VAD 计时器.
-     * 不再调用 asr.stop()/asr.start() (ASR 现在贯穿全程).
-     */
     private fun startListening() {
         tts.stop()
         ttsSentLength = 0
@@ -326,9 +362,6 @@ class VoiceCallService : Service(), KoinComponent {
         startVadDetection()
     }
 
-    /**
-     * VAD: 检测用户停顿后自动发送 (仅 Listening 状态生效).
-     */
     private fun startVadDetection() {
         vadJob?.cancel()
         vadJob = serviceScope.launch {
@@ -376,15 +409,11 @@ class VoiceCallService : Service(), KoinComponent {
         }
     }
 
-    /** 发送当前语音转写。 */
     private fun sendCurrentMessage() {
         sendCallMessage(_uiState.value.userTranscript.trim())
     }
 
-    /**
-     * 视频电话文字输入入口。
-     * 与语音输入共用同一套 Processing → AI → 流式 TTS → Listening 状态机。
-     */
+    /** 视频电话文字输入与语音输入共用 Processing → AI → TTS → Listening 状态机。 */
     fun sendTextMessage(text: String) {
         val normalized = text.trim()
         if (normalized.isBlank()) return
@@ -401,8 +430,6 @@ class VoiceCallService : Service(), KoinComponent {
             return
         }
 
-        // 若用户在 AI 说话时改用文字接话，停止当前朗读但保留 generationDone 监听器，
-        // 新消息仍会完整进入下一轮流式 TTS。
         if (_uiState.value.status == VoiceCallStatus.Speaking) {
             interruptDetectJob?.cancel()
             tts.stop()
@@ -425,11 +452,7 @@ class VoiceCallService : Service(), KoinComponent {
                 listOf(UIMessagePart.Text(transcript))
             )
         } catch (e: Exception) {
-            Log.e(
-                TAG,
-                "发送消息失败, conversationId=$conversationId, transcript=$transcript",
-                e
-            )
+            Log.e(TAG, "发送消息失败, conversationId=$conversationId, transcript=$transcript", e)
             _uiState.update {
                 it.copy(
                     status = VoiceCallStatus.Error,
@@ -439,12 +462,6 @@ class VoiceCallService : Service(), KoinComponent {
         }
     }
 
-    /**
-     * 监听对话流变化, 实现:
-     * 1. 流式 TTS (检测到新句子即朗读)
-     * 2. AI 开始输出时立即进入 Speaking 状态, 让用户可以打断
-     * 3. AI 回复完成后回到 Listening
-     */
     private fun startConversationMonitor() {
         conversationMonitorJob?.cancel()
         conversationMonitorJob = serviceScope.launch {
@@ -558,8 +575,7 @@ class VoiceCallService : Service(), KoinComponent {
     }
 
     private fun getPendingRemainder(text: String): String {
-        val lastSentenceEnd =
-            text.lastIndexOfAny(charArrayOf('。', '？', '！', '.', '?', '!', '\n'))
+        val lastSentenceEnd = text.lastIndexOfAny(charArrayOf('。', '？', '！', '.', '?', '!', '\n'))
         return if (lastSentenceEnd >= 0 && lastSentenceEnd < text.length - 1) {
             text.substring(lastSentenceEnd + 1)
         } else if (lastSentenceEnd < 0) {
@@ -572,7 +588,7 @@ class VoiceCallService : Service(), KoinComponent {
     private fun startInterruptDetection() {
         interruptDetectJob?.cancel()
         interruptDetectJob = serviceScope.launch {
-            var baselineTranscript = _uiState.value.userTranscript
+            val baselineTranscript = _uiState.value.userTranscript
             while (true) {
                 delay(150)
                 if (_uiState.value.status != VoiceCallStatus.Speaking) break
@@ -586,10 +602,7 @@ class VoiceCallService : Service(), KoinComponent {
                 val hasLoudVoice = recentAmplitude > 0.15f
 
                 if (hasNewTranscript || hasLoudVoice) {
-                    Log.d(
-                        TAG,
-                        "检测到用户打断: transcript=$currentTranscript, amplitude=$recentAmplitude"
-                    )
+                    Log.d(TAG, "检测到用户打断: transcript=$currentTranscript, amplitude=$recentAmplitude")
                     interruptSpeaking()
                     break
                 }
@@ -602,7 +615,6 @@ class VoiceCallService : Service(), KoinComponent {
         speakingMonitorJob?.cancel()
         interruptDetectJob?.cancel()
         startListening()
-        // 恢复 generationDone 监听，避免打断一次后后续轮次永远收不到生成完成事件。
         startConversationMonitor()
     }
 
@@ -618,12 +630,10 @@ class VoiceCallService : Service(), KoinComponent {
                     if (transcript.isNotEmpty() && _uiState.value.autoSendEnabled) {
                         Log.d(TAG, "ASR monitor: Auto-send after ASR completed: $transcript")
                         sendCurrentMessage()
-                    } else {
-                        if (!isMuted && _uiState.value.status == VoiceCallStatus.Listening) {
-                            runCatching {
-                                asr.start { t -> _uiState.update { it.copy(userTranscript = t) } }
-                            }.onFailure { Log.e(TAG, it.toString(), it) }
-                        }
+                    } else if (!isMuted && _uiState.value.status == VoiceCallStatus.Listening) {
+                        runCatching {
+                            asr.start { t -> _uiState.update { it.copy(userTranscript = t) } }
+                        }.onFailure { Log.e(TAG, it.toString(), it) }
                     }
                 }
 
@@ -662,10 +672,15 @@ class VoiceCallService : Service(), KoinComponent {
         interruptDetectJob?.cancel()
         if (::asr.isInitialized) asr.stop()
         if (::tts.isInitialized) tts.stop()
+        restoreAudioRoute()
         _uiState.update {
-            it.copy(status = VoiceCallStatus.Idle)
+            it.copy(
+                status = VoiceCallStatus.Idle,
+                isSpeakerEnabled = false,
+            )
         }
         _activeConversationId.value = null
+        _activeCallSurface.value = null
         try {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } catch (e: Exception) {
@@ -685,13 +700,15 @@ class VoiceCallService : Service(), KoinComponent {
             VoiceCallStatus.Error -> state.errorMessage ?: "通话出错"
             VoiceCallStatus.Idle -> "通话中"
         }
+        val isVideo = callSurface == VoiceCallSurface.Video
+        val returnExtra = if (isVideo) "openVideoCallConversationId" else "openVoiceCallConversationId"
 
         val contentIntent = PendingIntent.getActivity(
             this,
             conversationId.hashCode(),
             Intent(this, RouteActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                putExtra("openVoiceCallConversationId", conversationId.toString())
+                putExtra(returnExtra, conversationId.toString())
             },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
@@ -704,7 +721,7 @@ class VoiceCallService : Service(), KoinComponent {
         )
 
         return NotificationCompat.Builder(this, VOICE_CALL_NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("语音通话")
+            .setContentTitle(if (isVideo) "视频通话" else "语音通话")
             .setContentText(contentText)
             .setSmallIcon(R.drawable.small_icon)
             .setOngoing(true)
@@ -716,12 +733,15 @@ class VoiceCallService : Service(), KoinComponent {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         try {
             endCall()
+            if (::asr.isInitialized) asr.cleanup()
+            if (::tts.isInitialized) tts.cleanup()
         } catch (e: Exception) {
             Log.e(TAG, "onDestroy 清理失败", e)
+        } finally {
+            serviceScope.cancel()
+            super.onDestroy()
         }
-        serviceScope.cancel()
     }
 }
