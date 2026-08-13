@@ -115,7 +115,6 @@ internal class CustomTtsStateImpl(
 ) : CustomTtsState, KoinComponent {
 
     private val ttsManager by inject<TTSManager>()
-    private val companionStateRepository = CompanionStateRepository(context)
 
     private val controller by lazy {
         TtsController(context, ttsManager)
@@ -135,8 +134,8 @@ internal class CustomTtsStateImpl(
 
     /**
      * MiniMax 的 Character State Emotion 模式只在真正朗读前读取当前角色状态。
-     * 这样普通朗读、语音电话和视频电话复用同一个 TTS state 时，都会拿到同一份
-     * CompanionStateRepository 中的实时 emotion，而不会把旧情绪缓存整场通话。
+     * 普通朗读、语音电话和视频电话复用同一个 TTS state 时，都会读取同一份
+     * 持久化 Companion State，而不会把某次读取到的旧情绪缓存整场通话。
      *
      * Auto（emotion 为空）和手动 Emotion 不使用这个 hint；它们仍由 provider 自己决定。
      */
@@ -145,7 +144,7 @@ internal class CustomTtsStateImpl(
         val provider = settings.getSelectedTTSProvider()
         val emotionHint = if (provider is TTSProviderSetting.MiniMax && provider.useCharacterStateEmotion) {
             val assistant = settings.getCurrentAssistant()
-            companionStateRepository.observe(assistant.id).value.character.emotion
+            CompanionStateRepository(context).observe(assistant.id).value.character.emotion
                 .trim()
                 .takeIf { it.isNotBlank() }
         } else {
