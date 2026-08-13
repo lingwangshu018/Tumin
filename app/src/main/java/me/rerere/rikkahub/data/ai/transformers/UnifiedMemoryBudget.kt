@@ -74,23 +74,23 @@ object UnifiedMemoryBudget {
                     name = "cross_window_recent_tail",
                     content = crossParts.recentTail,
                     priority = 100,
-                    minChars = 320,
+                    minChars = 120,
                 ),
                 CompanionTokenBudgetManager.Section(
                     name = "cross_window_summary",
                     content = crossParts.summary,
                     priority = 90,
-                    minChars = 220,
+                    minChars = 180,
                 ),
                 CompanionTokenBudgetManager.Section(
                     name = "long_term_memory",
-                    content = durable?.content.orEmpty(),
+                    content = normalizeBlock(durable?.content.orEmpty(), "**Memories**", "## Long-term relevant memories"),
                     priority = 80,
                     minChars = 700,
                 ),
                 CompanionTokenBudgetManager.Section(
                     name = "recent_chats_fallback",
-                    content = recentChats?.content.orEmpty(),
+                    content = normalizeBlock(recentChats?.content.orEmpty(), "**Recent Chats**", "## Recent chats fallback"),
                     priority = 30,
                     minChars = 260,
                 ),
@@ -153,6 +153,12 @@ object UnifiedMemoryBudget {
             .minOrNull()
             ?: text.length
         return Block(start = start, end = end, content = text.substring(start, end).trim())
+    }
+
+    private fun normalizeBlock(content: String, marker: String, heading: String): String {
+        if (content.isBlank()) return ""
+        val body = content.removePrefix(marker).trim()
+        return if (body.isBlank()) heading else "$heading\n$body"
     }
 
     private fun removeBlocks(text: String, blocks: List<Block>): String {
