@@ -14,7 +14,9 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.media.AudioManager
 import android.os.Binder
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -81,6 +83,8 @@ class VoiceCallService : Service(), KoinComponent {
     private var audioRoutePrepared = false
     private var callSurface: VoiceCallSurface = VoiceCallSurface.Voice
     private var resourcesReleased = false
+    private var conversationReferenceHeld = false
+    private var lastMessageSentAt = 0L
 
     private val _uiState = MutableStateFlow(VoiceCallUiState())
     val uiState: StateFlow<VoiceCallUiState> = _uiState.asStateFlow()
@@ -91,6 +95,7 @@ class VoiceCallService : Service(), KoinComponent {
     private var vadJob: Job? = null
     private var speakingMonitorJob: Job? = null
     private var conversationMonitorJob: Job? = null
+    private var chatErrorMonitorJob: Job? = null
     private var asrMonitorJob: Job? = null
     private var interruptDetectJob: Job? = null
 
@@ -144,7 +149,9 @@ class VoiceCallService : Service(), KoinComponent {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_HANG_UP) {
-            endCall()
+            // 通知栏挂断没有页面按钮自己的 onBack，因此这里同步清空 active state，
+            // 让仍打开的视频页通过 activeCall observer 自动返回聊天。
+            endCall(clearActiveState = true)
             stopSelf()
             return START_NOT_STICKY
         }
@@ -186,14 +193,18 @@ class VoiceCallService : Service(), KoinComponent {
             )
         } catch (e: Exception) {
             Log.e(TAG, "startForeground 失败, conversationId=$conversationId", e)
-            _activeConversationId.value = null
-            _activeCallSurface.value = null
+            clearActiveCallState()
             stopSelf()
             return START_NOT_STICKY
         }
 
         serviceScope.launch {
             try {
+                // 视频/语音页面离开聊天页后仍要长期观察同一个 ConversationSession。
+                // 没有引用时 Session 5 秒后可能被回收，导致 AI 写入新 Session、通话 UI 还盯旧 Flow。
+                holdConversationReference()
+                chatService.initializeConversation(conversationId)
+
                 asr = createCustomAsrState(applicationContext, httpClient, settingsStore)
                 tts = createCustomTtsState(applicationContext, settingsStore)
                 startCall()
@@ -224,6 +235,7 @@ class VoiceCallService : Service(), KoinComponent {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "初始化通话失败, conversationId=$conversationId", e)
+                releaseConversationReference()
                 _uiState.update {
                     it.copy(
                         status = VoiceCallStatus.Error,
@@ -234,6 +246,23 @@ class VoiceCallService : Service(), KoinComponent {
         }
 
         return START_NOT_STICKY
+    }
+
+    private fun holdConversationReference() {
+        if (conversationReferenceHeld) return
+        chatService.addConversationReference(conversationId)
+        conversationReferenceHeld = true
+    }
+
+    private fun releaseConversationReference() {
+        if (!conversationReferenceHeld) return
+        conversationReferenceHeld = false
+        chatService.removeConversationReference(conversationId)
+    }
+
+    private fun clearActiveCallState() {
+        _activeConversationId.value = null
+        _activeCallSurface.value = null
     }
 
     private fun prepareAudioRoute() {
@@ -389,6 +418,7 @@ class VoiceCallService : Service(), KoinComponent {
             )
         }
         ttsSentLength = 0
+        lastMessageSentAt = System.currentTimeMillis()
 
         try {
             chatService.sendMessage(conversationId, listOf(UIMessagePart.Text(transcript)))
@@ -436,6 +466,25 @@ class VoiceCallService : Service(), KoinComponent {
         speakingMonitorJob = serviceScope.launch {
             chatService.generationDoneFlow.collect { convId ->
                 if (convId == conversationId) onGenerationDone()
+            }
+        }
+
+        chatErrorMonitorJob?.cancel()
+        chatErrorMonitorJob = serviceScope.launch {
+            chatService.errors.collect { errors ->
+                if (_uiState.value.status != VoiceCallStatus.Processing || lastMessageSentAt <= 0L) {
+                    return@collect
+                }
+                val error = errors.lastOrNull {
+                    it.conversationId == conversationId && it.timestamp >= lastMessageSentAt
+                } ?: return@collect
+                Log.e(TAG, "AI 生成失败, conversationId=$conversationId", error.error)
+                _uiState.update {
+                    it.copy(
+                        status = VoiceCallStatus.Error,
+                        errorMessage = error.error.message ?: "AI 回复生成失败",
+                    )
+                }
             }
         }
     }
@@ -601,16 +650,23 @@ class VoiceCallService : Service(), KoinComponent {
         _uiState.update { it.copy(autoSendEnabled = !it.autoSendEnabled) }
     }
 
-    /** 停止本场通话；真正的 controller dispose 在 Service onDestroy 中只执行一次。 */
-    fun endCall() {
+    /**
+     * 停止本场通话。
+     *
+     * 页面内挂断按钮自己会 onBack，因此默认不在这里同步清空 active state，避免页面 observer
+     * 同时再 onBack 一次造成双重导航；通知栏挂断则显式传 clearActiveState=true。
+     */
+    fun endCall(clearActiveState: Boolean = false) {
         vadJob?.cancel()
         speakingMonitorJob?.cancel()
         conversationMonitorJob?.cancel()
+        chatErrorMonitorJob?.cancel()
         asrMonitorJob?.cancel()
         interruptDetectJob?.cancel()
         if (::asr.isInitialized) asr.stop()
         if (::tts.isInitialized) tts.stop()
         restoreAudioRoute()
+        releaseConversationReference()
         _uiState.update {
             it.copy(
                 status = VoiceCallStatus.Idle,
@@ -620,8 +676,7 @@ class VoiceCallService : Service(), KoinComponent {
             )
         }
         isMuted = false
-        _activeConversationId.value = null
-        _activeCallSurface.value = null
+        if (clearActiveState) clearActiveCallState()
         runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
             .onFailure { Log.e(TAG, "stopForeground 失败", it) }
     }
@@ -690,6 +745,9 @@ class VoiceCallService : Service(), KoinComponent {
         } catch (e: Exception) {
             Log.e(TAG, "onDestroy 清理失败", e)
         } finally {
+            // UI 挂断路径会在 stopService() 后紧接着 onBack()。把 active state 清理排到下一轮
+            // 主线程消息，保证页面自己的返回先完成，避免 observer 再弹一次导航栈。
+            Handler(Looper.getMainLooper()).post { clearActiveCallState() }
             serviceScope.cancel()
             super.onDestroy()
         }
