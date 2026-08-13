@@ -79,8 +79,10 @@ class VideoCallArchiveStore(context: Context) {
         val all = readAll()
         val index = all.indexOfFirst { it.id == sessionId }
         if (index < 0) return
+        val snapshot = visibleSnapshot(messages)
+        if (all[index].messages == snapshot) return
         val next = all.toMutableList()
-        next[index] = next[index].copy(messages = visibleSnapshot(messages))
+        next[index] = next[index].copy(messages = snapshot)
         writeAll(next)
     }
 
@@ -151,6 +153,8 @@ class VideoCallArchiveStore(context: Context) {
  * foreground call service is actually hung up (including notification-bar hangup).
  */
 object VideoCallArchiveRuntime {
+    private const val PERSIST_INTERVAL_MS = 750L
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var archiveJob: Job? = null
     private var activeConversationId: String? = null
@@ -177,12 +181,17 @@ object VideoCallArchiveRuntime {
         )
 
         archiveJob = scope.launch {
+            var endedNormally = false
             val messageJob = launch {
+                var lastPersistAt = 0L
                 conversationFlow.collect { conversation ->
+                    val now = System.currentTimeMillis()
+                    if (now - lastPersistAt < PERSIST_INTERVAL_MS) return@collect
                     store.updateSession(
                         sessionId,
                         conversation.currentMessages.drop(baselineCount),
                     )
+                    lastPersistAt = now
                 }
             }
 
@@ -193,12 +202,13 @@ object VideoCallArchiveRuntime {
                 VoiceCallService.activeConversationId
                     .filter { it != conversationKey }
                     .first()
+                endedNormally = true
             } finally {
                 messageJob.cancelAndJoin()
                 store.finishSession(
                     sessionId = sessionId,
                     messages = conversationFlow.value.currentMessages.drop(baselineCount),
-                    endedNormally = true,
+                    endedNormally = endedNormally,
                 )
                 synchronized(this@VideoCallArchiveRuntime) {
                     if (activeConversationId == conversationKey) activeConversationId = null
