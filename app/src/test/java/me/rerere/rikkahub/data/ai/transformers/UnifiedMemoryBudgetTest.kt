@@ -80,11 +80,11 @@ class UnifiedMemoryBudgetTest {
             appendLine("## Code Block Rules")
         }
 
-        val result = UnifiedMemoryBudget.budgetSystemPrompt(source, maxChars = 420)
+        val result = UnifiedMemoryBudget.budgetSystemPrompt(source, maxChars = 180)
 
         assertTrue("LIVE-TAIL" in result.text)
         assertTrue("cross_window_recent_tail" in result.keptSections)
         assertTrue("recent_chats_fallback" in result.droppedSections)
-        assertTrue(result.memoryChars <= 420)
+        assertTrue(result.memoryChars <= 180)
     }
 }
