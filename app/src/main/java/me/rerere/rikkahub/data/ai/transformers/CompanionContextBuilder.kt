@@ -146,7 +146,9 @@ object CompanionTokenBudgetManager {
             val content = section.content.trim()
             val selected = when {
                 content.length <= available -> content
-                available >= section.minChars.coerceAtLeast(1) -> content.take(available).trimEnd() + if (available >= 4) "…" else ""
+                available >= section.minChars.coerceAtLeast(1) -> {
+                    if (available == 1) "…" else content.take(available - 1).trimEnd() + "…"
+                }
                 else -> ""
             }
             if (selected.isBlank()) {
@@ -157,7 +159,7 @@ object CompanionTokenBudgetManager {
             }
         }
 
-        val text = kept.joinToString("\n\n") { it.second }.take(budget)
+        val text = kept.joinToString("\n\n") { it.second }
         return Result(
             text = text,
             keptSections = kept.map { it.first.name },
