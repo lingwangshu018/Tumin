@@ -244,13 +244,13 @@ fun ChatMessageActionsSheet(
     var targets by remember { mutableStateOf<List<Conversation>>(emptyList()) }
     var loadingTargets by remember { mutableStateOf(false) }
     var forwardingTo by remember { mutableStateOf<Uuid?>(null) }
-    var forwardError by remember { mutableStateOf<String?>(null) }
+    var actionError by remember { mutableStateOf<String?>(null) }
     var regenerating by remember { mutableStateOf(false) }
 
     LaunchedEffect(forwardMode) {
         if (!forwardMode || targets.isNotEmpty()) return@LaunchedEffect
         loadingTargets = true
-        forwardError = null
+        actionError = null
         runCatching {
             settings.assistants
                 .flatMap { assistant -> conversationRepository.getConversationsOfAssistant(assistant.id).first() }
@@ -259,7 +259,7 @@ fun ChatMessageActionsSheet(
         }.onSuccess {
             targets = it
         }.onFailure {
-            forwardError = it.message ?: "读取聊天列表失败"
+            actionError = it.message ?: "读取聊天列表失败"
         }
         loadingTargets = false
     }
@@ -267,20 +267,24 @@ fun ChatMessageActionsSheet(
     fun locateSourceAndRegenerate() {
         if (regenerating) return
         regenerating = true
+        actionError = null
         scope.launch {
-            val source = runCatching {
-                settings.assistants.asSequence().mapNotNull { assistant ->
+            var source: Conversation? = null
+            for (assistant in settings.assistants) {
+                val recent = runCatching {
                     conversationRepository.getRecentConversations(assistant.id, limit = 50)
-                        .firstOrNull { conversation ->
-                            conversation.messageNodes.any { node -> node.messages.any { it.id == message.id } }
-                        }
-                }.firstOrNull()
-            }.getOrNull()
+                }.getOrDefault(emptyList())
+                source = recent.firstOrNull { conversation ->
+                    conversation.messageNodes.any { node -> node.messages.any { it.id == message.id } }
+                }
+                if (source != null) break
+            }
+
             if (source != null) {
-                chatService.regenerateAtMessage(source.id, message)
+                chatService.regenerateAtMessage(source!!.id, message)
                 onDismissRequest()
             } else {
-                forwardError = "没有找到这条消息所属的聊天，请回到消息下方使用重新生成按钮。"
+                actionError = "没有找到这条消息所属的聊天，请回到消息下方使用重新生成按钮。"
             }
             regenerating = false
         }
@@ -314,7 +318,7 @@ fun ChatMessageActionsSheet(
                         horizontalArrangement = Arrangement.Center,
                     ) { CircularProgressIndicator(modifier = Modifier.size(24.dp)) }
                 } else if (targets.isEmpty()) {
-                    Text(forwardError ?: "暂无可转发的聊天", modifier = Modifier.padding(16.dp))
+                    Text(actionError ?: "暂无可转发的聊天", modifier = Modifier.padding(16.dp))
                 } else {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(targets, key = { it.id }) { target ->
@@ -327,7 +331,7 @@ fun ChatMessageActionsSheet(
                                 enabled = forwardingTo == null,
                                 onClick = {
                                     forwardingTo = target.id
-                                    forwardError = null
+                                    actionError = null
                                     scope.launch {
                                         runCatching {
                                             val fullTarget = conversationRepository.getConversationById(target.id)
@@ -341,9 +345,7 @@ fun ChatMessageActionsSheet(
                                             require(text.isNotBlank()) { "这条消息没有可转发的文字内容" }
                                             val forwarded = UIMessage(
                                                 role = MessageRole.USER,
-                                                parts = listOf(
-                                                    UIMessagePart.Text("【转发自 $sourceLabel】\n$text")
-                                                ),
+                                                parts = listOf(UIMessagePart.Text("【转发自 $sourceLabel】\n$text")),
                                             )
                                             conversationRepository.updateConversation(
                                                 fullTarget.copy(
@@ -354,7 +356,7 @@ fun ChatMessageActionsSheet(
                                         }.onSuccess {
                                             onDismissRequest()
                                         }.onFailure {
-                                            forwardError = it.message ?: "转发失败"
+                                            actionError = it.message ?: "转发失败"
                                         }
                                         forwardingTo = null
                                     }
@@ -372,101 +374,99 @@ fun ChatMessageActionsSheet(
                         }
                     }
                 }
-                forwardError?.let {
+                actionError?.let {
                     Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
             }
-            return@ModalBottomSheet
-        }
-
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            ActionCard(HugeIcons.Copy01, "复制") {
-                context.copyMessageToClipboard(message)
-                onDismissRequest()
-            }
-            ActionCard(HugeIcons.Copy01, "引用") {
-                onDismissRequest()
-                onQuote()
-            }
-            ActionCard(HugeIcons.TextSelection, "选择") {
-                onDismissRequest()
-                onSelectAndCopy()
-            }
-            ActionCard(HugeIcons.Refresh03, if (regenerating) "正在重新生成…" else "重新生成") {
-                locateSourceAndRegenerate()
-            }
-            ActionCard(HugeIcons.Edit01, "编辑") {
-                onDismissRequest()
-                onEdit()
-            }
-            if (message.role == MessageRole.USER) {
-                ActionCard(HugeIcons.Refresh03, "编辑并重试") {
-                    onDismissRequest()
-                    onEditAndRegenerate()
-                }
-            }
-            ActionCard(HugeIcons.Share04, "转发") { forwardMode = true }
-
-            if (onToggleFavorite != null) {
-                ActionCard(
-                    HugeIcons.FavouriteCircle,
-                    stringResource(
-                        if (isFavorite) R.string.chat_message_remove_favorite
-                        else R.string.chat_message_add_favorite
-                    )
-                ) {
-                    onDismissRequest()
-                    onToggleFavorite()
-                }
-            }
-
-            // Keep the original advanced actions available below the core long-press menu.
-            ActionCard(HugeIcons.Share04, stringResource(R.string.share)) {
-                onDismissRequest()
-                onShare()
-            }
-            ActionCard(HugeIcons.GitFork, stringResource(R.string.create_fork)) {
-                onDismissRequest()
-                onFork()
-            }
-
-            val hasTextContent = message.parts.filterIsInstance<UIMessagePart.Text>().any { it.text.isNotBlank() }
-            if (hasTextContent) {
-                ActionCard(HugeIcons.WebDesign01, stringResource(R.string.render_with_webview)) {
-                    onDismissRequest()
-                    onWebViewPreview()
-                }
-            }
-
-            Card(
-                onClick = {
-                    onDismissRequest()
-                    onDelete()
-                },
-                shape = MaterialTheme.shapes.medium,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+        } else {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                ) {
-                    Icon(HugeIcons.Delete01, contentDescription = null, modifier = Modifier.padding(4.dp))
-                    Text(stringResource(R.string.delete), style = MaterialTheme.typography.titleMedium)
+                ActionCard(HugeIcons.Copy01, "复制") {
+                    context.copyMessageToClipboard(message)
+                    onDismissRequest()
                 }
-            }
+                ActionCard(HugeIcons.Copy01, "引用") {
+                    onDismissRequest()
+                    onQuote()
+                }
+                ActionCard(HugeIcons.TextSelection, "选择") {
+                    onDismissRequest()
+                    onSelectAndCopy()
+                }
+                ActionCard(HugeIcons.Refresh03, if (regenerating) "正在重新生成…" else "重新生成") {
+                    locateSourceAndRegenerate()
+                }
+                ActionCard(HugeIcons.Edit01, "编辑") {
+                    onDismissRequest()
+                    onEdit()
+                }
+                if (message.role == MessageRole.USER) {
+                    ActionCard(HugeIcons.Refresh03, "编辑并重试") {
+                        onDismissRequest()
+                        onEditAndRegenerate()
+                    }
+                }
+                ActionCard(HugeIcons.Share04, "转发") { forwardMode = true }
 
-            forwardError?.let {
-                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            }
+                if (onToggleFavorite != null) {
+                    ActionCard(
+                        HugeIcons.FavouriteCircle,
+                        stringResource(
+                            if (isFavorite) R.string.chat_message_remove_favorite
+                            else R.string.chat_message_add_favorite
+                        )
+                    ) {
+                        onDismissRequest()
+                        onToggleFavorite()
+                    }
+                }
 
-            ProvideTextStyle(MaterialTheme.typography.labelSmall) {
-                Text(message.createdAt.toJavaLocalDateTime().toLocalString())
-                if (model != null) Text(model.displayName)
+                ActionCard(HugeIcons.Share04, stringResource(R.string.share)) {
+                    onDismissRequest()
+                    onShare()
+                }
+                ActionCard(HugeIcons.GitFork, stringResource(R.string.create_fork)) {
+                    onDismissRequest()
+                    onFork()
+                }
+
+                val hasTextContent = message.parts.filterIsInstance<UIMessagePart.Text>().any { it.text.isNotBlank() }
+                if (hasTextContent) {
+                    ActionCard(HugeIcons.WebDesign01, stringResource(R.string.render_with_webview)) {
+                        onDismissRequest()
+                        onWebViewPreview()
+                    }
+                }
+
+                Card(
+                    onClick = {
+                        onDismissRequest()
+                        onDelete()
+                    },
+                    shape = MaterialTheme.shapes.medium,
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                    ) {
+                        Icon(HugeIcons.Delete01, contentDescription = null, modifier = Modifier.padding(4.dp))
+                        Text(stringResource(R.string.delete), style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+
+                actionError?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+
+                ProvideTextStyle(MaterialTheme.typography.labelSmall) {
+                    Text(message.createdAt.toJavaLocalDateTime().toLocalString())
+                    if (model != null) Text(model.displayName)
+                }
             }
         }
     }
