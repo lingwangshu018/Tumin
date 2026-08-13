@@ -51,6 +51,7 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.easteregg.EmojiBurstHost
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.UpdateCard
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
@@ -148,6 +149,10 @@ fun SettingAboutPage() {
                             headlineContent = { Text(stringResource(R.string.about_page_system)) },
                         )
                     }
+                }
+
+                item {
+                    UpdateCard()
                 }
 
                 item {
