@@ -313,12 +313,8 @@ class VoiceCallService : Service(), KoinComponent {
             )
         }
 
-        // 停止"打断检测"协程 (Speaking 状态才需要它)
         interruptDetectJob?.cancel()
 
-        // 重启 ASR: 非流式 ASR (SiliconFlow) 是“录一段→停”的一次性模式,
-        // AI 说完话回到 Listening 时它已停, 不重启则音波球不动、说话发不出去.
-        // 流式 ASR 的 start() 有 isRecording 守卫, 重复调用无副作用.
         if (!isMuted) {
             runCatching {
                 asr.start { transcript ->
@@ -332,9 +328,6 @@ class VoiceCallService : Service(), KoinComponent {
 
     /**
      * VAD: 检测用户停顿后自动发送 (仅 Listening 状态生效).
-     *
-     * 优化: 更快的响应时间, 更灵敏的检测.
-     * 阈值参数 (800ms / 2 字符 / 2 秒音量超时) 保持不变, 不要动.
      */
     private fun startVadDetection() {
         vadJob?.cancel()
@@ -349,31 +342,27 @@ class VoiceCallService : Service(), KoinComponent {
             while (true) {
                 delay(100)
                 if (_uiState.value.status != VoiceCallStatus.Listening) break
-                if (isMuted) continue // 静音期间不检测, 也不发送
+                if (isMuted) continue
                 if (!_uiState.value.autoSendEnabled) continue
 
                 val currentTranscript = _uiState.value.userTranscript
                 val amplitudes = _uiState.value.amplitudes
                 val recentAmplitude = amplitudes.takeLast(3).average().toFloat()
 
-                // 检测音量活动 - 如果有声音就重置计时
                 if (recentAmplitude > 0.05f) {
                     lastAmplitudeTime = System.currentTimeMillis()
                 }
 
                 if (currentTranscript != lastTranscript) {
-                    // 转写还在变化, 重置静音计时
                     lastTranscript = currentTranscript
                     silenceStartTime = 0L
                 } else if (currentTranscript.length >= minTranscriptLength) {
-                    // 转写稳定且有内容, 开始/继续计时
                     if (silenceStartTime == 0L) {
                         silenceStartTime = System.currentTimeMillis()
                     }
                     val silentFor = System.currentTimeMillis() - silenceStartTime
                     val amplitudeSilentFor = System.currentTimeMillis() - lastAmplitudeTime
 
-                    // 触发条件: 转写稳定且静音足够, 或音量持续低迷
                     if (silentFor >= silenceThresholdMs || amplitudeSilentFor >= amplitudeTimeoutMs) {
                         Log.d(
                             TAG,
@@ -387,24 +376,44 @@ class VoiceCallService : Service(), KoinComponent {
         }
     }
 
-    /**
-     * 发送当前转写的消息.
-     * 不再调用 asr.stop() (ASR 要持续跑到整场通话结束).
-     */
+    /** 发送当前语音转写。 */
     private fun sendCurrentMessage() {
-        val transcript = _uiState.value.userTranscript.trim()
+        sendCallMessage(_uiState.value.userTranscript.trim())
+    }
+
+    /**
+     * 视频电话文字输入入口。
+     * 与语音输入共用同一套 Processing → AI → 流式 TTS → Listening 状态机。
+     */
+    fun sendTextMessage(text: String) {
+        val normalized = text.trim()
+        if (normalized.isBlank()) return
+        if (_uiState.value.status == VoiceCallStatus.Processing) return
+        sendCallMessage(normalized)
+    }
+
+    private fun sendCallMessage(text: String) {
+        val transcript = text.trim()
         vadJob?.cancel()
 
         if (transcript.isBlank()) {
-            // 没有有效内容, 回到监听
             startListening()
             return
+        }
+
+        // 若用户在 AI 说话时改用文字接话，停止当前朗读但保留 generationDone 监听器，
+        // 新消息仍会完整进入下一轮流式 TTS。
+        if (_uiState.value.status == VoiceCallStatus.Speaking) {
+            interruptDetectJob?.cancel()
+            tts.stop()
         }
 
         _uiState.update {
             it.copy(
                 status = VoiceCallStatus.Processing,
-                assistantText = ""
+                assistantText = "",
+                userTranscript = "",
+                errorMessage = null,
             )
         }
         ttsSentLength = 0
@@ -448,14 +457,10 @@ class VoiceCallService : Service(), KoinComponent {
                 if (lastMessage?.role != MessageRole.ASSISTANT) return@collect
 
                 val currentText = lastMessage.toText()
-
-                // 更新 UI 显示的 AI 回复
                 _uiState.update { it.copy(assistantText = currentText) }
 
-                // 流式 TTS: 只朗读新增的部分
                 if (currentText.length > ttsSentLength) {
                     val newText = currentText.substring(ttsSentLength)
-                    // 按句子分割, 朗读完整句子
                     val sentences = extractCompleteSentences(newText)
                     for (sentence in sentences) {
                         if (sentence.isNotBlank()) {
@@ -466,8 +471,6 @@ class VoiceCallService : Service(), KoinComponent {
                     ttsSentLength = currentText.length - getPendingRemainder(newText).length
                 }
 
-                // 一旦 AI 有内容输出, 立即切换到 Speaking 状态
-                // 这样用户随时可以打断, UI 反馈更即时
                 if (_uiState.value.status == VoiceCallStatus.Processing && currentText.isNotBlank()) {
                     _uiState.update { it.copy(status = VoiceCallStatus.Speaking) }
                     startInterruptDetection()
@@ -477,7 +480,6 @@ class VoiceCallService : Service(), KoinComponent {
             }
         }
 
-        // 监听生成完成 -> 等待 TTS 播放完成 -> 回到 Listening
         speakingMonitorJob?.cancel()
         speakingMonitorJob = serviceScope.launch {
             chatService.generationDoneFlow.collect { convId ->
@@ -488,7 +490,6 @@ class VoiceCallService : Service(), KoinComponent {
     }
 
     private suspend fun onGenerationDone() {
-        // 朗读最后剩余的文本
         val finalText = _uiState.value.assistantText
         if (finalText.length > ttsSentLength) {
             val remaining = finalText.substring(ttsSentLength)
@@ -502,25 +503,16 @@ class VoiceCallService : Service(), KoinComponent {
         startInterruptDetection()
         waitForTtsToFinish()
 
-        // 回到监听
         if (_uiState.value.status == VoiceCallStatus.Speaking) {
             startListening()
         }
     }
 
     private suspend fun waitForTtsToFinish() {
-        // 等待 TTS 开始播放
         var waitStart = System.currentTimeMillis()
         while (!tts.isSpeaking.value && System.currentTimeMillis() - waitStart < 5000) {
             delay(100)
         }
-        // 等待 TTS 播放完成.
-        // 不能只靠 isSpeaking: 它在 worker 的 finally 里才会变 false,
-        // 一旦 worker 挂在网络请用/音频播放上 (isSpeaking 永远 true),
-        // 这里就死循环, 通话永远卡在 "正在传达".
-        // 改用 "活动超时": 跟踪 TTS 最后一次处于活动状态的时间,
-        // 连续 5 秒没有新的播放活动(不是 Playing/Buffering 且 isSpeaking 为 false)
-        // 就认为说完了. 另勠 5 分钟硬截止兜底.
         val idleTimeoutMs = 5_000L
         val hardDeadlineMs = 300_000L
         val startTime = System.currentTimeMillis()
@@ -534,11 +526,9 @@ class VoiceCallService : Service(), KoinComponent {
             if (active) {
                 lastActiveTime = now
             }
-            // 连续 idleTimeoutMs 没活动 → 说完了
             if (!active && now - lastActiveTime >= idleTimeoutMs) {
                 break
             }
-            // 硬截止兜底 (TTS 真卡死)
             if (now - startTime > hardDeadlineMs) {
                 Log.w(TAG, "TTS 播放超过 5 分钟未结束, 强制停止以防卡死")
                 tts.stop()
@@ -546,13 +536,9 @@ class VoiceCallService : Service(), KoinComponent {
             }
             delay(300)
         }
-        // 额外等待状态更新
         delay(300)
     }
 
-    /**
-     * 从增量文本中提取完整的句子 (以句号/问号/感叹号/换行结尾)
-     */
     private fun extractCompleteSentences(text: String): List<String> {
         val result = mutableListOf<String>()
         val current = StringBuilder()
@@ -568,13 +554,9 @@ class VoiceCallService : Service(), KoinComponent {
                 current.clear()
             }
         }
-        // 保存未完成的部分 (不朗读, 等下次)
         return result
     }
 
-    /**
-     * 获取增量文本中未形成完整句子的剩余部分
-     */
     private fun getPendingRemainder(text: String): String {
         val lastSentenceEnd =
             text.lastIndexOfAny(charArrayOf('。', '？', '！', '.', '?', '!', '\n'))
@@ -587,16 +569,6 @@ class VoiceCallService : Service(), KoinComponent {
         }
     }
 
-    /**
-     * Speaking 状态下的打断检测.
-     *
-     * 与 startVadDetection (判断"该发送了") 职责不同:
-     * 这里只关心"用户是否开始说话了", 一旦检测到就立即打断, 不等静音判断.
-     *
-     * 用比 Listening 状态更高的音量阈值 (0.15f vs 0.05f), 降低被 AI 自己声音误触发的概率.
-     * 残留风险: AEC 不是 100% 完美, 外放音量很大或低端机型硬件 AEC 差时仍可能误触发,
-     * 后续可加音量差阈值调优, 但不阻塞现在的实现.
-     */
     private fun startInterruptDetection() {
         interruptDetectJob?.cancel()
         interruptDetectJob = serviceScope.launch {
@@ -604,14 +576,12 @@ class VoiceCallService : Service(), KoinComponent {
             while (true) {
                 delay(150)
                 if (_uiState.value.status != VoiceCallStatus.Speaking) break
-                if (isMuted) continue // 静音期间不判断打断
+                if (isMuted) continue
 
                 val currentTranscript = _uiState.value.userTranscript
                 val amplitudes = _uiState.value.amplitudes
                 val recentAmplitude = amplitudes.takeLast(3).average().toFloat()
 
-                // 转写文本相较于进入 Speaking 时有新增内容, 或者音量突然超过阈值,
-                // 都视为"用户开始说话了"
                 val hasNewTranscript = currentTranscript.length > baselineTranscript.length + 1
                 val hasLoudVoice = recentAmplitude > 0.15f
 
@@ -627,23 +597,15 @@ class VoiceCallService : Service(), KoinComponent {
         }
     }
 
-    /**
-     * 用户打断 AI 说话 (Barge-in).
-     * 不再调用 asr.start() (ASR 一直是开着的), 只做状态切换 + cancel 协程.
-     */
     fun interruptSpeaking() {
         if (_uiState.value.status != VoiceCallStatus.Speaking) return
         speakingMonitorJob?.cancel()
         interruptDetectJob?.cancel()
         startListening()
+        // 恢复 generationDone 监听，避免打断一次后后续轮次永远收不到生成完成事件。
+        startConversationMonitor()
     }
 
-    /**
-     * 监听 ASR 状态 (用于非流式 ASR 如 SiliconFlow).
-     * 当 ASR 从 Recording -> Idle 且转写不为空时, 立即发送.
-     *
-     * 加了 !isMuted 判断, 避免静音操作本身触发的 Recording→非Recording 跳变被误判成"该发送了".
-     */
     private fun startAsrMonitor() {
         asrMonitorJob?.cancel()
         asrMonitorJob = serviceScope.launch {
@@ -651,16 +613,12 @@ class VoiceCallService : Service(), KoinComponent {
             asr.state.collect { asrState ->
                 val isRecording = asrState.isRecording
 
-                // 检测到从 Recording 变为非 Recording
                 if (wasRecording && !isRecording && !isMuted && _uiState.value.status == VoiceCallStatus.Listening) {
                     val transcript = asrState.transcript.trim()
                     if (transcript.isNotEmpty() && _uiState.value.autoSendEnabled) {
                         Log.d(TAG, "ASR monitor: Auto-send after ASR completed: $transcript")
                         sendCurrentMessage()
                     } else {
-                        // 转写为空(没说话/未识别到): 非流式 ASR (SiliconFlow)
-                        // 此时已停在 Idle, 不重启的话音波球不动、下一句说话发不出去.
-                        // 流式 ASR 的 start() 有 isRecording 守卫, 重复调用无副作用.
                         if (!isMuted && _uiState.value.status == VoiceCallStatus.Listening) {
                             runCatching {
                                 asr.start { t -> _uiState.update { it.copy(userTranscript = t) } }
@@ -674,10 +632,6 @@ class VoiceCallService : Service(), KoinComponent {
         }
     }
 
-    /**
-     * 切换静音. 在任何状态下都要能生效/取消, 不再判断 status.
-     * 静音 = 模型听不到; 取消静音 = 不管 Listening 还是 Speaking 都重新开始监听.
-     */
     fun toggleMute() {
         isMuted = !isMuted
         _uiState.update { it.copy(isMuted = isMuted) }
@@ -686,7 +640,6 @@ class VoiceCallService : Service(), KoinComponent {
             if (isMuted) {
                 asr.stop()
             } else {
-                // 不管当前是 Listening 还是 Speaking, 取消静音都要重新开始监听
                 asr.start { transcript ->
                     _uiState.update { it.copy(userTranscript = transcript) }
                 }
@@ -697,25 +650,18 @@ class VoiceCallService : Service(), KoinComponent {
         }
     }
 
-    /**
-     * 切换自动发送模式. UI 上不再挂载按钮, 但保留方法 (autoSendEnabled 字段仍在用).
-     */
     fun toggleAutoSend() {
         _uiState.update { it.copy(autoSendEnabled = !it.autoSendEnabled) }
     }
 
-    /**
-     * 挂断 / 结束通话.
-     * 额外复位 _activeConversationId 和移除前台通知.
-     */
     fun endCall() {
         vadJob?.cancel()
         speakingMonitorJob?.cancel()
         conversationMonitorJob?.cancel()
         asrMonitorJob?.cancel()
         interruptDetectJob?.cancel()
-        asr.stop()
-        tts.stop()
+        if (::asr.isInitialized) asr.stop()
+        if (::tts.isInitialized) tts.stop()
         _uiState.update {
             it.copy(status = VoiceCallStatus.Idle)
         }
@@ -727,16 +673,10 @@ class VoiceCallService : Service(), KoinComponent {
         }
     }
 
-    /**
-     * 更新振幅数据 (供 UI 动画使用)
-     */
     fun updateAmplitudes(amplitudes: List<Float>) {
         _uiState.update { it.copy(amplitudes = amplitudes) }
     }
 
-    /**
-     * 构建通话通知. 通话中这种更醒目、带操作按钮的通知.
-     */
     private fun buildNotification(state: VoiceCallUiState): android.app.Notification {
         val contentText = when (state.status) {
             VoiceCallStatus.Listening -> "正在聆听..."
@@ -746,7 +686,6 @@ class VoiceCallService : Service(), KoinComponent {
             VoiceCallStatus.Idle -> "通话中"
         }
 
-        // 点击通知本体: 回到 RouteActivity 并导航到 VoiceCallPage
         val contentIntent = PendingIntent.getActivity(
             this,
             conversationId.hashCode(),
@@ -757,7 +696,6 @@ class VoiceCallService : Service(), KoinComponent {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // 通知上的"挂断"按钮: 直接发一个带 ACTION_HANG_UP 的 Intent 给自己这个 Service
         val hangUpIntent = PendingIntent.getService(
             this,
             0,
@@ -780,7 +718,6 @@ class VoiceCallService : Service(), KoinComponent {
     override fun onDestroy() {
         super.onDestroy()
         try {
-            // 兜底, 防止外部通过 stopService 直接杀掉时状态没清理干净
             endCall()
         } catch (e: Exception) {
             Log.e(TAG, "onDestroy 清理失败", e)
