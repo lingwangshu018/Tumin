@@ -9,7 +9,6 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CaptureRequest
-import android.media.AudioManager
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
@@ -129,7 +128,6 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
     var service by remember { mutableStateOf<VoiceCallService?>(null) }
     var cameraEnabled by remember { mutableStateOf(false) }
     var cameraRequested by remember { mutableStateOf(false) }
-    var speakerEnabled by remember { mutableStateOf(true) }
     var typedInput by remember { mutableStateOf("") }
     var callBaselineCount by remember(conversationId) { mutableStateOf<Int?>(null) }
 
@@ -150,7 +148,7 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
             audioPermission.allRequiredPermissionsGranted &&
             VoiceCallService.activeConversationId.value != conversationId.toString()
         ) {
-            VoiceCallService.start(context, conversationId.toString())
+            VoiceCallService.start(context, conversationId.toString(), VoiceCallSurface.Video)
         }
         context.bindService(Intent(context, VoiceCallService::class.java), connection, Context.BIND_AUTO_CREATE)
         onDispose { runCatching { context.unbindService(connection) } }
@@ -176,7 +174,7 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
 
     LaunchedEffect(audioPermission.allRequiredPermissionsGranted) {
         if (audioPermission.allRequiredPermissionsGranted && VoiceCallService.activeConversationId.value == null) {
-            VoiceCallService.start(context, conversationId.toString())
+            VoiceCallService.start(context, conversationId.toString(), VoiceCallSurface.Video)
         }
     }
 
@@ -365,10 +363,11 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
                     }
                 }
 
-                CallButton(HugeIcons.VolumeHigh, if (speakerEnabled) "扬声器" else "听筒") {
-                    speakerEnabled = !speakerEnabled
-                    val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                    audio.isSpeakerphoneOn = speakerEnabled
+                CallButton(
+                    HugeIcons.VolumeHigh,
+                    if (uiState.isSpeakerEnabled) "扬声器" else "听筒",
+                ) {
+                    service?.toggleSpeaker()
                 }
 
                 CallButton(HugeIcons.Cancel01, "挂断", Color(0xFFE5484D)) {
