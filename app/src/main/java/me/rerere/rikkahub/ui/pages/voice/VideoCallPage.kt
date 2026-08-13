@@ -84,7 +84,12 @@ import me.rerere.rikkahub.ui.context.LocalSettings
 import org.koin.compose.koinInject
 import kotlin.uuid.Uuid
 
-/** Story video call with custom full-screen background, text input and persistent archives. */
+/**
+ * 剧情式视频电话。
+ *
+ * 画面层只负责呈现和交互；ASR / AI / TTS / 音频路由继续由 VoiceCallService 统一管理。
+ * 从通知返回正在进行的视频时会直接恢复通话画面，不再重复显示“开始通话”。
+ */
 @Composable
 fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
     val context = LocalContext.current
@@ -94,32 +99,37 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
     val visualSettings = remember { visualStore.read() }
     val archiveStore = remember { VideoCallArchiveStore(context) }
     val companionRepository = koinInject<CompanionStateRepository>()
-    var joined by remember { mutableStateOf(false) }
+
+    val activeConversationId by VoiceCallService.activeConversationId
+        .collectAsStateWithLifecycle(initialValue = VoiceCallService.activeConversationId.value)
+    val activeSurface by VoiceCallService.activeCallSurface
+        .collectAsStateWithLifecycle(initialValue = VoiceCallService.activeCallSurface.value)
+
+    val conversationKey = conversationId.toString()
+    val isActiveVideoCall = activeConversationId == conversationKey && activeSurface == VoiceCallSurface.Video
+    val anotherCallActive = activeConversationId != null && !isActiveVideoCall
+
+    var joined by remember(conversationId) { mutableStateOf(isActiveVideoCall) }
+    var callEverActive by remember(conversationId) { mutableStateOf(isActiveVideoCall) }
+
+    // 点通知回到仍在运行的视频时直接恢复画面；不再让用户再点一次“开始通话”。
+    LaunchedEffect(isActiveVideoCall) {
+        if (isActiveVideoCall) {
+            joined = true
+            callEverActive = true
+        } else if (joined && callEverActive && activeConversationId != conversationKey) {
+            // 通知栏挂断 / Service 结束后，已经打开的视频页面自动退出，避免僵尸页面。
+            onBack()
+        }
+    }
 
     if (!joined) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Color(0xFF171016))
-                .padding(32.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(HugeIcons.Camera01, null, tint = Color(0xFFFFB7C5), modifier = Modifier.size(72.dp))
-                Text("视频电话", color = Color.White, fontSize = 28.sp, modifier = Modifier.padding(top = 20.dp))
-                Text(
-                    if (visualSettings.selfViewMode == VideoCallSelfViewMode.FRONT_CAMERA)
-                        "通话期间会持续使用麦克风；你已选择前置摄像头，开始后会请求摄像头权限。"
-                    else
-                        "通话期间会持续使用麦克风；右上角默认显示你的头像，不会自动打开摄像头。",
-                    color = Color.White.copy(.7f),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(vertical = 20.dp),
-                )
-                Button(onClick = { joined = true }) { Text("开始通话") }
-                TextButton(onClick = onBack) { Text("取消") }
-            }
-        }
+        VideoCallJoinPage(
+            visualSettings = visualSettings,
+            blockedByAnotherCall = anotherCallActive,
+            onJoin = { joined = true },
+            onBack = onBack,
+        )
         return
     }
 
@@ -146,9 +156,9 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
     DisposableEffect(conversationId) {
         if (
             audioPermission.allRequiredPermissionsGranted &&
-            VoiceCallService.activeConversationId.value != conversationId.toString()
+            VoiceCallService.activeConversationId.value != conversationKey
         ) {
-            VoiceCallService.start(context, conversationId.toString(), VoiceCallSurface.Video)
+            VoiceCallService.start(context, conversationKey, VoiceCallSurface.Video)
         }
         context.bindService(Intent(context, VoiceCallService::class.java), connection, Context.BIND_AUTO_CREATE)
         onDispose { runCatching { context.unbindService(connection) } }
@@ -173,14 +183,19 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
     }
 
     LaunchedEffect(audioPermission.allRequiredPermissionsGranted) {
-        if (audioPermission.allRequiredPermissionsGranted && VoiceCallService.activeConversationId.value == null) {
-            VoiceCallService.start(context, conversationId.toString(), VoiceCallSurface.Video)
+        if (
+            audioPermission.allRequiredPermissionsGranted &&
+            VoiceCallService.activeConversationId.value == null
+        ) {
+            VoiceCallService.start(context, conversationKey, VoiceCallSurface.Video)
         }
     }
 
     val uiState by (service?.uiState ?: MutableStateFlow(VoiceCallUiState()))
         .collectAsStateWithLifecycle(initialValue = VoiceCallUiState())
-    val conversationFlow = service?.conversation?.map { it as me.rerere.rikkahub.data.model.Conversation? } ?: flowOf(null)
+    val conversationFlow = service?.conversation
+        ?.map { it as me.rerere.rikkahub.data.model.Conversation? }
+        ?: flowOf(null)
     val conversation by conversationFlow.collectAsStateWithLifecycle(initialValue = null)
     val assistant = conversation?.assistantId?.let { settings.getAssistantById(it) }
     val companionFlow = conversation?.assistantId?.let { companionRepository.observe(it) }
@@ -217,9 +232,18 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
         .lastOrNull { it.role == MessageRole.ASSISTANT }
         ?.toText()
         .orEmpty()
-    val storySource = latestCallAssistantText.ifBlank { uiState.assistantText }
+    val latestCallUserText = callMessages
+        .lastOrNull { it.role == MessageRole.USER }
+        ?.toText()
+        .orEmpty()
+
+    // Service 的 assistantText 是当前轮最可靠的流式文本；历史消息只作为页面重组后的兜底。
+    val storySource = uiState.assistantText.ifBlank { latestCallAssistantText }
     val story = remember(storySource, companion.character.activity) {
         storyPresentation(storySource, companion.character.activity)
+    }
+    val visibleUserText = uiState.userTranscript.ifBlank {
+        if (uiState.status == VoiceCallStatus.Processing) latestCallUserText else ""
     }
 
     fun sendTypedMessage() {
@@ -246,9 +270,10 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        0f to Color.Black.copy(alpha = .20f),
-                        .35f to Color.Transparent,
-                        1f to Color.Black.copy(alpha = .72f),
+                        0f to Color.Black.copy(alpha = .30f),
+                        .32f to Color.Transparent,
+                        .68f to Color.Black.copy(alpha = .08f),
+                        1f to Color.Black.copy(alpha = .78f),
                     )
                 )
         )
@@ -256,80 +281,111 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 22.dp),
+                .padding(horizontal = 20.dp),
         ) {
-            Row(
+            VideoCallHeader(
+                displayName = displayName,
+                status = uiState.status,
+                emotion = companion.character.emotion,
+                location = companion.character.location,
+                modifier = Modifier.padding(top = 50.dp, end = 118.dp),
+            )
+
+            Spacer(Modifier.height(104.dp))
+
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 52.dp),
-                verticalAlignment = Alignment.Top,
+                    .weight(1f),
+                contentAlignment = Alignment.Center,
             ) {
-                Column(Modifier.weight(1f).padding(end = 126.dp)) {
-                    Text(displayName, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        listOf(companion.character.emotion, companion.character.location)
-                            .filter { it.isNotBlank() }
-                            .joinToString(" · ")
-                            .ifBlank { "视频通话中" },
-                        color = Color.White.copy(.72f),
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(120.dp))
-
-            if (story.action.isNotBlank()) {
-                Text(
-                    story.action,
-                    color = Color.White.copy(.66f),
-                    fontStyle = FontStyle.Italic,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-                )
-            }
-
-            if (story.dialogue.isNotBlank()) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 20.dp),
-                    color = Color.Black.copy(alpha = .48f),
-                    shape = RoundedCornerShape(22.dp),
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text(
-                        story.dialogue,
-                        color = Color.White,
-                        fontSize = 17.sp,
-                        lineHeight = 26.sp,
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
-                    )
+                    if (story.action.isNotBlank()) {
+                        Surface(
+                            color = Color.Black.copy(alpha = .26f),
+                            shape = RoundedCornerShape(16.dp),
+                        ) {
+                            Text(
+                                story.action,
+                                color = Color.White.copy(.76f),
+                                fontStyle = FontStyle.Italic,
+                                textAlign = TextAlign.Center,
+                                fontSize = 14.sp,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                            )
+                        }
+                    }
+
+                    if (story.dialogue.isNotBlank()) {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 14.dp),
+                            color = Color.Black.copy(alpha = .48f),
+                            shape = RoundedCornerShape(22.dp),
+                        ) {
+                            Column(Modifier.padding(horizontal = 18.dp, vertical = 15.dp)) {
+                                Text(
+                                    displayName,
+                                    color = Color.White.copy(.62f),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                                Text(
+                                    story.dialogue,
+                                    color = Color.White,
+                                    fontSize = 17.sp,
+                                    lineHeight = 26.sp,
+                                    modifier = Modifier.padding(top = 5.dp),
+                                )
+                            }
+                        }
+                    }
+
+                    if (visibleUserText.isNotBlank()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 12.dp),
+                            contentAlignment = Alignment.CenterEnd,
+                        ) {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(.82f),
+                                color = Color.White.copy(alpha = .16f),
+                                shape = RoundedCornerShape(18.dp),
+                            ) {
+                                Column(Modifier.padding(horizontal = 15.dp, vertical = 11.dp)) {
+                                    Text("你", color = Color.White.copy(.56f), fontSize = 11.sp)
+                                    Text(
+                                        visibleUserText,
+                                        color = Color.White.copy(.92f),
+                                        fontSize = 15.sp,
+                                        modifier = Modifier.padding(top = 3.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
-
-            if (uiState.userTranscript.isNotBlank() && uiState.status != VoiceCallStatus.Speaking) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth(.82f)
-                        .padding(top = 14.dp),
-                    color = Color.Black.copy(alpha = .34f),
-                    shape = RoundedCornerShape(18.dp),
-                ) {
-                    Text(
-                        uiState.userTranscript,
-                        color = Color.White.copy(.82f),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                    )
-                }
-            }
-
-            Spacer(Modifier.weight(1f))
 
             OutlinedTextField(
                 value = typedInput,
                 onValueChange = { typedInput = it },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("对话…", color = Color.White.copy(.55f)) },
+                placeholder = {
+                    Text(
+                        when (uiState.status) {
+                            VoiceCallStatus.Processing -> "TA 正在思考…"
+                            VoiceCallStatus.Speaking -> "可以打字打断 TA…"
+                            else -> "对话…"
+                        },
+                        color = Color.White.copy(.55f),
+                    )
+                },
                 trailingIcon = {
                     TextButton(
                         onClick = { sendTypedMessage() },
@@ -366,9 +422,7 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
                 CallButton(
                     HugeIcons.VolumeHigh,
                     if (uiState.isSpeakerEnabled) "扬声器" else "听筒",
-                ) {
-                    service?.toggleSpeaker()
-                }
+                ) { service?.toggleSpeaker() }
 
                 CallButton(HugeIcons.Cancel01, "挂断", Color(0xFFE5484D)) {
                     service?.endCall()
@@ -381,9 +435,9 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
         Surface(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(top = 92.dp, end = 18.dp)
+                .padding(top = 88.dp, end = 16.dp)
                 .size(width = 104.dp, height = 142.dp)
-                .border(1.dp, Color.White.copy(alpha = .65f), RoundedCornerShape(18.dp)),
+                .border(1.dp, Color.White.copy(alpha = .58f), RoundedCornerShape(18.dp)),
             color = Color.Black.copy(alpha = .25f),
             shape = RoundedCornerShape(18.dp),
             shadowElevation = 8.dp,
@@ -400,6 +454,99 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
             }
         }
     }
+}
+
+@Composable
+private fun VideoCallJoinPage(
+    visualSettings: VideoCallVisualSettings,
+    blockedByAnotherCall: Boolean,
+    onJoin: () -> Unit,
+    onBack: () -> Unit,
+) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xFF171016))
+            .padding(32.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(HugeIcons.Camera01, null, tint = Color(0xFFFFB7C5), modifier = Modifier.size(72.dp))
+            Text("视频电话", color = Color.White, fontSize = 28.sp, modifier = Modifier.padding(top = 20.dp))
+            Text(
+                when {
+                    blockedByAnotherCall -> "当前已有其他通话进行中，请先挂断后再开始视频电话。"
+                    visualSettings.selfViewMode == VideoCallSelfViewMode.FRONT_CAMERA ->
+                        "通话期间会持续使用麦克风；你已选择前置摄像头，开始后会请求摄像头权限。"
+                    else ->
+                        "通话期间会持续使用麦克风；右上角默认显示你的头像，不会自动打开摄像头。"
+                },
+                color = if (blockedByAnotherCall) Color(0xFFFFB7C5) else Color.White.copy(.7f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(vertical = 20.dp),
+            )
+            Button(onClick = onJoin, enabled = !blockedByAnotherCall) { Text("开始通话") }
+            TextButton(onClick = onBack) { Text("取消") }
+        }
+    }
+}
+
+@Composable
+private fun VideoCallHeader(
+    displayName: String,
+    status: VoiceCallStatus,
+    emotion: String,
+    location: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                displayName,
+                color = Color.White,
+                fontSize = 25.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Surface(
+                modifier = Modifier.padding(start = 10.dp),
+                color = videoStatusColor(status),
+                shape = RoundedCornerShape(50),
+            ) {
+                Text(
+                    videoStatusText(status),
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                )
+            }
+        }
+        Text(
+            listOf(emotion, location)
+                .filter { it.isNotBlank() }
+                .joinToString(" · ")
+                .ifBlank { "正在和你视频" },
+            color = Color.White.copy(.70f),
+            fontSize = 13.sp,
+            modifier = Modifier.padding(top = 5.dp),
+        )
+    }
+}
+
+private fun videoStatusText(status: VoiceCallStatus): String = when (status) {
+    VoiceCallStatus.Idle -> "连接中"
+    VoiceCallStatus.Listening -> "正在听你说"
+    VoiceCallStatus.Processing -> "正在想"
+    VoiceCallStatus.Speaking -> "正在说话"
+    VoiceCallStatus.Error -> "通话异常"
+}
+
+private fun videoStatusColor(status: VoiceCallStatus): Color = when (status) {
+    VoiceCallStatus.Idle -> Color.Black.copy(alpha = .34f)
+    VoiceCallStatus.Listening -> Color(0xFF587C69).copy(alpha = .86f)
+    VoiceCallStatus.Processing -> Color(0xFF8A6B4A).copy(alpha = .88f)
+    VoiceCallStatus.Speaking -> Color(0xFF9A6675).copy(alpha = .88f)
+    VoiceCallStatus.Error -> Color(0xFFB84949).copy(alpha = .90f)
 }
 
 @Composable
@@ -449,7 +596,10 @@ private fun UserAvatarPreview(
     modifier: Modifier = Modifier,
 ) {
     val customFile = customPath.takeIf { it.isNotBlank() }?.let(::File)?.takeIf { it.exists() }
-    Box(modifier.clip(RoundedCornerShape(18.dp)).background(Color(0xFF252126)), contentAlignment = Alignment.Center) {
+    Box(
+        modifier.clip(RoundedCornerShape(18.dp)).background(Color(0xFF252126)),
+        contentAlignment = Alignment.Center,
+    ) {
         when {
             customFile != null -> AsyncImage(
                 model = customFile,
@@ -545,12 +695,23 @@ private fun FrontCameraPreview(modifier: Modifier = Modifier) {
         }
 
         textureView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-            override fun onSurfaceTextureAvailable(surface: android.graphics.SurfaceTexture, width: Int, height: Int) = openCamera()
-            override fun onSurfaceTextureSizeChanged(surface: android.graphics.SurfaceTexture, width: Int, height: Int) = Unit
+            override fun onSurfaceTextureAvailable(
+                surface: android.graphics.SurfaceTexture,
+                width: Int,
+                height: Int,
+            ) = openCamera()
+
+            override fun onSurfaceTextureSizeChanged(
+                surface: android.graphics.SurfaceTexture,
+                width: Int,
+                height: Int,
+            ) = Unit
+
             override fun onSurfaceTextureDestroyed(surface: android.graphics.SurfaceTexture): Boolean {
                 closeCamera()
                 return true
             }
+
             override fun onSurfaceTextureUpdated(surface: android.graphics.SurfaceTexture) = Unit
         }
         if (textureView.isAvailable) openCamera()
@@ -588,6 +749,11 @@ private fun CallButton(
         ) {
             Icon(icon, label, tint = Color.White)
         }
-        Text(label, color = Color.White.copy(.82f), fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
+        Text(
+            label,
+            color = Color.White.copy(.82f),
+            fontSize = 11.sp,
+            modifier = Modifier.padding(top = 6.dp),
+        )
     }
 }
