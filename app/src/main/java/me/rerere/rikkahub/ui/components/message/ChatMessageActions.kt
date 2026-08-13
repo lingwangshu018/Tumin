@@ -240,6 +240,7 @@ fun ChatMessageActionsSheet(
     val chatService = koinInject<ChatService>()
     val scope = rememberCoroutineScope()
 
+    var inspectQuoteForwardMode by remember { mutableStateOf(false) }
     var forwardMode by remember { mutableStateOf(false) }
     var targets by remember { mutableStateOf<List<Conversation>>(emptyList()) }
     var loadingTargets by remember { mutableStateOf(false) }
@@ -294,178 +295,209 @@ fun ChatMessageActionsSheet(
         onDismissRequest = onDismissRequest,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
-        if (forwardMode) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
+        when {
+            forwardMode -> {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Text("转发到", style = MaterialTheme.typography.titleLarge)
-                    TextButton(onClick = { forwardMode = false }) { Text("返回") }
-                }
-                Text(
-                    "选择一个 Character / Chat。转发只写入目标聊天，不会自动触发对方回复。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (loadingTargets) {
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(24.dp),
-                        horizontalArrangement = Arrangement.Center,
-                    ) { CircularProgressIndicator(modifier = Modifier.size(24.dp)) }
-                } else if (targets.isEmpty()) {
-                    Text(actionError ?: "暂无可转发的聊天", modifier = Modifier.padding(16.dp))
-                } else {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(targets, key = { it.id }) { target ->
-                            val assistantName = settings.assistants
-                                .firstOrNull { it.id == target.assistantId }
-                                ?.name
-                                .orEmpty()
-                                .ifBlank { "Character" }
-                            Card(
-                                enabled = forwardingTo == null,
-                                onClick = {
-                                    forwardingTo = target.id
-                                    actionError = null
-                                    scope.launch {
-                                        runCatching {
-                                            val fullTarget = conversationRepository.getConversationById(target.id)
-                                                ?: error("目标聊天不存在")
-                                            val sourceLabel = if (message.role == MessageRole.USER) {
-                                                settings.displaySetting.userNickname.ifBlank { "我" }
-                                            } else {
-                                                "AI 消息"
-                                            }
-                                            val text = message.toText().trim()
-                                            require(text.isNotBlank()) { "这条消息没有可转发的文字内容" }
-                                            val forwarded = UIMessage(
-                                                role = MessageRole.USER,
-                                                parts = listOf(UIMessagePart.Text("【转发自 $sourceLabel】\n$text")),
-                                            )
-                                            conversationRepository.updateConversation(
-                                                fullTarget.copy(
-                                                    messageNodes = fullTarget.messageNodes + forwarded.toMessageNode(),
-                                                    updateAt = Instant.now(),
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text("转发到", style = MaterialTheme.typography.titleLarge)
+                        TextButton(onClick = { forwardMode = false; inspectQuoteForwardMode = true }) { Text("返回") }
+                    }
+                    Text(
+                        "选择一个 Character / Chat。转发只写入目标聊天，不会自动触发对方回复。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (loadingTargets) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(24.dp),
+                            horizontalArrangement = Arrangement.Center,
+                        ) { CircularProgressIndicator(modifier = Modifier.size(24.dp)) }
+                    } else if (targets.isEmpty()) {
+                        Text(actionError ?: "暂无可转发的聊天", modifier = Modifier.padding(16.dp))
+                    } else {
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(targets, key = { it.id }) { target ->
+                                val assistantName = settings.assistants
+                                    .firstOrNull { it.id == target.assistantId }
+                                    ?.name
+                                    .orEmpty()
+                                    .ifBlank { "Character" }
+                                Card(
+                                    enabled = forwardingTo == null,
+                                    onClick = {
+                                        forwardingTo = target.id
+                                        actionError = null
+                                        scope.launch {
+                                            runCatching {
+                                                val fullTarget = conversationRepository.getConversationById(target.id)
+                                                    ?: error("目标聊天不存在")
+                                                val sourceLabel = if (message.role == MessageRole.USER) {
+                                                    settings.displaySetting.userNickname.ifBlank { "我" }
+                                                } else {
+                                                    "AI 消息"
+                                                }
+                                                val text = message.toText().trim()
+                                                require(text.isNotBlank()) { "这条消息没有可转发的文字内容" }
+                                                val forwarded = UIMessage(
+                                                    role = MessageRole.USER,
+                                                    parts = listOf(UIMessagePart.Text("【转发自 $sourceLabel】\n$text")),
                                                 )
-                                            )
-                                        }.onSuccess {
-                                            onDismissRequest()
-                                        }.onFailure {
-                                            actionError = it.message ?: "转发失败"
+                                                conversationRepository.updateConversation(
+                                                    fullTarget.copy(
+                                                        messageNodes = fullTarget.messageNodes + forwarded.toMessageNode(),
+                                                        updateAt = Instant.now(),
+                                                    )
+                                                )
+                                            }.onSuccess {
+                                                onDismissRequest()
+                                            }.onFailure {
+                                                actionError = it.message ?: "转发失败"
+                                            }
+                                            forwardingTo = null
                                         }
-                                        forwardingTo = null
+                                    },
+                                ) {
+                                    Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                                        Text(assistantName, style = MaterialTheme.typography.titleMedium)
+                                        Text(
+                                            target.title.ifBlank { "未命名聊天" },
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
                                     }
-                                },
-                            ) {
-                                Column(Modifier.fillMaxWidth().padding(14.dp)) {
-                                    Text(assistantName, style = MaterialTheme.typography.titleMedium)
-                                    Text(
-                                        target.title.ifBlank { "未命名聊天" },
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
                                 }
                             }
                         }
                     }
-                }
-                actionError?.let {
-                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    actionError?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
-        } else {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                ActionCard(HugeIcons.Copy01, "复制") {
-                    context.copyMessageToClipboard(message)
-                    onDismissRequest()
-                }
-                ActionCard(HugeIcons.Copy01, "引用") {
-                    onDismissRequest()
-                    onQuote()
-                }
-                ActionCard(HugeIcons.TextSelection, "选择") {
-                    onDismissRequest()
-                    onSelectAndCopy()
-                }
-                ActionCard(HugeIcons.Refresh03, if (regenerating) "正在重新生成…" else "重新生成") {
-                    locateSourceAndRegenerate()
-                }
-                ActionCard(HugeIcons.Edit01, "编辑") {
-                    onDismissRequest()
-                    onEdit()
-                }
-                if (message.role == MessageRole.USER) {
-                    ActionCard(HugeIcons.Refresh03, "编辑并重试") {
-                        onDismissRequest()
-                        onEditAndRegenerate()
-                    }
-                }
-                ActionCard(HugeIcons.Share04, "转发") { forwardMode = true }
 
-                if (onToggleFavorite != null) {
-                    ActionCard(
-                        HugeIcons.FavouriteCircle,
-                        stringResource(
-                            if (isFavorite) R.string.chat_message_remove_favorite
-                            else R.string.chat_message_add_favorite
-                        )
-                    ) {
-                        onDismissRequest()
-                        onToggleFavorite()
-                    }
-                }
-
-                ActionCard(HugeIcons.Share04, stringResource(R.string.share)) {
-                    onDismissRequest()
-                    onShare()
-                }
-                ActionCard(HugeIcons.GitFork, stringResource(R.string.create_fork)) {
-                    onDismissRequest()
-                    onFork()
-                }
-
-                val hasTextContent = message.parts.filterIsInstance<UIMessagePart.Text>().any { it.text.isNotBlank() }
-                if (hasTextContent) {
-                    ActionCard(HugeIcons.WebDesign01, stringResource(R.string.render_with_webview)) {
-                        onDismissRequest()
-                        onWebViewPreview()
-                    }
-                }
-
-                Card(
-                    onClick = {
-                        onDismissRequest()
-                        onDelete()
-                    },
-                    shape = MaterialTheme.shapes.medium,
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+            inspectQuoteForwardMode -> {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Row(
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Icon(HugeIcons.Delete01, contentDescription = null, modifier = Modifier.padding(4.dp))
-                        Text(stringResource(R.string.delete), style = MaterialTheme.typography.titleMedium)
+                        Text("检查引用/转发", style = MaterialTheme.typography.titleLarge)
+                        TextButton(onClick = { inspectQuoteForwardMode = false }) { Text("返回") }
+                    }
+                    Text(
+                        "检查这条消息的引用关系，或把它转发到其他 Character / Chat。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    ActionCard(HugeIcons.Copy01, "引用这条消息") {
+                        onDismissRequest()
+                        onQuote()
+                    }
+                    ActionCard(HugeIcons.Share04, "转发到其他聊天") {
+                        inspectQuoteForwardMode = false
+                        forwardMode = true
                     }
                 }
+            }
 
-                actionError?.let {
-                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                }
+            else -> {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    ActionCard(HugeIcons.Copy01, "复制") {
+                        context.copyMessageToClipboard(message)
+                        onDismissRequest()
+                    }
+                    ActionCard(HugeIcons.Share04, "检查引用/转发") {
+                        inspectQuoteForwardMode = true
+                    }
+                    ActionCard(HugeIcons.TextSelection, "选择") {
+                        onDismissRequest()
+                        onSelectAndCopy()
+                    }
+                    ActionCard(HugeIcons.Refresh03, if (regenerating) "正在重新生成…" else "重新生成") {
+                        locateSourceAndRegenerate()
+                    }
+                    ActionCard(HugeIcons.Edit01, "编辑") {
+                        onDismissRequest()
+                        onEdit()
+                    }
+                    if (message.role == MessageRole.USER) {
+                        ActionCard(HugeIcons.Refresh03, "编辑并重试") {
+                            onDismissRequest()
+                            onEditAndRegenerate()
+                        }
+                    }
 
-                ProvideTextStyle(MaterialTheme.typography.labelSmall) {
-                    Text(message.createdAt.toJavaLocalDateTime().toLocalString())
-                    if (model != null) Text(model.displayName)
+                    if (onToggleFavorite != null) {
+                        ActionCard(
+                            HugeIcons.FavouriteCircle,
+                            stringResource(
+                                if (isFavorite) R.string.chat_message_remove_favorite
+                                else R.string.chat_message_add_favorite
+                            )
+                        ) {
+                            onDismissRequest()
+                            onToggleFavorite()
+                        }
+                    }
+
+                    ActionCard(HugeIcons.Share04, stringResource(R.string.share)) {
+                        onDismissRequest()
+                        onShare()
+                    }
+                    ActionCard(HugeIcons.GitFork, stringResource(R.string.create_fork)) {
+                        onDismissRequest()
+                        onFork()
+                    }
+
+                    val hasTextContent = message.parts.filterIsInstance<UIMessagePart.Text>().any { it.text.isNotBlank() }
+                    if (hasTextContent) {
+                        ActionCard(HugeIcons.WebDesign01, stringResource(R.string.render_with_webview)) {
+                            onDismissRequest()
+                            onWebViewPreview()
+                        }
+                    }
+
+                    Card(
+                        onClick = {
+                            onDismissRequest()
+                            onDelete()
+                        },
+                        shape = MaterialTheme.shapes.medium,
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                        ) {
+                            Icon(HugeIcons.Delete01, contentDescription = null, modifier = Modifier.padding(4.dp))
+                            Text(stringResource(R.string.delete), style = MaterialTheme.typography.titleMedium)
+                        }
+                    }
+
+                    actionError?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+
+                    ProvideTextStyle(MaterialTheme.typography.labelSmall) {
+                        Text(message.createdAt.toJavaLocalDateTime().toLocalString())
+                        if (model != null) Text(model.displayName)
+                    }
                 }
             }
         }
