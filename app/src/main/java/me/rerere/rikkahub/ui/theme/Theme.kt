@@ -155,7 +155,7 @@ fun RikkahubTheme(
             typography = Typography,
             motionScheme = MotionScheme.expressive()
         ) {
-            val petEnabled by rememberSharedPreferenceBoolean("in_app_pet_enabled", true)
+            val petEnabled by rememberSharedPreferenceBoolean("in_app_pet_enabled", false)
             val activeCall by VoiceCallService.activeConversationId.collectAsState()
             val currentAssistant = settings.getCurrentAssistant()
 
