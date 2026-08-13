@@ -34,6 +34,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -64,6 +65,8 @@ import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import me.rerere.ai.core.MessageRole
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Camera01
 import me.rerere.hugeicons.stroke.Cancel01
@@ -73,6 +76,7 @@ import me.rerere.hugeicons.stroke.VolumeHigh
 import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.repository.CompanionStateRepository
+import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.VoiceCallService
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionCamera
@@ -83,7 +87,7 @@ import me.rerere.rikkahub.ui.context.LocalSettings
 import org.koin.compose.koinInject
 import kotlin.uuid.Uuid
 
-/** Story video call with custom full-screen background and configurable self-view. */
+/** Story video call with custom full-screen background, text input and persistent archives. */
 @Composable
 fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
     val context = LocalContext.current
@@ -91,7 +95,9 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
     val displaySetting = LocalDisplaySettings.current
     val visualStore = remember { VideoCallVisualSettingsStore(context) }
     val visualSettings = remember { visualStore.read() }
+    val archiveStore = remember { VideoCallArchiveStore(context) }
     val companionRepository = koinInject<CompanionStateRepository>()
+    val chatService = koinInject<ChatService>()
     var joined by remember { mutableStateOf(false) }
 
     if (!joined) {
@@ -127,6 +133,8 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
     var cameraEnabled by remember { mutableStateOf(false) }
     var cameraRequested by remember { mutableStateOf(false) }
     var speakerEnabled by remember { mutableStateOf(true) }
+    var typedInput by remember { mutableStateOf("") }
+    var callBaselineCount by remember(conversationId) { mutableStateOf<Int?>(null) }
 
     val connection = remember {
         object : ServiceConnection {
@@ -152,6 +160,7 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
     }
 
     LaunchedEffect(Unit) {
+        archiveStore.recoverInterruptedSessions()
         if (!audioPermission.allRequiredPermissionsGranted) {
             audioPermission.requestPermissions()
         }
@@ -183,12 +192,55 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
     val companionFlow = conversation?.assistantId?.let { companionRepository.observe(it) }
     val companion by (companionFlow ?: MutableStateFlow(me.rerere.rikkahub.data.model.CompanionState()))
         .collectAsStateWithLifecycle(initialValue = me.rerere.rikkahub.data.model.CompanionState())
-    val story = remember(uiState.assistantText, companion.character.activity) {
-        storyPresentation(uiState.assistantText, companion.character.activity)
-    }
 
     val displayName = assistant?.name.orEmpty().ifBlank {
         conversation?.title.orEmpty().ifBlank { "TA" }
+    }
+
+    LaunchedEffect(conversation?.id) {
+        val current = conversation ?: return@LaunchedEffect
+        if (callBaselineCount == null) {
+            callBaselineCount = current.currentMessages.size
+        }
+    }
+
+    LaunchedEffect(service, conversation?.assistantId, displayName) {
+        val activeService = service ?: return@LaunchedEffect
+        val current = conversation ?: return@LaunchedEffect
+        VideoCallArchiveRuntime.attach(
+            store = archiveStore,
+            conversationId = conversationId,
+            assistantId = current.assistantId,
+            assistantName = displayName,
+            conversationFlow = activeService.conversation,
+        )
+    }
+
+    val callMessages = callBaselineCount?.let { baseline ->
+        conversation?.currentMessages?.drop(baseline).orEmpty()
+    }.orEmpty()
+    val latestCallAssistantText = callMessages
+        .lastOrNull { it.role == MessageRole.ASSISTANT }
+        ?.toText()
+        .orEmpty()
+    val storySource = latestCallAssistantText.ifBlank { uiState.assistantText }
+    val story = remember(storySource, companion.character.activity) {
+        storyPresentation(storySource, companion.character.activity)
+    }
+
+    fun sendTypedMessage() {
+        val text = typedInput.trim()
+        if (text.isBlank()) return
+        if (uiState.status == VoiceCallStatus.Speaking) {
+            service?.interruptSpeaking()
+        }
+        runCatching {
+            chatService.sendMessage(
+                conversationId,
+                listOf(UIMessagePart.Text(text)),
+            )
+        }
+        typedInput = ""
     }
 
     BackHandler { onBack() }
@@ -286,10 +338,24 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
 
             Spacer(Modifier.weight(1f))
 
+            OutlinedTextField(
+                value = typedInput,
+                onValueChange = { typedInput = it },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("对话…", color = Color.White.copy(.55f)) },
+                trailingIcon = {
+                    TextButton(
+                        onClick = { sendTypedMessage() },
+                        enabled = typedInput.isNotBlank(),
+                    ) { Text("发送") }
+                },
+                maxLines = 3,
+            )
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 32.dp),
+                    .padding(top = 14.dp, bottom = 28.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
                 CallButton(
