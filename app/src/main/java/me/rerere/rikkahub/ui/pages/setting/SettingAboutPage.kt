@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -6,13 +6,6 @@
 
 package me.rerere.rikkahub.ui.pages.setting
 
-import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.Code
-import me.rerere.hugeicons.stroke.Earth
-import me.rerere.hugeicons.stroke.File02
-import me.rerere.hugeicons.stroke.Github
-import me.rerere.hugeicons.stroke.SecurityCheck
-import me.rerere.hugeicons.stroke.SmartPhone01
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -44,25 +37,27 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Code
+import me.rerere.hugeicons.stroke.File02
+import me.rerere.hugeicons.stroke.SecurityCheck
+import me.rerere.hugeicons.stroke.SmartPhone01
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
-import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.easteregg.EmojiBurstHost
+import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
-import me.rerere.rikkahub.utils.openUrl
 import me.rerere.rikkahub.utils.plus
 
 @Composable
 fun SettingAboutPage() {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    val context = LocalContext.current
     val navController = LocalNavController.current
     val emojiOptions = remember {
         listOf(
@@ -76,15 +71,12 @@ fun SettingAboutPage() {
         )
     }
     var logoCenterPx by remember { mutableStateOf(Offset.Zero) }
+
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
-                title = {
-                    Text(stringResource(R.string.about_page_title))
-                },
-                navigationIcon = {
-                    BackButton()
-                },
+                title = { Text(stringResource(R.string.about_page_title)) },
+                navigationIcon = { BackButton() },
                 scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors,
             )
@@ -95,7 +87,7 @@ fun SettingAboutPage() {
         EmojiBurstHost(
             modifier = Modifier.fillMaxSize(),
             emojiOptions = emojiOptions,
-            burstCount = 12
+            burstCount = 12,
         ) { onBurst ->
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -108,7 +100,7 @@ fun SettingAboutPage() {
                             .fillMaxWidth()
                             .padding(8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         AsyncImage(
                             model = R.mipmap.ic_launcher,
@@ -121,25 +113,20 @@ fun SettingAboutPage() {
                                     val size = coordinates.size
                                     logoCenterPx = Offset(
                                         position.x + size.width / 2f,
-                                        position.y + size.height / 2f
+                                        position.y + size.height / 2f,
                                     )
                                 }
-                                .clickable {
-                                    onBurst(logoCenterPx)
-                                }
+                                .clickable { onBurst(logoCenterPx) },
                         )
-
                         Text(
-                            text = "橘瓣",
+                            text = "兔眠",
                             style = MaterialTheme.typography.displaySmall,
                         )
                     }
                 }
 
                 item {
-                    CardGroup(
-                        modifier = Modifier.padding(horizontal = 8.dp),
-                    ) {
+                    CardGroup(modifier = Modifier.padding(horizontal = 8.dp)) {
                         item(
                             modifier = Modifier.combinedClickable(
                                 onClick = {},
@@ -164,61 +151,13 @@ fun SettingAboutPage() {
                 }
 
                 item {
-                    CardGroup(
-                        modifier = Modifier.padding(horizontal = 8.dp),
-                    ) {
-                        item(
-                            onClick = { context.openUrl("https://github.com/sue1231513/orangechat") },
-                            leadingContent = { Icon(HugeIcons.Earth, null) },
-                            supportingContent = {
-                                Text("https://github.com/sue1231513/orangechat")
-                            },
-                            headlineContent = { Text(stringResource(R.string.about_page_website)) },
-                        )
-                        item(
-                            onClick = { context.openUrl("https://github.com/sue1231513/orangechat") },
-                            leadingContent = { Icon(HugeIcons.Github, null) },
-                            supportingContent = {
-                                Text("https://github.com/sue1231513/orangechat")
-                            },
-                            headlineContent = { Text(stringResource(R.string.about_page_github)) },
-                        )
-                        item(
-                            onClick = { context.openUrl("https://github.com/sue1231513/orangechat/blob/master/LICENSE") },
-                            leadingContent = { Icon(HugeIcons.File02, null) },
-                            supportingContent = {
-                                Text("https://github.com/sue1231513/orangechat/blob/master/LICENSE")
-                            },
-                            headlineContent = { Text(stringResource(R.string.about_page_license)) },
-                        )
-                    }
-                }
-
-                item {
-                    CardGroup(
-                        modifier = Modifier.padding(horizontal = 8.dp),
-                    ) {
-                        item(
-                            onClick = { context.openUrl("https://github.com/rikkahub/rikkahub") },
-                            leadingContent = { Icon(HugeIcons.Github, null) },
-                            supportingContent = {
-                                Text(stringResource(R.string.about_page_upstream_desc))
-                            },
-                            headlineContent = { Text(stringResource(R.string.about_page_upstream_name)) },
-                        )
-                    }
-                }
-
-                item {
-                    CardGroup(
-                        modifier = Modifier.padding(horizontal = 8.dp),
-                    ) {
+                    CardGroup(modifier = Modifier.padding(horizontal = 8.dp)) {
                         item(
                             onClick = {
                                 navController.navigate(
                                     Screen.Legal(
                                         titleRes = R.string.legal_user_agreement_title,
-                                        contentRes = R.string.legal_user_agreement_text
+                                        contentRes = R.string.legal_user_agreement_text,
                                     )
                                 )
                             },
@@ -231,7 +170,7 @@ fun SettingAboutPage() {
                                 navController.navigate(
                                     Screen.Legal(
                                         titleRes = R.string.legal_privacy_policy_title,
-                                        contentRes = R.string.legal_privacy_policy_text
+                                        contentRes = R.string.legal_privacy_policy_text,
                                     )
                                 )
                             },
@@ -244,7 +183,7 @@ fun SettingAboutPage() {
                                 navController.navigate(
                                     Screen.Legal(
                                         titleRes = R.string.legal_disclaimer_title,
-                                        contentRes = R.string.legal_disclaimer_text
+                                        contentRes = R.string.legal_disclaimer_text,
                                     )
                                 )
                             },
@@ -257,7 +196,7 @@ fun SettingAboutPage() {
                                 navController.navigate(
                                     Screen.Legal(
                                         titleRes = R.string.legal_plugin_security_title,
-                                        contentRes = R.string.legal_plugin_security_text
+                                        contentRes = R.string.legal_plugin_security_text,
                                     )
                                 )
                             },
