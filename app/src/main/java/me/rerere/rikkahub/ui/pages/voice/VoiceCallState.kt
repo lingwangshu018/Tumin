@@ -6,6 +6,12 @@
 
 package me.rerere.rikkahub.ui.pages.voice
 
+/** Which UI surface owns the active call. */
+enum class VoiceCallSurface {
+    Voice,
+    Video,
+}
+
 /**
  * 语音通话状态机
  *
@@ -32,6 +38,7 @@ data class VoiceCallUiState(
     val amplitudes: List<Float> = emptyList(),
     val isMuted: Boolean = false,
     val autoSendEnabled: Boolean = true,
+    val isSpeakerEnabled: Boolean = false,
 ) {
     val isActive: Boolean
         get() = status != VoiceCallStatus.Idle
