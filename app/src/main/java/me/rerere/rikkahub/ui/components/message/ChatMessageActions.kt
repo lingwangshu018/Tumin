@@ -70,7 +70,6 @@ import me.rerere.hugeicons.stroke.WebDesign01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
-import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
@@ -81,7 +80,6 @@ import me.rerere.rikkahub.utils.copyMessageToClipboard
 import me.rerere.rikkahub.utils.extractQuotedContentAsText
 import me.rerere.rikkahub.utils.toLocalString
 import org.koin.compose.koinInject
-import java.time.Instant
 import java.util.Locale
 import kotlin.uuid.Uuid
 
@@ -326,29 +324,18 @@ fun ChatMessageActionsSheet(
                 val persistedTarget = conversationRepository.getConversationById(target.id)
                     ?: error("目标聊天不存在")
                 val liveTarget = chatService.getConversationFlow(target.id).value
-                val base = if (
-                    liveTarget.id == target.id &&
-                    (liveTarget.messageNodes.isNotEmpty() || liveTarget.title.isNotBlank())
-                ) {
-                    liveTarget
-                } else {
-                    persistedTarget
+                if (liveTarget.messageNodes.isEmpty() && liveTarget.title.isBlank()) {
+                    chatService.updateConversationState(target.id) { persistedTarget }
                 }
 
-                val forwarded = UIMessage(
-                    role = MessageRole.USER,
-                    parts = listOf(
+                chatService.sendMessage(
+                    conversationId = target.id,
+                    content = listOf(
                         UIMessagePart.Text(
                             "【转发自 $sourceLabel · $sourceChatTitle】\n$text"
                         )
                     ),
-                )
-                chatService.saveConversation(
-                    target.id,
-                    base.copy(
-                        messageNodes = base.messageNodes + forwarded.toMessageNode(),
-                        updateAt = Instant.now(),
-                    )
+                    answer = false,
                 )
             }.onSuccess {
                 onDismissRequest()
