@@ -56,10 +56,7 @@ jobs:
               raise SystemExit('VideoCallPage archive flow target not found')
           video.write_text(s.replace(old, new, 1), encoding='utf-8')
           PY
-      - name: Compile Android
-        run: ./gradlew :app:compileReleaseKotlin --stacktrace
       - name: Remove temporary workflow and commit patch
-        if: success()
         run: |
           rm .github/workflows/patch-voice-call-init-race.yml
           git config user.name "github-actions[bot]"
