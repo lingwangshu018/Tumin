@@ -120,6 +120,8 @@ class ToolSurfaceBuilder(
                 ))
             }
             addAll(pluginToolProvider.getTools())
-        }.distinctBy { it.name }
+        }
+            .distinctBy { it.name }
+            .sortedBy { it.name }
     }
 }
