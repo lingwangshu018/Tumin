@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -294,12 +294,16 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             val systemMessage = messages.firstOrNull { it.role == MessageRole.SYSTEM }
             val systemTextParts = systemMessage?.parts?.filterIsInstance<UIMessagePart.Text>().orEmpty()
             if (systemTextParts.isNotEmpty()) {
+                // When PromptInjection splits SYSTEM into stable + dynamic Lorebook blocks,
+                // keep Claude's explicit cache breakpoint on the stable block. With a single
+                // block, preserve the previous behavior and cache that block as-is.
+                val systemCacheBreakpointIndex = if (systemTextParts.size > 1) 0 else systemTextParts.lastIndex
                 put("system", buildJsonArray {
                     systemTextParts.forEachIndexed { index, part ->
                         add(buildJsonObject {
                             put("type", "text")
                             put("text", part.text)
-                            if (providerSetting.promptCaching && index == systemTextParts.lastIndex) {
+                            if (providerSetting.promptCaching && index == systemCacheBreakpointIndex) {
                                 put("cache_control", cacheControlEphemeral(providerSetting.promptCacheTtl))
                             }
                         })
