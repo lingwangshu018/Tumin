@@ -1,0 +1,39 @@
+name: Patch Claude stable system cache
+
+on:
+  push:
+    branches:
+      - perf/claude-stable-system-cache
+    paths:
+      - .github/workflows/patch-claude-cache.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/claude-stable-system-cache
+      - name: Patch Claude cache breakpoint
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt')
+          text = path.read_text(encoding='utf-8-sig')
+          old = '''            val systemTextParts = systemMessage?.parts?.filterIsInstance<UIMessagePart.Text>().orEmpty()\n            if (systemTextParts.isNotEmpty()) {\n                put("system", buildJsonArray {\n                    systemTextParts.forEachIndexed { index, part ->\n                        add(buildJsonObject {\n                            put("type", "text")\n                            put("text", part.text)\n                            if (providerSetting.promptCaching && index == systemTextParts.lastIndex) {\n                                put("cache_control", cacheControlEphemeral(providerSetting.promptCacheTtl))\n                            }\n                        })\n                    }\n                })\n            }'''
+          new = '''            val systemTextParts = systemMessage?.parts?.filterIsInstance<UIMessagePart.Text>().orEmpty()\n            if (systemTextParts.isNotEmpty()) {\n                // When PromptInjection splits SYSTEM into stable + dynamic Lorebook blocks,\n                // keep Claude's explicit cache breakpoint on the stable block. With a single\n                // block, preserve the previous behavior and cache that block as-is.\n                val systemCacheBreakpointIndex = if (systemTextParts.size > 1) 0 else systemTextParts.lastIndex\n                put("system", buildJsonArray {\n                    systemTextParts.forEachIndexed { index, part ->\n                        add(buildJsonObject {\n                            put("type", "text")\n                            put("text", part.text)\n                            if (providerSetting.promptCaching && index == systemCacheBreakpointIndex) {\n                                put("cache_control", cacheControlEphemeral(providerSetting.promptCacheTtl))\n                            }\n                        })\n                    }\n                })\n            }'''
+          if old not in text:
+              raise SystemExit('Claude cache breakpoint anchor not found')
+          text = text.replace(old, new, 1)
+          path.write_text(text, encoding='utf-8')
+      - name: Commit patch and remove helper workflow
+        run: |
+          rm .github/workflows/patch-claude-cache.yml
+          git config user.name "lingwangshu018"
+          git config user.email "307459419+lingwangshu018@users.noreply.github.com"
+          git add ai/src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt .github/workflows/patch-claude-cache.yml
+          git commit -m "perf: pin Claude cache breakpoint to stable system block"
+          git push
