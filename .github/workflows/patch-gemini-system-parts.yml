@@ -1,0 +1,38 @@
+name: Patch Gemini system parts
+
+on:
+  push:
+    branches:
+      - perf/gemini-system-parts
+    paths:
+      - .github/workflows/patch-gemini-system-parts.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/gemini-system-parts
+      - name: Preserve Gemini system text blocks
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt')
+          text = path.read_text(encoding='utf-8-sig')
+          old = '''        if (systemMessage != null && !params.model.outputModalities.contains(Modality.IMAGE)) {\n            put("systemInstruction", buildJsonObject {\n                putJsonArray("parts") {\n                    add(buildJsonObject {\n                        put(\n                            "text",\n                            systemMessage.parts.filterIsInstance<UIMessagePart.Text>()\n                                .joinToString { it.text })\n                    })\n                }\n            })\n        }'''
+          new = '''        if (systemMessage != null && !params.model.outputModalities.contains(Modality.IMAGE)) {\n            val systemTextParts = systemMessage.parts.filterIsInstance<UIMessagePart.Text>()\n            if (systemTextParts.isNotEmpty()) {\n                put("systemInstruction", buildJsonObject {\n                    putJsonArray("parts") {\n                        systemTextParts.forEach { part ->\n                            add(buildJsonObject {\n                                put("text", part.text)\n                            })\n                        }\n                    }\n                })\n            }\n        }'''
+          if old not in text:
+              raise SystemExit('Gemini systemInstruction anchor not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+      - name: Commit patch and remove helper workflow
+        run: |
+          rm .github/workflows/patch-gemini-system-parts.yml
+          git config user.name "lingwangshu018"
+          git config user.email "307459419+lingwangshu018@users.noreply.github.com"
+          git add ai/src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt .github/workflows/patch-gemini-system-parts.yml
+          git commit -m "perf: preserve Gemini system text block boundaries"
+          git push
