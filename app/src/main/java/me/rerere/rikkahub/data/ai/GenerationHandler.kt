@@ -463,18 +463,9 @@ class GenerationHandler(
         } else {
             memories
         }
-        val internalMessages = buildList {
-            val system = buildString {
-                val effectiveSystemPrompt =
-                    if (assistant.allowConversationSystemPrompt && !conversationSystemPrompt.isNullOrBlank()) {
-                        conversationSystemPrompt
-                    } else {
-                        assistant.systemPrompt
-                    }
-                if (effectiveSystemPrompt.isNotBlank()) {
-                    append(effectiveSystemPrompt)
-                }
- 
+        // Prompt-cache stability: recall results change with every user turn, so keep them
+        // out of SYSTEM. They remain available to the model immediately before the latest user turn.
+        val dynamicMemoryContext = buildString {
                 // 记忆
                 if (assistant.enableMemory && recalledLocalMemories.isNotEmpty()) {
                     appendLine()
@@ -588,6 +579,20 @@ class GenerationHandler(
                     append(crossWindowMemoryPrompt)
                 }
  
+        }.trim()
+
+        val internalMessages = buildList {
+            val system = buildString {
+                val effectiveSystemPrompt =
+                    if (assistant.allowConversationSystemPrompt && !conversationSystemPrompt.isNullOrBlank()) {
+                        conversationSystemPrompt
+                    } else {
+                        assistant.systemPrompt
+                    }
+                if (effectiveSystemPrompt.isNotBlank()) {
+                    append(effectiveSystemPrompt)
+                }
+ 
                 // 代码文件命名和ZIP打包功能说明
                 appendLine()
                 append(buildCodeBlockPrompt())
@@ -640,7 +645,23 @@ class GenerationHandler(
  
             }
             if (system.isNotBlank()) add(UIMessage.system(prompt = system))
-            addAll(messages.limitContext(assistant.contextMessageSize))
+            val limitedMessages = messages.limitContext(assistant.contextMessageSize)
+            if (dynamicMemoryContext.isNotBlank()) {
+                val latestUserIndex = limitedMessages.indexOfLast { it.role == MessageRole.USER }
+                val memoryContextMessage = UIMessage.user(
+                    "<memory_context>\n$dynamicMemoryContext\n</memory_context>"
+                )
+                if (latestUserIndex >= 0) {
+                    addAll(limitedMessages.take(latestUserIndex))
+                    add(memoryContextMessage)
+                    addAll(limitedMessages.drop(latestUserIndex))
+                } else {
+                    addAll(limitedMessages)
+                    add(memoryContextMessage)
+                }
+            } else {
+                addAll(limitedMessages)
+            }
         }.transforms(
             transformers = transformers,
             context = context,
