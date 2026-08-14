@@ -1,0 +1,45 @@
+name: Patch prompt cache stable prefix
+
+on:
+  push:
+    branches:
+      - perf/prompt-cache-stable-prefix
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply focused cache-prefix patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('app/src/main/java/me/rerere/rikkahub/data/ai/transformers/LifeContextTransformer.kt')
+          text = path.read_text(encoding='utf-8-sig')
+
+          old_import = 'import android.util.Log\nimport me.rerere.ai.ui.UIMessage\n'
+          new_import = 'import android.util.Log\nimport me.rerere.ai.core.MessageRole\nimport me.rerere.ai.ui.UIMessage\n'
+          if old_import not in text:
+              raise SystemExit('import target not found')
+          text = text.replace(old_import, new_import, 1)
+
+          old_return = '''        return listOf(UIMessage.user(budgeted.text)) + memoryBudgetedMessages\n'''
+          new_return = '''        // Prompt caches are prefix-oriented. Companion/life context changes frequently, so\n        // prepending it invalidates the otherwise stable system/character/worldbook/history\n        // prefix on every turn. Keep the exact same context, but place it immediately before\n        // the latest user message so only the dynamic tail needs to be recomputed.\n        val dynamicContextMessage = UIMessage.user(budgeted.text)\n        val latestUserIndex = memoryBudgetedMessages.indexOfLast { it.role == MessageRole.USER }\n        return if (latestUserIndex >= 0) {\n            memoryBudgetedMessages.toMutableList().apply {\n                add(latestUserIndex, dynamicContextMessage)\n            }\n        } else {\n            memoryBudgetedMessages + dynamicContextMessage\n        }\n'''
+          if old_return not in text:
+              raise SystemExit('return target not found')
+          path.write_text(text.replace(old_return, new_return, 1), encoding='utf-8')
+          PY
+      - name: Remove temporary workflow and commit patch
+        run: |
+          rm .github/workflows/patch-prompt-cache-prefix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/me/rerere/rikkahub/data/ai/transformers/LifeContextTransformer.kt .github/workflows/patch-prompt-cache-prefix.yml
+          git commit -m "perf: preserve prompt cache prefix around dynamic context"
+          git push
