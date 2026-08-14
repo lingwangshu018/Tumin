@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -434,7 +434,14 @@ private fun MessagePartsBlock(
                             part.text.replace(Regex("\\[zip:[^\\]]+\\]", RegexOption.IGNORE_CASE), "")
                         }
                         
-                        SelectionContainer {
+                        val archiveSessionId = remember(part.text) {
+                            extractVideoCallArchiveSessionId(part.text)
+                        }
+
+                        if (archiveSessionId != null) {
+                            VideoCallArchiveCard(sessionId = archiveSessionId)
+                        } else {
+                            SelectionContainer {
                             Column {
                                 if (role == MessageRole.USER) {
                                     if (assistant?.splitUserBubbleByLine == true) {
@@ -564,6 +571,7 @@ private fun MessagePartsBlock(
                                 }
                                 
                             }
+                        }
                         }
                     }
  
