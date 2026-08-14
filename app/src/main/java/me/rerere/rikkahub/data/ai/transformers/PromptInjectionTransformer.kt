@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -44,25 +44,78 @@ internal fun transformMessages(
     modeInjections: List<PromptInjection.ModeInjection>,
     lorebooks: List<Lorebook>
 ): List<UIMessage> {
-    // 收集所有需要注入的内容
+    // 收集所有需要注入的内容，并先稳定排序。
     val injections = collectInjections(
         messages = messages,
         assistant = assistant,
         modeInjections = modeInjections,
         lorebooks = lorebooks
-    )
+    ).sortedByDescending { it.priority }
 
     if (injections.isEmpty()) {
         return messages
     }
 
-    // 按位置和优先级分组
-    val byPosition = injections
-        .sortedByDescending { it.priority }
-        .groupBy { it.position }
+    // Prompt-cache stability:
+    // 条件触发的 Lorebook 会随着最近聊天内容变化。若直接把它们拼进 SYSTEM 的开头/主体，
+    // 每次触发变化都会破坏最早的可缓存前缀。常驻 Lorebook 和 ModeInjection 仍按原位置应用；
+    // 条件触发、且目标位置属于 SYSTEM 的 Lorebook 则保留 SYSTEM 权限，但放入独立的尾部 Text block。
+    // 这样 Claude 可在稳定 block 上设置 cache breakpoint，OpenAI/Gemini 也能保留稳定前缀。
+    val (dynamicSystemLorebookInjections, stableAndChatInjections) = injections.partition {
+        it.isDynamicSystemLorebookInjection()
+    }
 
-    // 应用注入
-    return applyInjections(messages, byPosition)
+    val stableByPosition = stableAndChatInjections.groupBy { it.position }
+    val withStableInjections = if (stableByPosition.isEmpty()) {
+        messages
+    } else {
+        applyInjections(messages, stableByPosition)
+    }
+
+    return appendDynamicSystemLorebookBlock(
+        messages = withStableInjections,
+        injections = dynamicSystemLorebookInjections,
+    )
+}
+
+private fun PromptInjection.isDynamicSystemLorebookInjection(): Boolean {
+    return this is PromptInjection.RegexInjection &&
+        !constantActive &&
+        (position == InjectionPosition.BEFORE_SYSTEM_PROMPT ||
+            position == InjectionPosition.AFTER_SYSTEM_PROMPT)
+}
+
+/**
+ * 把本轮条件触发的 SYSTEM Lorebook 放进第一条 SYSTEM 消息的独立尾部 Text block。
+ *
+ * 这里故意不创建第二条 SYSTEM 消息：Claude/Gemini Provider 都只读取第一条 SYSTEM，
+ * 第二条会被过滤掉。独立 Text block 既保留 SYSTEM 语义，又给 Provider 一个稳定/动态边界。
+ */
+internal fun appendDynamicSystemLorebookBlock(
+    messages: List<UIMessage>,
+    injections: List<PromptInjection>,
+): List<UIMessage> {
+    if (injections.isEmpty()) return messages
+
+    val dynamicContent = injections
+        .joinToString("\n") { it.content }
+        .trim()
+    if (dynamicContent.isEmpty()) return messages
+
+    val result = messages.toMutableList()
+    val systemIndex = result.indexOfFirst { it.role == MessageRole.SYSTEM }
+
+    if (systemIndex >= 0) {
+        val systemMessage = result[systemIndex]
+        result[systemIndex] = systemMessage.copy(
+            parts = systemMessage.parts + UIMessagePart.Text(dynamicContent)
+        )
+    } else {
+        // 没有已有 SYSTEM 时无法形成稳定前缀，但仍必须保留原本的 SYSTEM 权限。
+        result.add(0, UIMessage.system(dynamicContent))
+    }
+
+    return result
 }
 
 /**
