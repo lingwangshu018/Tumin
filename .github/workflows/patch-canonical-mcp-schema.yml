@@ -13,42 +13,43 @@ jobs:
         with:
           ref: perf/canonical-mcp-schema
       - name: Patch McpManager
-        shell: python
         run: |
+          python - <<'PY'
           from pathlib import Path
           p = Path('app/src/main/java/me/rerere/rikkahub/data/ai/mcp/McpManager.kt')
           s = p.read_text(encoding='utf-8-sig')
-          old = '''private fun ToolSchema.toSchema(): InputSchema {
-    return InputSchema.Obj(properties = this.properties ?: JsonObject(emptyMap()), required = this.required)
-}
-'''
-          new = '''private fun canonicalizeSchemaJson(
-    element: kotlinx.serialization.json.JsonElement,
-): kotlinx.serialization.json.JsonElement = when (element) {
-    is JsonObject -> JsonObject(
-        element.entries
-            .sortedBy { it.key }
-            .associate { (key, value) -> key to canonicalizeSchemaJson(value) }
-    )
-    is kotlinx.serialization.json.JsonArray -> kotlinx.serialization.json.JsonArray(
-        element.map(::canonicalizeSchemaJson)
-    )
-    else -> element
-}
-
-private fun ToolSchema.toSchema(): InputSchema {
-    val properties = canonicalizeSchemaJson(
-        this.properties ?: JsonObject(emptyMap())
-    ) as JsonObject
-    return InputSchema.Obj(
-        properties = properties,
-        required = this.required?.sorted(),
-    )
-}
-'''
+          old = "private fun ToolSchema.toSchema(): InputSchema {\n    return InputSchema.Obj(properties = this.properties ?: JsonObject(emptyMap()), required = this.required)\n}\n"
+          lines = [
+              "private fun canonicalizeSchemaJson(",
+              "    element: kotlinx.serialization.json.JsonElement,",
+              "): kotlinx.serialization.json.JsonElement = when (element) {",
+              "    is JsonObject -> JsonObject(",
+              "        element.entries",
+              "            .sortedBy { it.key }",
+              "            .associate { (key, value) -> key to canonicalizeSchemaJson(value) }",
+              "    )",
+              "    is kotlinx.serialization.json.JsonArray -> kotlinx.serialization.json.JsonArray(",
+              "        element.map(::canonicalizeSchemaJson)",
+              "    )",
+              "    else -> element",
+              "}",
+              "",
+              "private fun ToolSchema.toSchema(): InputSchema {",
+              "    val properties = canonicalizeSchemaJson(",
+              "        this.properties ?: JsonObject(emptyMap())",
+              "    ) as JsonObject",
+              "    return InputSchema.Obj(",
+              "        properties = properties,",
+              "        required = this.required?.sorted(),",
+              "    )",
+              "}",
+              "",
+          ]
+          new = "\n".join(lines)
           if old not in s:
               raise SystemExit('target snippet not found')
           p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
       - name: Commit patch and remove temporary workflow
         run: |
           git config user.name github-actions[bot]
