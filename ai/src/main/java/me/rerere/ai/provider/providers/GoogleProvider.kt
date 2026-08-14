@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -360,16 +360,18 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         // System message if available
         val systemMessage = messages.firstOrNull { it.role == MessageRole.SYSTEM }
         if (systemMessage != null && !params.model.outputModalities.contains(Modality.IMAGE)) {
-            put("systemInstruction", buildJsonObject {
-                putJsonArray("parts") {
-                    add(buildJsonObject {
-                        put(
-                            "text",
-                            systemMessage.parts.filterIsInstance<UIMessagePart.Text>()
-                                .joinToString { it.text })
-                    })
-                }
-            })
+            val systemTextParts = systemMessage.parts.filterIsInstance<UIMessagePart.Text>()
+            if (systemTextParts.isNotEmpty()) {
+                put("systemInstruction", buildJsonObject {
+                    putJsonArray("parts") {
+                        systemTextParts.forEach { part ->
+                            add(buildJsonObject {
+                                put("text", part.text)
+                            })
+                        }
+                    }
+                })
+            }
         }
 
         // Generation config
