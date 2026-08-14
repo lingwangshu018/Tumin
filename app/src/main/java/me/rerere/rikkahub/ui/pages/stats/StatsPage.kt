@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -319,15 +319,30 @@ private fun StatsGrid(stats: AppStats, modifier: Modifier = Modifier) {
                 value = formatTokens(stats.totalCompletionTokens),
             )
         }
-        if (stats.totalCachedTokens > 0) {
-            StatCard(
-                modifier = Modifier.fillMaxWidth(),
-                icon = HugeIcons.Zap,
-                label = stringResource(R.string.stats_page_cached_tokens),
-                value = formatTokens(stats.totalCachedTokens),
-            )
-        }
-        StatCard(
+Row(
+    horizontalArrangement = Arrangement.spacedBy(8.dp),
+    modifier = Modifier.fillMaxWidth(),
+) {
+    StatCard(
+        modifier = Modifier.weight(1f),
+        icon = HugeIcons.Zap,
+        label = stringResource(R.string.stats_page_cache_hit_rate),
+        value = formatPercent(stats.cacheHitRate),
+    )
+    StatCard(
+        modifier = Modifier.weight(1f),
+        icon = HugeIcons.Zap,
+        label = stringResource(R.string.stats_page_cache_read_tokens),
+        value = formatTokens(stats.totalCachedTokens.coerceAtLeast(0L)),
+    )
+}
+StatCard(
+    modifier = Modifier.fillMaxWidth(),
+    icon = HugeIcons.Cpu,
+    label = stringResource(R.string.stats_page_uncached_input_tokens),
+    value = formatTokens(stats.uncachedPromptTokens),
+)
+StatCard(
             modifier = Modifier.fillMaxWidth(),
             icon = HugeIcons.Rocket01,
             label = stringResource(R.string.stats_page_launch_count),
@@ -372,6 +387,8 @@ private fun formatCount(count: Long): String = when {
     count >= 1_000 -> "%.1fK".format(count / 1_000.0)
     else -> count.toString()
 }
+
+private fun formatPercent(rate: Double): String = "%.1f%%".format(rate.coerceIn(0.0, 1.0) * 100.0)
 
 private fun formatTokens(count: Long): String = when {
     count >= 1_000_000_000 -> "%.2fB".format(count / 1_000_000_000.0)

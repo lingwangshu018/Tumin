@@ -1167,4 +1167,8 @@
 
   <string name="plugin_security_banner">⚠ 插件可執行網路請求並存取您已授權的系統資料。請僅從可信來源安裝插件。</string>
   <string name="web_server_security_warning_no_jwt">⚠ 未啟用 JWT 鑒權或密碼為空。目前任何可存取該位址的人都能讀取您的對話記錄，強烈建議立即設定密碼並開啟 JWT。</string>
+
+    <string name="stats_page_cache_hit_rate">快取命中率</string>
+    <string name="stats_page_cache_read_tokens">快取讀取 Token</string>
+    <string name="stats_page_uncached_input_tokens">未快取輸入 Token</string>
 </resources>
