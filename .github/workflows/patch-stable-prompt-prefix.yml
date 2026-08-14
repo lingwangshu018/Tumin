@@ -28,3 +28,5 @@ jobs:
           git add -A
           git commit -m "perf: keep dynamic memory out of system cache prefix"
           git push origin HEAD:feat/stable-prompt-prefix
+
+# rerun: newline-agnostic patch
