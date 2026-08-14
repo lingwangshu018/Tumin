@@ -175,7 +175,9 @@ fun VoiceCallPage(
 
     val uiState by (boundService?.uiState ?: MutableStateFlow(VoiceCallUiState()))
         .collectAsStateWithLifecycle(initialValue = VoiceCallUiState())
-    val conversationFlow = boundService?.conversation
+    // The binder may arrive before VoiceCallService.onStartCommand initializes conversationId.
+    // Use the safe accessor during that short lifecycle window instead of touching lateinit state.
+    val conversationFlow = boundService?.getConversationFlowOrNull()
         ?.map { it as me.rerere.rikkahub.data.model.Conversation? }
         ?: flowOf(null)
     val conversation by conversationFlow.collectAsStateWithLifecycle(initialValue = null)
