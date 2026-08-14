@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -32,7 +32,20 @@ data class AppStats(
     val totalCachedTokens: Long = 0L,
     val conversationsPerDay: Map<LocalDate, Int> = emptyMap(),
     val launchCount: Int = 0,
-)
+) {
+    private val boundedCachedTokens: Long
+        get() = totalCachedTokens.coerceIn(0L, totalPromptTokens.coerceAtLeast(0L))
+
+    val cacheHitRate: Double
+        get() = if (totalPromptTokens > 0L) {
+            boundedCachedTokens.toDouble() / totalPromptTokens.toDouble()
+        } else {
+            0.0
+        }
+
+    val uncachedPromptTokens: Long
+        get() = (totalPromptTokens.coerceAtLeast(0L) - boundedCachedTokens).coerceAtLeast(0L)
+}
 
 class StatsVM(
     private val conversationDAO: ConversationDAO,
