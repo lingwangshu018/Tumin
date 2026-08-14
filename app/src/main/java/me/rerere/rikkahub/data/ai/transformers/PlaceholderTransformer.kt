@@ -12,12 +12,12 @@ import android.os.Build
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
+import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.model.Assistant
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
@@ -142,47 +142,126 @@ object DefaultPlaceholderProvider : PlaceholderProvider {
 
 object PlaceholderTransformer : InputMessageTransformer, KoinComponent {
     private val defaultProvider = DefaultPlaceholderProvider
+    private val volatileSystemPlaceholders = setOf(
+        "cur_date",
+        "cur_time",
+        "cur_datetime",
+        "battery_level",
+    )
 
     override suspend fun transform(
         ctx: TransformerContext,
         messages: List<UIMessage>,
     ): List<UIMessage> {
         val settingsStore = get<SettingsStore>()
-        return messages.map {
-            it.copy(
-                parts = it.parts.map { part ->
+        val placeholderCtx = PlaceholderCtx(
+            context = ctx.context,
+            settingsStore = settingsStore,
+            model = ctx.model,
+            assistant = ctx.assistant,
+        )
+        val dynamicValues = linkedMapOf<String, String>()
+
+        val transformedMessages = messages.map { message ->
+            message.copy(
+                parts = message.parts.map { part ->
                     if (part is UIMessagePart.Text) {
-                        part.copy(
-                            text = replacePlaceholders(text = part.text, ctx = ctx, settingsStore = settingsStore)
-                        )
+                        val text = if (message.role == MessageRole.SYSTEM) {
+                            replaceSystemPlaceholders(
+                                text = part.text,
+                                ctx = placeholderCtx,
+                                dynamicValues = dynamicValues,
+                            )
+                        } else {
+                            replacePlaceholders(text = part.text, ctx = placeholderCtx)
+                        }
+                        part.copy(text = text)
                     } else {
                         part
                     }
                 }
             )
         }
+
+        if (dynamicValues.isEmpty()) return transformedMessages
+
+        val dynamicContext = UIMessage.user(
+            buildString {
+                appendLine("<dynamic_context>")
+                appendLine("Resolve <dynamic_ref key=\"...\"/> references in system instructions using these current values:")
+                dynamicValues.forEach { (key, value) ->
+                    appendLine("$key: $value")
+                }
+                append("</dynamic_context>")
+            }
+        )
+        val latestUserIndex = transformedMessages.indexOfLast { it.role == MessageRole.USER }
+
+        return if (latestUserIndex >= 0) {
+            transformedMessages.toMutableList().apply {
+                add(latestUserIndex, dynamicContext)
+            }
+        } else {
+            transformedMessages + dynamicContext
+        }
+    }
+
+    private fun replaceSystemPlaceholders(
+        text: String,
+        ctx: PlaceholderCtx,
+        dynamicValues: MutableMap<String, String>,
+    ): String {
+        var result = text
+
+        defaultProvider.placeholders.forEach { (key, placeholderInfo) ->
+            if (!containsPlaceholder(result, key)) return@forEach
+
+            if (key in volatileSystemPlaceholders) {
+                dynamicValues[key] = placeholderInfo.resolver(ctx)
+                result = replacePlaceholder(
+                    text = result,
+                    key = key,
+                    value = "<dynamic_ref key=\"$key\"/>",
+                )
+            } else {
+                result = replacePlaceholder(
+                    text = result,
+                    key = key,
+                    value = placeholderInfo.resolver(ctx),
+                )
+            }
+        }
+
+        return result
     }
 
     private fun replacePlaceholders(
         text: String,
-        ctx: TransformerContext,
-        settingsStore: SettingsStore
+        ctx: PlaceholderCtx,
     ): String {
         var result = text
 
-        val ctx = PlaceholderCtx(
-            context = ctx.context,
-            settingsStore = settingsStore,
-            model = ctx.model,
-            assistant = ctx.assistant
-        )
         defaultProvider.placeholders.forEach { (key, placeholderInfo) ->
-            val value = placeholderInfo.resolver(ctx)
-            result = result
-                .replace(oldValue = "{{$key}}", newValue = value, ignoreCase = true)
-                .replace(oldValue = "{$key}", newValue = value, ignoreCase = true)
+            if (containsPlaceholder(result, key)) {
+                result = replacePlaceholder(
+                    text = result,
+                    key = key,
+                    value = placeholderInfo.resolver(ctx),
+                )
+            }
         }
 
         return result
+    }
+
+    private fun containsPlaceholder(text: String, key: String): Boolean {
+        return text.contains("{{$key}}", ignoreCase = true) ||
+            text.contains("{$key}", ignoreCase = true)
+    }
+
+    private fun replacePlaceholder(text: String, key: String, value: String): String {
+        return text
+            .replace(oldValue = "{{$key}}", newValue = value, ignoreCase = true)
+            .replace(oldValue = "{$key}", newValue = value, ignoreCase = true)
     }
 }
