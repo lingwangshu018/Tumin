@@ -24,10 +24,11 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           vm_path = Path('app/src/main/java/me/rerere/rikkahub/ui/pages/stats/StatsVM.kt')
           vm = vm_path.read_text(encoding='utf-8-sig')
-          old = '''data class AppStats(
+          old = """data class AppStats(
               val isLoading: Boolean = true,
               val totalConversations: Int = 0,
               val totalMessages: Int = 0,
@@ -36,8 +37,8 @@ jobs:
               val totalCachedTokens: Long = 0L,
               val conversationsPerDay: Map<LocalDate, Int> = emptyMap(),
               val launchCount: Int = 0,
-          )'''
-          new = '''data class AppStats(
+          )"""
+          new = """data class AppStats(
               val isLoading: Boolean = true,
               val totalConversations: Int = 0,
               val totalMessages: Int = 0,
@@ -59,23 +60,22 @@ jobs:
 
               val uncachedPromptTokens: Long
                   get() = (totalPromptTokens.coerceAtLeast(0L) - boundedCachedTokens).coerceAtLeast(0L)
-          }'''
+          }"""
           if old not in vm:
               raise SystemExit('AppStats anchor not found')
-          vm_path.write_text(vm.replace(old, new), encoding='utf-8')
+          vm_path.write_text(vm.replace(old, new, 1), encoding='utf-8')
 
           page_path = Path('app/src/main/java/me/rerere/rikkahub/ui/pages/stats/StatsPage.kt')
           page = page_path.read_text(encoding='utf-8-sig')
-          old = '''        if (stats.totalCachedTokens > 0) {
-              StatCard(
-                  modifier = Modifier.fillMaxWidth(),
-                  icon = HugeIcons.Zap,
-                  label = stringResource(R.string.stats_page_cached_tokens),
-                  value = formatTokens(stats.totalCachedTokens),
-              )
-          }
-          StatCard('''
-          new = '''        Row(
+          pattern = re.compile(
+              r'\n\s*if \(stats\.totalCachedTokens > 0\) \{\s*'
+              r'StatCard\(\s*modifier = Modifier\.fillMaxWidth\(\),\s*'
+              r'icon = HugeIcons\.Zap,\s*'
+              r'label = stringResource\(R\.string\.stats_page_cached_tokens\),\s*'
+              r'value = formatTokens\(stats\.totalCachedTokens\),\s*\)\s*\}\s*'
+          )
+          replacement = """
+          Row(
               horizontalArrangement = Arrangement.spacedBy(8.dp),
               modifier = Modifier.fillMaxWidth(),
           ) {
@@ -98,15 +98,15 @@ jobs:
               label = stringResource(R.string.stats_page_uncached_input_tokens),
               value = formatTokens(stats.uncachedPromptTokens),
           )
-          StatCard('''
-          if old not in page:
-              raise SystemExit('StatsPage cache-card anchor not found')
-          page = page.replace(old, new)
-          anchor = '''private fun formatTokens(count: Long): String = when {'''
-          helper = '''private fun formatPercent(rate: Double): String = "%.1f%%".format(rate.coerceIn(0.0, 1.0) * 100.0)\n\n'''
+          """
+          page, count = pattern.subn('\n' + replacement.strip('\n') + '\n', page, count=1)
+          if count != 1:
+              raise SystemExit(f'StatsPage cache-card match count={count}')
+          anchor = 'private fun formatTokens(count: Long): String = when {'
+          helper = 'private fun formatPercent(rate: Double): String = "%.1f%%".format(rate.coerceIn(0.0, 1.0) * 100.0)\n\n'
           if anchor not in page:
               raise SystemExit('formatTokens anchor not found')
-          page = page.replace(anchor, helper + anchor)
+          page = page.replace(anchor, helper + anchor, 1)
           page_path.write_text(page, encoding='utf-8')
 
           translations = {
@@ -130,14 +130,15 @@ jobs:
               if not path.exists():
                   continue
               text = path.read_text(encoding='utf-8-sig')
-              additions = []
-              for key, value in entries.items():
-                  if f'name="{key}"' not in text:
-                      additions.append(f'    <string name="{key}">{value}</string>')
+              additions = [
+                  f'    <string name="{key}">{value}</string>'
+                  for key, value in entries.items()
+                  if f'name="{key}"' not in text
+              ]
               if additions:
                   if '</resources>' not in text:
                       raise SystemExit(f'resources closing tag not found: {path}')
-                  text = text.replace('</resources>', '\n' + '\n'.join(additions) + '\n</resources>')
+                  text = text.replace('</resources>', '\n' + '\n'.join(additions) + '\n</resources>', 1)
                   path.write_text(text, encoding='utf-8')
           PY
 
