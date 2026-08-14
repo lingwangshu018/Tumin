@@ -1,3 +1,1 @@
-build: 2026-08-14-video-fix
-source: latest master
-purpose: build Tumin v3.0.2 with video call reply and hangup fixes
+release 3.0.3
