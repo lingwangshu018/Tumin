@@ -13,11 +13,17 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.toMessageNode
+import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.VoiceCallService
 import me.rerere.rikkahub.utils.JsonInstant
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 import java.io.File
 import java.time.Instant
+import kotlin.math.max
 import kotlin.uuid.Uuid
 
 @Serializable
@@ -54,6 +60,10 @@ class VideoCallArchiveStore(context: Context) {
         .sortedByDescending { it.startedAtEpochMillis }
 
     @Synchronized
+    fun find(sessionId: String): VideoCallArchiveEntry? =
+        readAll().firstOrNull { it.id == sessionId }
+
+    @Synchronized
     fun startSession(
         conversationId: Uuid,
         assistantId: Uuid,
@@ -87,17 +97,23 @@ class VideoCallArchiveStore(context: Context) {
     }
 
     @Synchronized
-    fun finishSession(sessionId: String, messages: List<UIMessage>, endedNormally: Boolean = true) {
+    fun finishSession(
+        sessionId: String,
+        messages: List<UIMessage>,
+        endedNormally: Boolean = true,
+    ): VideoCallArchiveEntry? {
         val all = readAll()
         val index = all.indexOfFirst { it.id == sessionId }
-        if (index < 0) return
-        val next = all.toMutableList()
-        next[index] = next[index].copy(
+        if (index < 0) return null
+        val finished = all[index].copy(
             endedAtEpochMillis = Instant.now().toEpochMilli(),
             endedNormally = endedNormally,
             messages = visibleSnapshot(messages),
         )
+        val next = all.toMutableList()
+        next[index] = finished
         writeAll(next)
+        return finished
     }
 
     @Synchronized
@@ -151,11 +167,18 @@ class VideoCallArchiveStore(context: Context) {
  * Keeps the active video-call archive alive even if VideoCallPage leaves composition.
  * The runtime follows the shared conversation flow and seals the archive when the
  * foreground call service is actually hung up (including notification-bar hangup).
+ *
+ * While a call is active, its turns remain in the live Conversation so the model can
+ * naturally continue the same call. When the call ends, those temporary turns are
+ * removed from the normal chat history and replaced by one compact archive marker.
+ * The complete transcript remains in VideoCallArchiveStore.
  */
-object VideoCallArchiveRuntime {
+object VideoCallArchiveRuntime : KoinComponent {
     private const val PERSIST_INTERVAL_MS = 750L
+    const val ARCHIVE_MARKER_PREFIX = "[VIDEO_CALL_ARCHIVE:"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val chatService: ChatService by inject()
     private var archiveJob: Job? = null
     private var activeConversationId: String? = null
 
@@ -205,15 +228,66 @@ object VideoCallArchiveRuntime {
                 endedNormally = true
             } finally {
                 messageJob.cancelAndJoin()
-                store.finishSession(
+                val callMessages = conversationFlow.value.currentMessages.drop(baselineCount)
+                val finished = store.finishSession(
                     sessionId = sessionId,
-                    messages = conversationFlow.value.currentMessages.drop(baselineCount),
+                    messages = callMessages,
                     endedNormally = endedNormally,
                 )
+
+                if (endedNormally && finished != null) {
+                    collapseConversationToArchiveRecord(
+                        conversationId = conversationId,
+                        conversationFlow = conversationFlow,
+                        baselineCount = baselineCount,
+                        archive = finished,
+                    )
+                }
+
                 synchronized(this@VideoCallArchiveRuntime) {
                     if (activeConversationId == conversationKey) activeConversationId = null
                 }
             }
+        }
+    }
+
+    private suspend fun collapseConversationToArchiveRecord(
+        conversationId: Uuid,
+        conversationFlow: StateFlow<Conversation>,
+        baselineCount: Int,
+        archive: VideoCallArchiveEntry,
+    ) {
+        val current = conversationFlow.value
+        if (current.currentMessages.size <= baselineCount) return
+
+        val archiveText = buildArchiveMarkerText(archive)
+        val archiveNode = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(UIMessagePart.Text(archiveText)),
+        ).toMessageNode()
+
+        val updated = current.copy(
+            messageNodes = current.messageNodes.take(baselineCount) + archiveNode,
+            updateAt = Instant.now(),
+        )
+
+        chatService.updateConversation(conversationId, updated)
+        chatService.saveConversation(conversationId, updated)
+    }
+
+    private fun buildArchiveMarkerText(archive: VideoCallArchiveEntry): String {
+        val end = archive.endedAtEpochMillis ?: archive.startedAtEpochMillis
+        val durationSeconds = max(0L, (end - archive.startedAtEpochMillis) / 1000L)
+        val minutes = durationSeconds / 60L
+        val seconds = durationSeconds % 60L
+        val turns = archive.messages.count { it.role == "user" }
+        val duration = if (minutes > 0) "${minutes}分${seconds}秒" else "${seconds}秒"
+        return buildString {
+            append("📹 视频通话记录")
+            if (archive.assistantName.isNotBlank()) append(" · ${archive.assistantName}")
+            append("\n通话时长：$duration · $turns 回合")
+            append("\n完整通话已存档")
+            append("\n$ARCHIVE_MARKER_PREFIX${archive.id}]")
         }
     }
 }
