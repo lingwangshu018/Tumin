@@ -3,11 +3,11 @@ from pathlib import Path
 path = Path('app/src/main/java/me/rerere/rikkahub/data/ai/GenerationHandler.kt')
 raw = path.read_bytes()
 text = raw.decode('utf-8-sig')
-newline = '\r\n' if '\r\n' in text else '\n'
+newline = '\r\n' if '\r\n' in text else ('\r' if '\r' in text else '\n')
 
-internal_anchor = f'        val internalMessages = buildList {{{newline}'
+internal_anchor = '        val internalMessages = buildList {'
 internal_pos = text.index(internal_anchor)
-start_marker = f'                // 记忆{newline}'
+start_marker = '                // 记忆'
 end_marker = '                // 代码文件命名和ZIP打包功能说明'
 start = text.index(start_marker, internal_pos)
 end = text.index(end_marker, start)
@@ -49,10 +49,11 @@ if old_history not in text:
     raise SystemExit('history insertion anchor not found')
 text = text.replace(old_history, new_history, 1)
 
-prefix = text[:text.index(internal_anchor)]
+new_internal_pos = text.index(internal_anchor)
+prefix = text[:new_internal_pos]
 if '// 外置记忆库召回' not in prefix or 'crossWindowMemoryPrompt.isNotBlank()' not in prefix:
     raise SystemExit('dynamic memory extraction incomplete')
-system_region = text[text.index(internal_anchor):text.index('        // Token observation only:', text.index(internal_anchor))]
+system_region = text[new_internal_pos:text.index('        // Token observation only:', new_internal_pos)]
 if '// 外置记忆库召回' in system_region or 'crossWindowMemoryPrompt.isNotBlank()' in system_region:
     raise SystemExit('dynamic memory still present in system prompt')
 if text.count('<memory_context>') != 1:
