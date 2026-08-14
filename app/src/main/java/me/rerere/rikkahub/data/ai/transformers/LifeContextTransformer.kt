@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.ai.transformers
 
 import android.content.Context
 import android.util.Log
+import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.ui.pages.life.MusicPlaybackSession
 import me.rerere.rikkahub.utils.StickerAiSupport
@@ -104,7 +105,19 @@ object LifeContextTransformer : InputMessageTransformer {
             "CompanionContext",
             "assistant=${ctx.assistant.id} chars=${budgeted.charCount} kept=${budgeted.keptSections} dropped=${budgeted.droppedSections}",
         )
-        return listOf(UIMessage.user(budgeted.text)) + memoryBudgetedMessages
+        // Prompt caches are prefix-oriented. Companion/life context changes frequently, so
+        // prepending it invalidates the otherwise stable system/character/worldbook/history
+        // prefix on every turn. Keep the exact same context, but place it immediately before
+        // the latest user message so only the dynamic tail needs to be recomputed.
+        val dynamicContextMessage = UIMessage.user(budgeted.text)
+        val latestUserIndex = memoryBudgetedMessages.indexOfLast { it.role == MessageRole.USER }
+        return if (latestUserIndex >= 0) {
+            memoryBudgetedMessages.toMutableList().apply {
+                add(latestUserIndex, dynamicContextMessage)
+            }
+        } else {
+            memoryBudgetedMessages + dynamicContextMessage
+        }
     }
 
     private fun buildMusicContext(): String {
