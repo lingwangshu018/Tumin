@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -377,10 +378,15 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
                 }
             }
 
-            OutlinedTextField(
-                value = typedInput,
-                onValueChange = { typedInput = it },
-                modifier = Modifier.fillMaxWidth(),
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .imePadding(),
+            ) {
+                OutlinedTextField(
+                    value = typedInput,
+                    onValueChange = { typedInput = it },
+                    modifier = Modifier.fillMaxWidth(),
                 placeholder = {
                     Text(
                         when (uiState.status) {
@@ -402,12 +408,12 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
                 maxLines = 3,
             )
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 14.dp, bottom = 28.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 14.dp, bottom = 28.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
                 CallButton(
                     if (uiState.isMuted) HugeIcons.MicOff01 else HugeIcons.Mic01,
                     if (uiState.isMuted) "取消静音" else "静音",
@@ -433,6 +439,7 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
                     service?.endCall()
                     VoiceCallService.stop(context)
                     onBack()
+                }
                 }
             }
         }
