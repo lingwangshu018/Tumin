@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.ui.pet
 
 import android.graphics.BitmapFactory
-import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -31,112 +30,13 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import me.rerere.rikkahub.R
 
-enum class OfficialBunnyPose {
-    IDLE,
-    SIT,
-    WALK,
-    HAPPY,
-    HEART,
-    BACK,
-    LOOK,
-    SLEEP,
-    SHY,
-    ANGRY,
-    TOUCHED,
-    POKED,
-    RECONCILE,
-}
-
-sealed interface BunnyFrame {
-    data class Drawable(@param:DrawableRes val id: Int) : BunnyFrame
-    data class Atlas(val index: Int) : BunnyFrame
-}
-
-data class BunnyAnimationSpec(
-    val frames: List<BunnyFrame>,
-    val frameDurationMillis: Long,
-)
-
-fun PetMotion.toOfficialBunnyPose(): OfficialBunnyPose = when (this) {
-    PetMotion.IDLE -> OfficialBunnyPose.IDLE
-    PetMotion.GENTLE -> OfficialBunnyPose.SIT
-    PetMotion.APPROACH -> OfficialBunnyPose.WALK
-    PetMotion.AFFECTIONATE -> OfficialBunnyPose.HAPPY
-    PetMotion.STAY_CLOSE -> OfficialBunnyPose.HEART
-    PetMotion.CAUTIOUS -> OfficialBunnyPose.BACK
-    PetMotion.LOOK -> OfficialBunnyPose.LOOK
-    PetMotion.SLEEP -> OfficialBunnyPose.SLEEP
-    PetMotion.SHY -> OfficialBunnyPose.SHY
-    PetMotion.ANGRY -> OfficialBunnyPose.ANGRY
-    PetMotion.TOUCHED -> OfficialBunnyPose.TOUCHED
-    PetMotion.POKED -> OfficialBunnyPose.POKED
-    PetMotion.RECONCILE -> OfficialBunnyPose.RECONCILE
-}
-
-private fun drawable(@DrawableRes id: Int) = BunnyFrame.Drawable(id)
-private fun atlas(index: Int) = BunnyFrame.Atlas(index)
-
-fun OfficialBunnyPose.animationSpec(): BunnyAnimationSpec = when (this) {
-    OfficialBunnyPose.IDLE -> BunnyAnimationSpec(
-        frames = listOf(drawable(R.drawable.pet_bunny_idle_1), drawable(R.drawable.pet_bunny_idle_2)),
-        frameDurationMillis = 850L,
-    )
-    OfficialBunnyPose.SIT -> BunnyAnimationSpec(
-        frames = listOf(drawable(R.drawable.pet_bunny_sit_1), drawable(R.drawable.pet_bunny_sit_2)),
-        frameDurationMillis = 780L,
-    )
-    OfficialBunnyPose.WALK -> BunnyAnimationSpec(
-        frames = listOf(
-            drawable(R.drawable.pet_bunny_walk_right_1),
-            drawable(R.drawable.pet_bunny_walk_right_2),
-            drawable(R.drawable.pet_bunny_walk_right_3),
-        ),
-        frameDurationMillis = 190L,
-    )
-    OfficialBunnyPose.HAPPY -> BunnyAnimationSpec(
-        frames = listOf(drawable(R.drawable.pet_bunny_happy_1), drawable(R.drawable.pet_bunny_happy_2)),
-        frameDurationMillis = 330L,
-    )
-    OfficialBunnyPose.HEART -> BunnyAnimationSpec(
-        frames = listOf(drawable(R.drawable.pet_bunny_heart_1), drawable(R.drawable.pet_bunny_heart_2)),
-        frameDurationMillis = 520L,
-    )
-    OfficialBunnyPose.BACK -> BunnyAnimationSpec(
-        frames = listOf(drawable(R.drawable.pet_bunny_back_1), drawable(R.drawable.pet_bunny_back_2)),
-        frameDurationMillis = 900L,
-    )
-    OfficialBunnyPose.LOOK -> BunnyAnimationSpec(
-        frames = listOf(atlas(0), atlas(1), atlas(2)),
-        frameDurationMillis = 420L,
-    )
-    OfficialBunnyPose.SLEEP -> BunnyAnimationSpec(
-        frames = listOf(atlas(3), atlas(4)),
-        frameDurationMillis = 980L,
-    )
-    OfficialBunnyPose.SHY -> BunnyAnimationSpec(
-        frames = listOf(atlas(5), atlas(6)),
-        frameDurationMillis = 560L,
-    )
-    OfficialBunnyPose.ANGRY -> BunnyAnimationSpec(
-        frames = listOf(atlas(7), atlas(8)),
-        frameDurationMillis = 360L,
-    )
-    OfficialBunnyPose.TOUCHED -> BunnyAnimationSpec(
-        frames = listOf(atlas(9), atlas(10)),
-        frameDurationMillis = 240L,
-    )
-    OfficialBunnyPose.POKED -> BunnyAnimationSpec(
-        frames = listOf(atlas(11), atlas(12)),
-        frameDurationMillis = 180L,
-    )
-    OfficialBunnyPose.RECONCILE -> BunnyAnimationSpec(
-        frames = listOf(atlas(13), atlas(14)),
-        frameDurationMillis = 480L,
-    )
-}
-
+/**
+ * Crash-safe renderer for the official bunny. Some release/device combinations can make
+ * BitmapFactory.decodeResource() return null for the optional WebP state atlas. Atlas-backed
+ * poses therefore decode lazily and fall back to the normal idle drawable instead of crashing.
+ */
 @Composable
-fun OfficialBunnyPet(
+fun SafeOfficialBunnyPet(
     presentation: PetPresentation,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
@@ -154,7 +54,7 @@ fun OfficialBunnyPet(
         }
     }
 
-    val transition = rememberInfiniteTransition(label = "official-bunny")
+    val transition = rememberInfiniteTransition(label = "safe-official-bunny")
     val bob by transition.animateFloat(
         initialValue = 0f,
         targetValue = when (pose) {
@@ -181,7 +81,7 @@ fun OfficialBunnyPet(
             ),
             repeatMode = RepeatMode.Reverse,
         ),
-        label = "bunny-bob",
+        label = "safe-bunny-bob",
     )
     val pulse by transition.animateFloat(
         initialValue = 0.992f,
@@ -194,7 +94,7 @@ fun OfficialBunnyPet(
             animation = tween(durationMillis = 1550),
             repeatMode = RepeatMode.Reverse,
         ),
-        label = "bunny-pulse",
+        label = "safe-bunny-pulse",
     )
 
     val frame = animation.frames[frameIndex]
