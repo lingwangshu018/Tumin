@@ -8,4 +8,4 @@ import me.rerere.rikkahub.ui.pages.chat.ChatVM
  * Keep this overload as a no-op so the chat drawer no longer renders a duplicate update section.
  */
 @Composable
-fun UpdateCard(vm: ChatVM) = Unit
+fun UpdateCard(@Suppress("UNUSED_PARAMETER") vm: ChatVM) = Unit
