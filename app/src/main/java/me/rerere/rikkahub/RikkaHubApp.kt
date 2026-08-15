@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -44,6 +44,7 @@ import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.WebServerService
 import me.rerere.rikkahub.utils.CrashHandler
 import me.rerere.rikkahub.utils.DatabaseUtil
+import me.rerere.rikkahub.utils.UpdateChecker
 import org.koin.android.ext.android.get
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
@@ -138,10 +139,23 @@ class RikkaHubApp : Application() {
         // Diary summary is now generated entirely by Supabase Edge Function.
         // App no longer schedules local diary summary alarms.
 
+        // Check GitHub Releases on launch when automatic updates are enabled (max once per day)
+        checkForUpdatesOnLaunch()
+
         // Increment launch count
         incrementLaunchCount()
 
         // Composer.setDiagnosticStackTraceMode(ComposeStackTraceMode.Auto)
+    }
+
+    private fun checkForUpdatesOnLaunch() {
+        get<AppScope>().launch {
+            runCatching {
+                get<UpdateChecker>().autoCheckIfDue(this@RikkaHubApp)
+            }.onFailure {
+                Log.w(TAG, "Automatic update check failed", it)
+            }
+        }
     }
 
     private fun incrementLaunchCount() {
