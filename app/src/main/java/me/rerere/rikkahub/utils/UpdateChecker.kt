@@ -18,120 +18,133 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import me.rerere.common.http.await
 import me.rerere.rikkahub.BuildConfig
-import me.rerere.rikkahub.RikkaHubApp
-import me.rerere.rikkahub.data.datastore.SettingsStore
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.koin.android.ext.android.get
 
-// 更新检查源：兔眠自己的 GitHub Releases
 private const val GITHUB_OWNER = "lingwangshu018"
 private const val GITHUB_REPO = "Tumin"
 private const val API_URL = "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/releases/latest"
 private const val UPDATE_PREFS = "app_update_checker"
+private const val AUTO_CHECK_ENABLED = "auto_check_enabled"
+private const val LAST_AUTO_CHECK_AT = "last_auto_check_at"
 private const val LAST_NOTIFIED_VERSION = "last_notified_version"
+private const val AUTO_CHECK_INTERVAL_MS = 24L * 60L * 60L * 1000L
 
 class UpdateChecker(private val client: OkHttpClient) {
     private val json = Json { ignoreUnknownKeys = true }
 
     fun checkUpdate(): Flow<UiState<UpdateInfo>> = flow {
         emit(UiState.Loading)
-        emit(
-            UiState.Success(
-                data = try {
-                    val response = client.newCall(
-                        Request.Builder()
-                            .url(API_URL)
-                            .get()
-                            .addHeader(
-                                "User-Agent",
-                                "OrangeChat ${BuildConfig.VERSION_NAME} #${BuildConfig.VERSION_CODE}"
-                            )
-                            .build()
-                    ).await()
-                    if (response.isSuccessful) {
-                        val release = json.decodeFromString<GithubRelease>(response.body.string())
-                        // 将 GitHub Release 映射为 App 使用的 UpdateInfo 结构
-                        val version = release.tagName.removePrefix("v").removePrefix("V")
-                        val info = UpdateInfo(
-                            version = version,
-                            publishedAt = release.publishedAt,
-                            changelog = release.body.takeIf { !it.isNullOrBlank() }
-                                ?: "暂无更新说明",
-                            downloads = release.assets.map { asset ->
-                                UpdateDownload(
-                                    name = asset.name,
-                                    url = asset.browserDownloadUrl,
-                                    size = formatSize(asset.size)
-                                )
-                            }
-                        )
-                        showUpdateHintIfNeeded(info)
-                        info
-                    } else {
-                        throw Exception("Failed to fetch update info (HTTP ${response.code})")
-                    }
-                } catch (e: Exception) {
-                    throw Exception("Failed to fetch update info", e)
-                }
-            )
-        )
+        emit(UiState.Success(fetchUpdateInfo()))
     }.catch {
         emit(UiState.Error(it))
     }.flowOn(Dispatchers.IO)
 
-    private fun showUpdateHintIfNeeded(info: UpdateInfo) {
-        if (Version(info.version) <= Version(BuildConfig.VERSION_NAME)) return
+    suspend fun fetchUpdateInfo(): UpdateInfo = withContext(Dispatchers.IO) {
+        val response = client.newCall(
+            Request.Builder()
+                .url(API_URL)
+                .get()
+                .addHeader(
+                    "User-Agent",
+                    "Tumin ${BuildConfig.VERSION_NAME} #${BuildConfig.VERSION_CODE}"
+                )
+                .build()
+        ).await()
 
-        val app = RikkaHubApp.INSTANCE ?: return
-        val showUpdates = runCatching {
-            app.get<SettingsStore>().settingsFlow.value.displaySetting.showUpdates
-        }.getOrDefault(true)
-        if (!showUpdates) return
-
-        val prefs = app.getSharedPreferences(UPDATE_PREFS, Context.MODE_PRIVATE)
-        if (prefs.getString(LAST_NOTIFIED_VERSION, null) == info.version) return
-
-        prefs.edit().putString(LAST_NOTIFIED_VERSION, info.version).apply()
-        Handler(Looper.getMainLooper()).post {
-            Toast.makeText(
-                app,
-                "发现兔眠新版本 ${info.version}，可前往关于页面查看更新",
-                Toast.LENGTH_LONG,
-            ).show()
+        if (!response.isSuccessful) {
+            throw Exception("检查更新失败（HTTP ${response.code}）")
         }
+
+        val release = json.decodeFromString<GithubRelease>(response.body.string())
+        val version = release.tagName.removePrefix("v").removePrefix("V")
+        UpdateInfo(
+            version = version,
+            publishedAt = release.publishedAt,
+            changelog = release.body.takeIf { !it.isNullOrBlank() } ?: "暂无更新说明",
+            downloads = release.assets
+                .filter { it.name.endsWith(".apk", ignoreCase = true) }
+                .map { asset ->
+                    UpdateDownload(
+                        name = asset.name,
+                        url = asset.browserDownloadUrl,
+                        size = formatSize(asset.size)
+                    )
+                }
+        )
+    }
+
+    fun isNewerVersion(info: UpdateInfo): Boolean =
+        Version(info.version) > Version(BuildConfig.VERSION_NAME)
+
+    fun isAutoCheckEnabled(context: Context): Boolean =
+        context.getSharedPreferences(UPDATE_PREFS, Context.MODE_PRIVATE)
+            .getBoolean(AUTO_CHECK_ENABLED, true)
+
+    fun setAutoCheckEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(UPDATE_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(AUTO_CHECK_ENABLED, enabled)
+            .apply()
+    }
+
+    /**
+     * App 启动时调用。自动检查默认开启，同一设备 24 小时内最多请求 GitHub 一次。
+     * 没有新版本时保持安静；只有发现新版本时才提示。
+     */
+    suspend fun autoCheckIfDue(context: Context): UpdateInfo? {
+        val prefs = context.getSharedPreferences(UPDATE_PREFS, Context.MODE_PRIVATE)
+        if (!prefs.getBoolean(AUTO_CHECK_ENABLED, true)) return null
+
+        val now = System.currentTimeMillis()
+        val lastCheckAt = prefs.getLong(LAST_AUTO_CHECK_AT, 0L)
+        if (now - lastCheckAt < AUTO_CHECK_INTERVAL_MS) return null
+
+        // 在真正发起请求前记下时间，避免一次启动周期内多个入口重复请求。
+        prefs.edit().putLong(LAST_AUTO_CHECK_AT, now).apply()
+
+        val info = runCatching { fetchUpdateInfo() }.getOrNull() ?: return null
+        if (!isNewerVersion(info)) return null
+
+        if (prefs.getString(LAST_NOTIFIED_VERSION, null) != info.version) {
+            prefs.edit().putString(LAST_NOTIFIED_VERSION, info.version).apply()
+            Handler(Looper.getMainLooper()).post {
+                Toast.makeText(
+                    context.applicationContext,
+                    "发现兔眠新版本 ${info.version}，可前往关于页面下载更新",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+        return info
     }
 
     fun downloadUpdate(context: Context, download: UpdateDownload) {
         runCatching {
             val request = DownloadManager.Request(download.url.toUri()).apply {
-                // 设置下载时通知栏的标题和描述
                 setTitle(download.name)
-                setDescription("正在下载更新包...")
-                // 下载完成后通知栏可见
+                setDescription("正在下载兔眠更新包…")
                 setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                // 允许在移动网络和WiFi下下载
-                setAllowedNetworkTypes(DownloadManager.Request.NETWORK_WIFI or DownloadManager.Request.NETWORK_MOBILE)
-                // 设置文件保存路径
+                setAllowedNetworkTypes(
+                    DownloadManager.Request.NETWORK_WIFI or DownloadManager.Request.NETWORK_MOBILE
+                )
                 setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, download.name)
-                // 允许下载的文件类型
                 setMimeType("application/vnd.android.package-archive")
             }
-            // 获取系统的DownloadManager
             val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
             dm.enqueue(request)
         }.onFailure {
-            Toast.makeText(context, "Failed to update", Toast.LENGTH_SHORT).show()
-            context.openUrl(download.url) // 跳转到下载页面
+            Toast.makeText(context, "下载更新失败，将打开浏览器", Toast.LENGTH_SHORT).show()
+            context.openUrl(download.url)
         }
     }
 
-    /** 将字节数格式化为可读字符串 */
     private fun formatSize(bytes: Long): String {
         val mb = bytes.toDouble() / (1024 * 1024)
         return if (mb >= 1) {
@@ -146,7 +159,7 @@ class UpdateChecker(private val client: OkHttpClient) {
 data class UpdateDownload(
     val name: String,
     val url: String,
-    val size: String
+    val size: String,
 )
 
 @Serializable
@@ -154,41 +167,28 @@ data class UpdateInfo(
     val version: String,
     val publishedAt: String,
     val changelog: String,
-    val downloads: List<UpdateDownload>
+    val downloads: List<UpdateDownload>,
 )
 
-/** GitHub Release API 返回结构（仅取需要的字段） */
 @Serializable
 data class GithubRelease(
     @SerialName("tag_name") val tagName: String,
     @SerialName("published_at") val publishedAt: String,
     val body: String? = null,
-    val assets: List<GithubAsset> = emptyList()
+    val assets: List<GithubAsset> = emptyList(),
 )
 
 @Serializable
 data class GithubAsset(
     val name: String,
     val size: Long,
-    @SerialName("browser_download_url") val browserDownloadUrl: String
+    @SerialName("browser_download_url") val browserDownloadUrl: String,
 )
 
-/**
- * 版本号值类，封装版本号字符串并提供比较功能
- *
- * 支持完整的 SemVer 规范：MAJOR.MINOR.PATCH[-prerelease][+build]
- * - 预发布版本优先级低于正式版：1.0.0-alpha < 1.0.0
- * - 预发布标识符按段逐个比较：数字按数值比较，字符串按字典序比较
- * - 预发布标识符优先级：alpha < beta < rc（通过字典序自然满足）
- * - build metadata（+号后面的部分）不影响优先级比较
- */
 @JvmInline
 value class Version(val value: String) : Comparable<Version> {
-
     private fun parse(): ParsedVersion {
-        // 去掉 build metadata（+号后面的部分）
         val withoutBuild = value.split("+").first()
-        // 分离主版本号和预发布标识符
         val hyphenIndex = withoutBuild.indexOf('-')
         val (coreStr, prereleaseStr) = if (hyphenIndex >= 0) {
             withoutBuild.substring(0, hyphenIndex) to withoutBuild.substring(hyphenIndex + 1)
@@ -201,19 +201,14 @@ value class Version(val value: String) : Comparable<Version> {
     }
 
     override fun compareTo(other: Version): Int {
-        val a = this.parse()
+        val a = parse()
         val b = other.parse()
-
-        // 先比较主版本号
         val maxLen = maxOf(a.core.size, b.core.size)
         for (i in 0 until maxLen) {
-            val ap = if (i < a.core.size) a.core[i] else 0
-            val bp = if (i < b.core.size) b.core[i] else 0
+            val ap = a.core.getOrElse(i) { 0 }
+            val bp = b.core.getOrElse(i) { 0 }
             if (ap != bp) return ap.compareTo(bp)
         }
-
-        // 主版本号相同时比较预发布标识符
-        // 有预发布标识符的版本优先级低于没有的：1.0.0-alpha < 1.0.0
         return when {
             a.prerelease == null && b.prerelease == null -> 0
             a.prerelease != null && b.prerelease == null -> -1
@@ -223,27 +218,20 @@ value class Version(val value: String) : Comparable<Version> {
     }
 
     companion object {
-        fun compare(version1: String, version2: String): Int {
-            return Version(version1).compareTo(Version(version2))
-        }
+        fun compare(version1: String, version2: String): Int =
+            Version(version1).compareTo(Version(version2))
 
         private fun comparePrerelease(a: List<String>, b: List<String>): Int {
             val maxLen = maxOf(a.size, b.size)
             for (i in 0 until maxLen) {
-                // 字段少的优先级更低：1.0.0-alpha < 1.0.0-alpha.1
                 if (i >= a.size) return -1
                 if (i >= b.size) return 1
-
                 val aNum = a[i].toIntOrNull()
                 val bNum = b[i].toIntOrNull()
-
                 val cmp = when {
-                    // 都是数字：按数值比较
                     aNum != null && bNum != null -> aNum.compareTo(bNum)
-                    // 数字优先级低于字符串
                     aNum != null -> -1
                     bNum != null -> 1
-                    // 都是字符串：按字典序比较
                     else -> a[i].compareTo(b[i])
                 }
                 if (cmp != 0) return cmp
@@ -258,6 +246,5 @@ private data class ParsedVersion(
     val prerelease: List<String>?,
 )
 
-// 扩展操作符函数，使比较更直观
 operator fun String.compareTo(other: Version): Int = Version(this).compareTo(other)
-operator fun Version.compareTo(other: String): Int = this.compareTo(Version(other))
+operator fun Version.compareTo(other: String): Int = compareTo(Version(other))
