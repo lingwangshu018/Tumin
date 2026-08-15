@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -238,14 +239,24 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
         .lastOrNull { it.role == MessageRole.USER }
         ?.toText()
         .orEmpty()
+    val dialogueScrollState = rememberScrollState()
 
-    // Service 的 assistantText 是当前轮最可靠的流式文本；历史消息只作为页面重组后的兜底。
-    val storySource = uiState.assistantText.ifBlank { latestCallAssistantText }
-    val story = remember(storySource, companion.character.activity) {
-        storyPresentation(storySource, companion.character.activity)
-    }
-    val visibleUserText = uiState.userTranscript.ifBlank {
-        if (uiState.status == VoiceCallStatus.Processing) latestCallUserText else ""
+    // Keep the live turn visible while it is streaming, while persisted callMessages retain
+    // every completed user/assistant turn for manual scrolling.
+    val liveAssistantText = uiState.assistantText
+        .takeIf { it.isNotBlank() && it != latestCallAssistantText }
+        .orEmpty()
+    val liveUserText = uiState.userTranscript
+        .takeIf { it.isNotBlank() && it != latestCallUserText }
+        .orEmpty()
+
+    LaunchedEffect(callMessages.size, liveAssistantText, liveUserText) {
+        // Follow new turns only while the viewer is already near the bottom. If they scroll up
+        // to reread earlier video-call messages, streaming output must not steal the scroll.
+        val distanceFromBottom = dialogueScrollState.maxValue - dialogueScrollState.value
+        if (distanceFromBottom <= 160) {
+            dialogueScrollState.animateScrollTo(dialogueScrollState.maxValue)
+        }
     }
 
     fun sendTypedMessage() {
@@ -304,83 +315,53 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
+                        .verticalScroll(dialogueScrollState)
                         .padding(vertical = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    if (story.action.isNotBlank()) {
-                        Surface(
-                            color = Color.Black.copy(alpha = .26f),
-                            shape = RoundedCornerShape(16.dp),
-                        ) {
-                            Text(
-                                story.action,
-                                color = Color.White.copy(.76f),
-                                fontStyle = FontStyle.Italic,
-                                textAlign = TextAlign.Center,
-                                fontSize = 14.sp,
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
-                            )
-                        }
-                    }
-
-                    if (story.dialogue.isNotBlank()) {
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 14.dp),
-                            color = Color.Black.copy(alpha = .48f),
-                            shape = RoundedCornerShape(22.dp),
-                        ) {
-                            Column(Modifier.padding(horizontal = 18.dp, vertical = 15.dp)) {
-                                Text(
-                                    displayName,
-                                    color = Color.White.copy(.62f),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium,
-                                )
-                                Text(
-                                    story.dialogue,
-                                    color = Color.White,
-                                    fontSize = 17.sp,
-                                    lineHeight = 26.sp,
-                                    modifier = Modifier.padding(top = 5.dp),
-                                )
+                    callMessages.forEach { message ->
+                        when (message.role) {
+                            MessageRole.USER -> {
+                                val text = message.toText()
+                                if (text.isNotBlank()) {
+                                    VideoCallUserBubble(text)
+                                }
                             }
-                        }
-                    }
-
-                    if (visibleUserText.isNotBlank()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 12.dp),
-                            contentAlignment = Alignment.CenterEnd,
-                        ) {
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(.82f),
-                                color = Color.White.copy(alpha = .16f),
-                                shape = RoundedCornerShape(18.dp),
-                            ) {
-                                Column(Modifier.padding(horizontal = 15.dp, vertical = 11.dp)) {
-                                    Text("你", color = Color.White.copy(.56f), fontSize = 11.sp)
-                                    Text(
-                                        visibleUserText,
-                                        color = Color.White.copy(.92f),
-                                        fontSize = 15.sp,
-                                        modifier = Modifier.padding(top = 3.dp),
+                            MessageRole.ASSISTANT -> {
+                                val text = message.toText()
+                                if (text.isNotBlank()) {
+                                    val messageStory = storyPresentation(text, companion.character.activity)
+                                    VideoCallAssistantBubble(
+                                        displayName = displayName,
+                                        story = messageStory,
                                     )
                                 }
                             }
+                            else -> Unit
                         }
+                    }
+
+                    if (liveUserText.isNotBlank()) {
+                        VideoCallUserBubble(liveUserText)
+                    }
+                    if (liveAssistantText.isNotBlank()) {
+                        VideoCallAssistantBubble(
+                            displayName = displayName,
+                            story = storyPresentation(liveAssistantText, companion.character.activity),
+                        )
                     }
                 }
             }
 
-            OutlinedTextField(
-                value = typedInput,
-                onValueChange = { typedInput = it },
-                modifier = Modifier.fillMaxWidth(),
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .imePadding(),
+            ) {
+                OutlinedTextField(
+                    value = typedInput,
+                    onValueChange = { typedInput = it },
+                    modifier = Modifier.fillMaxWidth(),
                 placeholder = {
                     Text(
                         when (uiState.status) {
@@ -402,12 +383,12 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
                 maxLines = 3,
             )
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 14.dp, bottom = 28.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 14.dp, bottom = 28.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
                 CallButton(
                     if (uiState.isMuted) HugeIcons.MicOff01 else HugeIcons.Mic01,
                     if (uiState.isMuted) "取消静音" else "静音",
@@ -433,6 +414,7 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
                     service?.endCall()
                     VoiceCallService.stop(context)
                     onBack()
+                }
                 }
             }
         }
@@ -492,6 +474,81 @@ private fun VideoCallJoinPage(
             )
             Button(onClick = onJoin, enabled = !blockedByAnotherCall) { Text("开始通话") }
             TextButton(onClick = onBack) { Text("取消") }
+        }
+    }
+}
+
+@Composable
+private fun VideoCallUserBubble(text: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp),
+        contentAlignment = Alignment.CenterEnd,
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(.82f),
+            color = Color.White.copy(alpha = .16f),
+            shape = RoundedCornerShape(18.dp),
+        ) {
+            Column(Modifier.padding(horizontal = 15.dp, vertical = 11.dp)) {
+                Text("你", color = Color.White.copy(.56f), fontSize = 11.sp)
+                Text(
+                    text,
+                    color = Color.White.copy(.92f),
+                    fontSize = 15.sp,
+                    modifier = Modifier.padding(top = 3.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun VideoCallAssistantBubble(
+    displayName: String,
+    story: StoryPresentation,
+) {
+    if (story.action.isNotBlank()) {
+        Surface(
+            modifier = Modifier.padding(top = 12.dp),
+            color = Color.Black.copy(alpha = .26f),
+            shape = RoundedCornerShape(16.dp),
+        ) {
+            Text(
+                story.action,
+                color = Color.White.copy(.76f),
+                fontStyle = FontStyle.Italic,
+                textAlign = TextAlign.Center,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+            )
+        }
+    }
+
+    if (story.dialogue.isNotBlank()) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 14.dp),
+            color = Color.Black.copy(alpha = .48f),
+            shape = RoundedCornerShape(22.dp),
+        ) {
+            Column(Modifier.padding(horizontal = 18.dp, vertical = 15.dp)) {
+                Text(
+                    displayName,
+                    color = Color.White.copy(.62f),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    story.dialogue,
+                    color = Color.White,
+                    fontSize = 17.sp,
+                    lineHeight = 26.sp,
+                    modifier = Modifier.padding(top = 5.dp),
+                )
+            }
         }
     }
 }
