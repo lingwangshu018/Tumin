@@ -71,27 +71,29 @@ fun UpdateCard(updateChecker: UpdateChecker = koinInject()) {
     ) {
         item(
             onClick = {
-                if (checking) return@item
-                scope.launch {
-                    updateChecker.checkUpdate().collectLatest { state ->
-                        when (state) {
-                            UiState.Loading -> checking = true
-                            is UiState.Success -> {
-                                checking = false
-                                val info = state.data
-                                if (updateChecker.isNewerVersion(info)) {
-                                    latestInfo = info
-                                    showDetail = true
-                                } else {
-                                    toaster.show("当前已是最新版", type = ToastType.Success)
+                if (!checking) {
+                    scope.launch {
+                        updateChecker.checkUpdate().collectLatest { state ->
+                            when (state) {
+                                UiState.Idle -> Unit
+                                UiState.Loading -> checking = true
+                                is UiState.Success -> {
+                                    checking = false
+                                    val info = state.data
+                                    if (updateChecker.isNewerVersion(info)) {
+                                        latestInfo = info
+                                        showDetail = true
+                                    } else {
+                                        toaster.show("当前已是最新版", type = ToastType.Success)
+                                    }
                                 }
-                            }
-                            is UiState.Error -> {
-                                checking = false
-                                toaster.show(
-                                    state.error.message ?: "检查更新失败，请稍后重试",
-                                    type = ToastType.Error,
-                                )
+                                is UiState.Error -> {
+                                    checking = false
+                                    toaster.show(
+                                        state.error.message ?: "检查更新失败，请稍后重试",
+                                        type = ToastType.Error,
+                                    )
+                                }
                             }
                         }
                     }
