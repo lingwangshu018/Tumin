@@ -251,7 +251,12 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
         .orEmpty()
 
     LaunchedEffect(callMessages.size, liveAssistantText, liveUserText) {
-        dialogueScrollState.animateScrollTo(dialogueScrollState.maxValue)
+        // Follow new turns only while the viewer is already near the bottom. If they scroll up
+        // to reread earlier video-call messages, streaming output must not steal the scroll.
+        val distanceFromBottom = dialogueScrollState.maxValue - dialogueScrollState.value
+        if (distanceFromBottom <= 160) {
+            dialogueScrollState.animateScrollTo(dialogueScrollState.maxValue)
+        }
     }
 
     fun sendTypedMessage() {
