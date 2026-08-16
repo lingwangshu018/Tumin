@@ -137,7 +137,12 @@ class CompanionStateUpdater(
         return (now + offset) / MILLIS_PER_DAY
     }
 
-    private fun buildPrompt(current: CompanionState, userText: String, assistantText: String) = """
+    private fun buildPrompt(current: CompanionState, userText: String, assistantText: String): String {
+        val unresolved = current.relationship.unresolvedIssues
+            .takeLast(3)
+            .joinToString(" | ") { it.take(120) }
+            .ifBlank { "none" }
+        return """
         Analyze ONE exchange for a fictional companion. Be conservative. Routine greetings, ordinary affection,
         repeated pet names, and small talk are not meaningful relationship events by themselves.
 
@@ -152,7 +157,12 @@ class CompanionStateUpdater(
         BOND_GROWTH is reserved for the app's local long-term tracker. Never output BOND_GROWTH.
         Intensity must be 0..5. Use 4-5 only for genuinely major events.
         milestone must be null unless this exchange creates a memorable first/commitment/relationship milestone.
-        targetIssue should identify an unresolved issue only for conflict/apology/reconciliation when clear.
+
+        Conflict history rules:
+        - CONFLICT/BETRAYAL: targetIssue should name the concrete unresolved issue when clear.
+        - APOLOGY means an apology happened; it does NOT mean the issue is resolved.
+        - RECONCILIATION requires evidence that the apology/repair was accepted or both sides actually made peace.
+        - For RECONCILIATION, targetIssue should match one of the current unresolved issues whenever possible.
 
         If location/activity/appearance/emotion clearly changed, return a COMPLETE updated character object.
         Otherwise character must be null. Preserve unsupported character fields exactly.
@@ -161,7 +171,7 @@ class CompanionStateUpdater(
         ${json.encodeToString(current.character)}
         Current relationship stage: ${current.relationship.stage.name}
         Current relationship summary: ${current.relationship.summary.take(240)}
-        Latest unresolved issue: ${current.relationship.unresolvedIssues.lastOrNull()?.take(160) ?: "none"}
+        Current unresolved issues: $unresolved
 
         User: ${userText.take(700)}
         Assistant: ${assistantText.take(700)}
@@ -170,7 +180,8 @@ class CompanionStateUpdater(
         {"changed":false,"reason":"routine","character":null,"relationshipEvent":{"meaningful":false,"type":"ROUTINE","intensity":0,"summary":"","milestone":null,"targetIssue":null}}
         or
         {"changed":true,"reason":"brief reason","character":null,"relationshipEvent":{"meaningful":true,"type":"EMOTIONAL_SUPPORT","intensity":3,"summary":"brief factual summary","milestone":null,"targetIssue":null}}
-    """.trimIndent()
+        """.trimIndent()
+    }
 
     private fun parseDecision(raw: String): CompanionStateDecision? {
         val start = raw.indexOf('{')
