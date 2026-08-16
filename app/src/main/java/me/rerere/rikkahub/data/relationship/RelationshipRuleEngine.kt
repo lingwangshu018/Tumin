@@ -49,6 +49,7 @@ internal object RelationshipRuleEngine {
         val da = adjusted(base.attraction, current.attraction)
         val ds = adjusted(base.security, current.security)
         val dc = RelationshipPolicy.capPerEvent((base.conflict * scale).roundToInt(), intensity)
+        val history = RelationshipHistoryManager.apply(current, event)
 
         val effects = buildList {
             if (di != 0) add("intimacy ${signed(di)}")
@@ -56,28 +57,10 @@ internal object RelationshipRuleEngine {
             if (da != 0) add("attraction ${signed(da)}")
             if (ds != 0) add("security ${signed(ds)}")
             if (dc != 0) add("conflict ${signed(dc)}")
+            addAll(history.extraEffects)
         }
 
         val summary = event.summary.trim().ifBlank { defaultSummary(event.type) }
-        val issueText = event.targetIssue?.trim().orEmpty()
-        val unresolved = when (event.type) {
-            RelationshipEventType.CONFLICT,
-            RelationshipEventType.BETRAYAL -> if (issueText.isNotBlank()) current.unresolvedIssues + issueText else current.unresolvedIssues
-
-            RelationshipEventType.APOLOGY,
-            RelationshipEventType.RECONCILIATION -> if (issueText.isNotBlank()) {
-                current.unresolvedIssues.filterNot { it.equals(issueText, ignoreCase = true) }
-            } else if (event.type == RelationshipEventType.RECONCILIATION) {
-                current.unresolvedIssues.dropLast(1)
-            } else {
-                current.unresolvedIssues
-            }
-
-            else -> current.unresolvedIssues
-        }
-
-        val milestone = event.milestone?.trim().orEmpty()
-        val milestones = if (milestone.isNotBlank()) current.milestones + milestone else current.milestones
         val changed = current.copy(
             intimacy = current.intimacy + di,
             trust = current.trust + dt,
@@ -85,9 +68,16 @@ internal object RelationshipRuleEngine {
             security = current.security + ds,
             conflict = current.conflict + dc,
             summary = summary,
-            milestones = milestones,
-            recentChanges = current.recentChanges + RelationshipChange(summary = summary, effects = effects, createdAt = now),
-            unresolvedIssues = unresolved,
+            milestones = history.milestones,
+            milestoneKeys = history.milestoneKeys,
+            recentChanges = current.recentChanges + RelationshipChange(
+                summary = summary,
+                effects = effects,
+                eventType = event.type.name,
+                createdAt = now,
+            ),
+            unresolvedIssues = history.unresolvedIssues,
+            resolvedIssues = history.resolvedIssues,
             meaningfulInteractionCount = current.meaningfulInteractionCount + if (passiveBondGrowth) 0 else 1,
             lastMeaningfulEventAt = if (passiveBondGrowth) current.lastMeaningfulEventAt else now,
             recentEventTypes = if (passiveBondGrowth) {
