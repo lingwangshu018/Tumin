@@ -62,7 +62,7 @@ internal object CompanionEventGate {
         val visible = "$userText\n$assistantText".trim()
         if (explicitEventWords.any { it in visible }) return true
         if (visible.length >= 180 && emotionalWords.any { it in visible }) return true
-        return visible.length >= 360
+        return visible.length >= 220
     }
 }
 
