@@ -48,6 +48,9 @@ data class RelationshipState(
     val milestones: List<String> = emptyList(),
     val recentChanges: List<RelationshipChange> = emptyList(),
     val unresolvedIssues: List<String> = emptyList(),
+    val meaningfulInteractionCount: Int = 0,
+    val lastMeaningfulEventAt: Long = 0L,
+    val recentEventTypes: List<String> = emptyList(),
     val updatedAt: Long = 0L,
 ) {
     fun normalized() = copy(
@@ -56,6 +59,8 @@ data class RelationshipState(
         attraction = attraction.coerceIn(0, 100),
         security = security.coerceIn(0, 100),
         conflict = conflict.coerceIn(0, 100),
+        meaningfulInteractionCount = meaningfulInteractionCount.coerceAtLeast(0),
+        recentEventTypes = recentEventTypes.takeLast(12),
         recentChanges = recentChanges.takeLast(20),
         milestones = milestones.distinct().takeLast(50),
         unresolvedIssues = unresolvedIssues.distinct().takeLast(20),
