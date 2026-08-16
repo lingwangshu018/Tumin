@@ -194,9 +194,9 @@ class CompanionStateUpdater(
         return runCatching {
             json.decodeFromString<CompanionStateDecision>(jsonStr)
         }.onFailure { e ->
-            Log.w(TAG, "parseDecision: invalid JSON: ${jsonStr.take(220)}", e)
+            Log.w(TAG, "parseDecision: invalid JSON response (len=${jsonStr.length})", e)
         }.onSuccess { decision ->
-            Log.d(TAG, "Decision: changed=${decision.changed}, event=${decision.relationshipEvent?.type}, reason=${decision.reason.take(80)}")
+            Log.d(TAG, "Decision: changed=${decision.changed}, event=${decision.relationshipEvent?.type}")
         }.getOrNull()
     }
 
