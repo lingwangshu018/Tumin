@@ -30,12 +30,15 @@ internal object CompanionEventGate {
         "喜欢", "爱", "想你", "讨厌", "生气", "难过", "委屈", "吃醋", "害怕", "担心",
         "对不起", "原谅", "约会", "礼物", "表白", "分手", "和好", "承诺", "以后", "永远",
         "第一次", "秘密", "重要", "记住", "搬家", "工作", "考试", "生日", "纪念日",
+        "开心", "高兴", "感动", "想念", "好想", "陪", "亲", "抱", "笑", "哭",
+        "谢谢", "感谢", "信任", "依赖", "安全感", "心疼", "宝贝", "老公", "老婆", "夫",
+        "晚安", "早安", "吃饭", "睡觉", "做梦", "在干嘛", "想吃", "出去玩",
     )
 
     fun shouldEvaluate(userText: String, assistantText: String): Boolean {
         val visible = "$userText\n$assistantText".trim()
         if (userText.isBlank() || assistantText.isBlank()) return false
-        return visible.length >= 220 || meaningfulWords.any { it in visible }
+        return visible.length >= 80 || meaningfulWords.any { it in visible }
     }
 }
 
@@ -47,7 +50,11 @@ class CompanionStateUpdater(
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     suspend fun consider(assistantId: Uuid, userText: String, assistantText: String) {
-        if (!CompanionEventGate.shouldEvaluate(userText, assistantText)) return
+        if (!CompanionEventGate.shouldEvaluate(userText, assistantText)) {
+            Log.d(TAG, "Skipped: gate filtered out (user=${userText.take(30)}...)")
+            return
+        }
+        Log.d(TAG, "Evaluating companion state update for $assistantId")
         runCatching {
             val settings = settingsStore.settingsFlow.first()
             val assistant = settings.assistants.firstOrNull { it.id == assistantId } ?: return
@@ -68,7 +75,9 @@ class CompanionStateUpdater(
             if (decision.changed && decision.state != null) {
                 repository.update(assistantId) { decision.state }
             }
-        }.onFailure { Log.w(TAG, "Background companion-state evaluation failed", it) }
+        }.onFailure { e ->
+            Log.w(TAG, "Background companion-state evaluation failed: ${e.message}", e)
+        }
     }
 
     private fun buildPrompt(current: CompanionState, userText: String, assistantText: String) = """
@@ -90,14 +99,26 @@ class CompanionStateUpdater(
 
         Visible assistant text:
         ${assistantText.take(1200)}
+
+        IMPORTANT: You MUST respond with a single valid JSON object, no extra text.
+        If nothing meaningful happened, respond: {"changed":false,"reason":"routine exchange","state":null}
+        If something changed, update ALL fields of the state object, keeping unchanged fields at their current values.
     """.trimIndent()
 
     private fun parseDecision(raw: String): CompanionStateDecision? {
         val start = raw.indexOf('{')
         val end = raw.lastIndexOf('}')
-        if (start < 0 || end <= start) return null
+        if (start < 0 || end <= start) {
+            Log.w(TAG, "parseDecision: no JSON object found in response (len=${raw.length})")
+            return null
+        }
+        val jsonStr = raw.substring(start, end + 1)
         return runCatching {
-            json.decodeFromString<CompanionStateDecision>(raw.substring(start, end + 1))
+            json.decodeFromString<CompanionStateDecision>(jsonStr)
+        }.onFailure { e ->
+            Log.w(TAG, "parseDecision: failed to parse JSON: ${jsonStr.take(200)}", e)
+        }.onSuccess { decision ->
+            Log.d(TAG, "parseDecision: changed=${decision.changed}, reason=${decision.reason.take(60)}")
         }.getOrNull()
     }
 }
