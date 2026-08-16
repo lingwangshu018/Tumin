@@ -25,6 +25,11 @@ data class PetRelationshipSnapshot(
     val milestones: List<String>,
     val recentChanges: List<PetRelationshipChange>,
     val unresolvedIssues: List<String>,
+    val resolvedIssues: List<String>,
+    val totalInteractionCount: Int,
+    val meaningfulInteractionCount: Int,
+    val activeDayCount: Int,
+    val consecutiveActiveDays: Int,
     val updatedAt: Long,
     val behavior: PetRelationshipBehavior,
 )
@@ -71,6 +76,11 @@ fun RelationshipState.toPetRelationshipSnapshot(): PetRelationshipSnapshot {
             )
         },
         unresolvedIssues = normalized.unresolvedIssues,
+        resolvedIssues = normalized.resolvedIssues,
+        totalInteractionCount = normalized.totalInteractionCount,
+        meaningfulInteractionCount = normalized.meaningfulInteractionCount,
+        activeDayCount = normalized.activeDayCount,
+        consecutiveActiveDays = normalized.consecutiveActiveDays,
         updatedAt = normalized.updatedAt,
         behavior = normalized.toPetRelationshipBehavior(),
     )
