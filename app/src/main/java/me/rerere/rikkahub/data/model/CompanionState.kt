@@ -33,6 +33,7 @@ enum class RelationshipStage(val label: String) {
 data class RelationshipChange(
     val summary: String,
     val effects: List<String> = emptyList(),
+    val eventType: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
 )
 
@@ -46,8 +47,10 @@ data class RelationshipState(
     val conflict: Int = 0,
     val summary: String = "关系才刚刚开始，正在通过共同经历慢慢了解彼此。",
     val milestones: List<String> = emptyList(),
+    val milestoneKeys: List<String> = emptyList(),
     val recentChanges: List<RelationshipChange> = emptyList(),
     val unresolvedIssues: List<String> = emptyList(),
+    val resolvedIssues: List<String> = emptyList(),
     val meaningfulInteractionCount: Int = 0,
     val totalInteractionCount: Int = 0,
     val activeDayCount: Int = 0,
@@ -74,7 +77,9 @@ data class RelationshipState(
         recentEventTypes = recentEventTypes.takeLast(12),
         recentChanges = recentChanges.takeLast(20),
         milestones = milestones.distinct().takeLast(50),
+        milestoneKeys = milestoneKeys.distinct().takeLast(50),
         unresolvedIssues = unresolvedIssues.distinct().takeLast(20),
+        resolvedIssues = resolvedIssues.distinct().takeLast(30),
     )
 }
 
