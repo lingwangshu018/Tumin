@@ -11,34 +11,58 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
+import me.rerere.rikkahub.data.model.CharacterState
 import me.rerere.rikkahub.data.model.CompanionState
+import me.rerere.rikkahub.data.model.RelationshipEvent
+import me.rerere.rikkahub.data.model.RelationshipEventType
+import me.rerere.rikkahub.data.relationship.RelationshipActivityTracker
+import me.rerere.rikkahub.data.relationship.RelationshipRuleEngine
 import me.rerere.rikkahub.data.repository.CompanionStateRepository
+import java.util.TimeZone
 import kotlin.uuid.Uuid
 
 private const val TAG = "CompanionStateUpdater"
+private const val MILLIS_PER_DAY = 86_400_000L
+
+@Serializable
+private data class RawRelationshipEvent(
+    val meaningful: Boolean = false,
+    val type: String = "ROUTINE",
+    val intensity: Int = 0,
+    val summary: String = "",
+    val milestone: String? = null,
+    val targetIssue: String? = null,
+)
 
 @Serializable
 private data class CompanionStateDecision(
     val changed: Boolean = false,
     val reason: String = "",
-    val state: CompanionState? = null,
+    val character: CharacterState? = null,
+    val relationshipEvent: RawRelationshipEvent? = null,
 )
 
-/** Cheap local gate: obvious routine turns never trigger an extra model request. */
+/**
+ * Cheap local gate. Most routine turns die here and cost no extra model request.
+ * Short turns only pass on explicit relationship/emotional signals; long turns get a semantic check.
+ */
 internal object CompanionEventGate {
-    private val meaningfulWords = listOf(
-        "喜欢", "爱", "想你", "讨厌", "生气", "难过", "委屈", "吃醋", "害怕", "担心",
-        "对不起", "原谅", "约会", "礼物", "表白", "分手", "和好", "承诺", "以后", "永远",
-        "第一次", "秘密", "重要", "记住", "搬家", "工作", "考试", "生日", "纪念日",
-        "开心", "高兴", "感动", "想念", "好想", "陪", "亲", "抱", "笑", "哭",
-        "谢谢", "感谢", "信任", "依赖", "安全感", "心疼", "宝贝", "老公", "老婆", "夫",
-        "晚安", "早安", "吃饭", "睡觉", "做梦", "在干嘛", "想吃", "出去玩",
+    private val explicitEventWords = listOf(
+        "喜欢", "爱你", "爱上", "想你", "想念", "讨厌", "生气", "难过", "委屈", "吃醋", "害怕", "担心",
+        "对不起", "道歉", "原谅", "约会", "礼物", "表白", "在一起", "分手", "和好", "承诺", "永远",
+        "第一次", "秘密", "信任", "依赖", "安全感", "心疼", "亲亲", "抱抱", "拥抱", "亲吻", "暧昧",
+        "吵架", "争吵", "冷战", "背叛", "离开我", "结婚", "订婚", "纪念日",
+    )
+    private val emotionalWords = listOf(
+        "开心", "高兴", "感动", "难受", "哭", "孤独", "不安", "失望", "幸福", "陪我", "需要你", "重要",
     )
 
     fun shouldEvaluate(userText: String, assistantText: String): Boolean {
-        val visible = "$userText\n$assistantText".trim()
         if (userText.isBlank() || assistantText.isBlank()) return false
-        return visible.length >= 80 || meaningfulWords.any { it in visible }
+        val visible = "$userText\n$assistantText".trim()
+        if (explicitEventWords.any { it in visible }) return true
+        if (visible.length >= 180 && emotionalWords.any { it in visible }) return true
+        return visible.length >= 220
     }
 }
 
@@ -50,15 +74,30 @@ class CompanionStateUpdater(
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     suspend fun consider(assistantId: Uuid, userText: String, assistantText: String) {
-        if (!CompanionEventGate.shouldEvaluate(userText, assistantText)) {
-            Log.d(TAG, "Skipped: gate filtered out (user=${userText.take(30)}...)")
-            return
-        }
-        Log.d(TAG, "Evaluating companion state update for $assistantId")
+        if (userText.isBlank() || assistantText.isBlank()) return
+
         runCatching {
             val settings = settingsStore.settingsFlow.first()
             val assistant = settings.assistants.firstOrNull { it.id == assistantId } ?: return
             if (!assistant.enableCompanionState) return
+
+            // Every completed exchange contributes to long-term continuity locally.
+            // This path never calls a model and can occasionally emit a tiny BOND_GROWTH event.
+            val now = System.currentTimeMillis()
+            val epochDay = localEpochDay(now)
+            repository.update(assistantId) { previous ->
+                val tracked = RelationshipActivityTracker.record(previous.relationship, epochDay)
+                val relationship = tracked.bondGrowthEvent?.let { event ->
+                    RelationshipRuleEngine.apply(tracked.state, event, now)
+                } ?: tracked.state
+                previous.copy(relationship = relationship)
+            }
+
+            if (!CompanionEventGate.shouldEvaluate(userText, assistantText)) {
+                Log.d(TAG, "Skipped model analysis: local gate filtered routine turn")
+                return
+            }
+
             val model = settings.findModelById(settings.compressModelId)
                 ?: settings.getCurrentChatModel()
                 ?: return
@@ -72,53 +111,105 @@ class CompanionStateUpdater(
             )
             val raw = result.choices.firstOrNull()?.message?.toText().orEmpty()
             val decision = parseDecision(raw) ?: return
-            if (decision.changed && decision.state != null) {
-                repository.update(assistantId) { decision.state }
+            val event = decision.relationshipEvent?.toDomainEvent()
+            val characterChanged = decision.character != null
+            val relationshipChanged = event?.meaningful == true && event.type != RelationshipEventType.ROUTINE
+            if (!decision.changed && !characterChanged && !relationshipChanged) return
+
+            repository.update(assistantId) { previous ->
+                val nextRelationship = if (relationshipChanged && event != null) {
+                    RelationshipRuleEngine.apply(previous.relationship, event)
+                } else {
+                    previous.relationship
+                }
+                previous.copy(
+                    character = decision.character ?: previous.character,
+                    relationship = nextRelationship,
+                )
             }
         }.onFailure { e ->
             Log.w(TAG, "Background companion-state evaluation failed: ${e.message}", e)
         }
     }
 
-    private fun buildPrompt(current: CompanionState, userText: String, assistantText: String) = """
-        You maintain a fictional companion's persistent state. Decide whether this exchange contains a meaningful
-        emotional, relationship, location, activity, appearance, commitment, conflict, reconciliation or milestone
-        change. Routine greetings and ordinary small talk MUST return changed=false.
+    private fun localEpochDay(now: Long): Long {
+        val offset = TimeZone.getDefault().getOffset(now).toLong()
+        return (now + offset) / MILLIS_PER_DAY
+    }
 
-        Emotion is temporary; relationship stage changes only after strong evidence and meaningful events.
-        Preserve fields that are not supported by the exchange. Relationship scores are 0..100 and must change
-        conservatively. Never expose scores in dialogue. Return JSON only, matching:
-        {"changed":false,"reason":"...","state":null}
-        or {"changed":true,"reason":"...","state":<complete updated state>}
+    private fun buildPrompt(current: CompanionState, userText: String, assistantText: String): String {
+        val unresolved = current.relationship.unresolvedIssues
+            .takeLast(3)
+            .joinToString(" | ") { it.take(120) }
+            .ifBlank { "none" }
+        return """
+        Analyze ONE exchange for a fictional companion. Be conservative. Routine greetings, ordinary affection,
+        repeated pet names, and small talk are not meaningful relationship events by themselves.
 
-        Current state:
-        ${json.encodeToString(current)}
+        Your job is ONLY semantic classification. Never invent or output relationship scores or stages.
+        Relationship math is performed locally by the app.
 
-        Visible user text:
-        ${userText.take(1200)}
+        Allowed relationship event types:
+        ROUTINE, AFFECTION, EMOTIONAL_SUPPORT, SELF_DISCLOSURE, TRUST_BUILDING, FLIRTING, JEALOUSY, GIFT, DATE,
+        CONFLICT, APOLOGY, RECONCILIATION, CONFESSION, RELATIONSHIP_CONFIRMED, COMMITMENT, BETRAYAL, BREAKUP,
+        SEPARATION, MILESTONE.
 
-        Visible assistant text:
-        ${assistantText.take(1200)}
+        BOND_GROWTH is reserved for the app's local long-term tracker. Never output BOND_GROWTH.
+        Intensity must be 0..5. Use 4-5 only for genuinely major events.
+        milestone must be null unless this exchange creates a memorable first/commitment/relationship milestone.
 
-        IMPORTANT: You MUST respond with a single valid JSON object, no extra text.
-        If nothing meaningful happened, respond: {"changed":false,"reason":"routine exchange","state":null}
-        If something changed, update ALL fields of the state object, keeping unchanged fields at their current values.
-    """.trimIndent()
+        Conflict history rules:
+        - CONFLICT/BETRAYAL: targetIssue should name the concrete unresolved issue when clear.
+        - APOLOGY means an apology happened; it does NOT mean the issue is resolved.
+        - RECONCILIATION requires evidence that the apology/repair was accepted or both sides actually made peace.
+        - For RECONCILIATION, targetIssue should match one of the current unresolved issues whenever possible.
+
+        If location/activity/appearance/emotion clearly changed, return a COMPLETE updated character object.
+        Otherwise character must be null. Preserve unsupported character fields exactly.
+
+        Current character:
+        ${json.encodeToString(current.character)}
+        Current relationship stage: ${current.relationship.stage.name}
+        Current relationship summary: ${current.relationship.summary.take(240)}
+        Current unresolved issues: $unresolved
+
+        User: ${userText.take(700)}
+        Assistant: ${assistantText.take(700)}
+
+        Return ONE JSON object only:
+        {"changed":false,"reason":"routine","character":null,"relationshipEvent":{"meaningful":false,"type":"ROUTINE","intensity":0,"summary":"","milestone":null,"targetIssue":null}}
+        or
+        {"changed":true,"reason":"brief reason","character":null,"relationshipEvent":{"meaningful":true,"type":"EMOTIONAL_SUPPORT","intensity":3,"summary":"brief factual summary","milestone":null,"targetIssue":null}}
+        """.trimIndent()
+    }
 
     private fun parseDecision(raw: String): CompanionStateDecision? {
         val start = raw.indexOf('{')
         val end = raw.lastIndexOf('}')
         if (start < 0 || end <= start) {
-            Log.w(TAG, "parseDecision: no JSON object found in response (len=${raw.length})")
+            Log.w(TAG, "parseDecision: no JSON object found (len=${raw.length})")
             return null
         }
         val jsonStr = raw.substring(start, end + 1)
         return runCatching {
             json.decodeFromString<CompanionStateDecision>(jsonStr)
         }.onFailure { e ->
-            Log.w(TAG, "parseDecision: failed to parse JSON: ${jsonStr.take(200)}", e)
+            Log.w(TAG, "parseDecision: invalid JSON response (len=${jsonStr.length})", e)
         }.onSuccess { decision ->
-            Log.d(TAG, "parseDecision: changed=${decision.changed}, reason=${decision.reason.take(60)}")
+            Log.d(TAG, "Decision: changed=${decision.changed}, event=${decision.relationshipEvent?.type}")
         }.getOrNull()
+    }
+
+    private fun RawRelationshipEvent.toDomainEvent(): RelationshipEvent {
+        val parsedType = runCatching { RelationshipEventType.valueOf(type.trim().uppercase()) }
+            .getOrDefault(RelationshipEventType.ROUTINE)
+        return RelationshipEvent(
+            meaningful = meaningful && parsedType != RelationshipEventType.ROUTINE,
+            type = parsedType,
+            intensity = intensity.coerceIn(0, 5),
+            summary = summary,
+            milestone = milestone,
+            targetIssue = targetIssue,
+        )
     }
 }

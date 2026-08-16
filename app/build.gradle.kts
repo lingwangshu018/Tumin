@@ -304,6 +304,7 @@ dependencies {
     implementation(kotlin("reflect"))
 
     testImplementation(libs.junit)
+    testImplementation(kotlin("test-junit"))
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

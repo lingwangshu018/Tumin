@@ -79,6 +79,14 @@ jobs:
             -keypass android \
             -dname "CN=Android Debug,O=Android,C=US" \
             -keyalg RSA -keysize 2048 -validity 10000
+      - name: Run relationship core unit tests
+        run: |
+          ./gradlew :app:testDebugUnitTest \
+            --tests "me.rerere.rikkahub.data.relationship.RelationshipCoreV2Test" \
+            --tests "me.rerere.rikkahub.data.service.CompanionEventGateTest" \
+            --tests "me.rerere.rikkahub.data.model.CompanionStateTest" \
+            --tests "me.rerere.rikkahub.data.ai.transformers.CompanionContextBuilderTest" \
+            --stacktrace
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug --stacktrace
       - name: Upload debug APK

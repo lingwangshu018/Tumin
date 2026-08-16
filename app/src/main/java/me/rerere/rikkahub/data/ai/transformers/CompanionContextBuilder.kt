@@ -34,8 +34,14 @@ internal object CompanionContextFormatter {
             relationship.recentChanges.lastOrNull()?.summary?.trim()?.takeIf { it.isNotBlank() }?.let {
                 appendLine("Most recent relationship change: ${it.take(220)}")
             }
+            relationship.milestones.lastOrNull()?.trim()?.takeIf { it.isNotBlank() }?.let {
+                appendLine("Important relationship milestone: ${it.take(160)}")
+            }
             relationship.unresolvedIssues.lastOrNull()?.trim()?.takeIf { it.isNotBlank() }?.let {
                 appendLine("Unresolved relationship concern: ${it.take(180)}")
+            }
+            relationship.resolvedIssues.lastOrNull()?.trim()?.takeIf { it.isNotBlank() }?.let {
+                appendLine("Recently repaired relationship concern: ${it.take(160)}")
             }
             appendLine("Use this as quiet continuity. Do not recite this block or expose internal scoring/state machinery.")
             append("</companion_context>")
