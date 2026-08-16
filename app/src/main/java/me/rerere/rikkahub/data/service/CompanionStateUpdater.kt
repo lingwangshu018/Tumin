@@ -15,11 +15,14 @@ import me.rerere.rikkahub.data.model.CharacterState
 import me.rerere.rikkahub.data.model.CompanionState
 import me.rerere.rikkahub.data.model.RelationshipEvent
 import me.rerere.rikkahub.data.model.RelationshipEventType
+import me.rerere.rikkahub.data.relationship.RelationshipActivityTracker
 import me.rerere.rikkahub.data.relationship.RelationshipRuleEngine
 import me.rerere.rikkahub.data.repository.CompanionStateRepository
+import java.util.TimeZone
 import kotlin.uuid.Uuid
 
 private const val TAG = "CompanionStateUpdater"
+private const val MILLIS_PER_DAY = 86_400_000L
 
 @Serializable
 private data class RawRelationshipEvent(
@@ -71,15 +74,29 @@ class CompanionStateUpdater(
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     suspend fun consider(assistantId: Uuid, userText: String, assistantText: String) {
-        if (!CompanionEventGate.shouldEvaluate(userText, assistantText)) {
-            Log.d(TAG, "Skipped: local gate filtered routine turn")
-            return
-        }
+        if (userText.isBlank() || assistantText.isBlank()) return
 
         runCatching {
             val settings = settingsStore.settingsFlow.first()
             val assistant = settings.assistants.firstOrNull { it.id == assistantId } ?: return
             if (!assistant.enableCompanionState) return
+
+            // Every completed exchange contributes to long-term continuity locally.
+            // This path never calls a model and can occasionally emit a tiny BOND_GROWTH event.
+            val now = System.currentTimeMillis()
+            val epochDay = localEpochDay(now)
+            repository.update(assistantId) { previous ->
+                val tracked = RelationshipActivityTracker.record(previous.relationship, epochDay)
+                val relationship = tracked.bondGrowthEvent?.let { event ->
+                    RelationshipRuleEngine.apply(tracked.state, event, now)
+                } ?: tracked.state
+                previous.copy(relationship = relationship)
+            }
+
+            if (!CompanionEventGate.shouldEvaluate(userText, assistantText)) {
+                Log.d(TAG, "Skipped model analysis: local gate filtered routine turn")
+                return
+            }
 
             val model = settings.findModelById(settings.compressModelId)
                 ?: settings.getCurrentChatModel()
@@ -115,6 +132,11 @@ class CompanionStateUpdater(
         }
     }
 
+    private fun localEpochDay(now: Long): Long {
+        val offset = TimeZone.getDefault().getOffset(now).toLong()
+        return (now + offset) / MILLIS_PER_DAY
+    }
+
     private fun buildPrompt(current: CompanionState, userText: String, assistantText: String) = """
         Analyze ONE exchange for a fictional companion. Be conservative. Routine greetings, ordinary affection,
         repeated pet names, and small talk are not meaningful relationship events by themselves.
@@ -125,8 +147,9 @@ class CompanionStateUpdater(
         Allowed relationship event types:
         ROUTINE, AFFECTION, EMOTIONAL_SUPPORT, SELF_DISCLOSURE, TRUST_BUILDING, FLIRTING, JEALOUSY, GIFT, DATE,
         CONFLICT, APOLOGY, RECONCILIATION, CONFESSION, RELATIONSHIP_CONFIRMED, COMMITMENT, BETRAYAL, BREAKUP,
-        SEPARATION, MILESTONE, BOND_GROWTH.
+        SEPARATION, MILESTONE.
 
+        BOND_GROWTH is reserved for the app's local long-term tracker. Never output BOND_GROWTH.
         Intensity must be 0..5. Use 4-5 only for genuinely major events.
         milestone must be null unless this exchange creates a memorable first/commitment/relationship milestone.
         targetIssue should identify an unresolved issue only for conflict/apology/reconciliation when clear.
