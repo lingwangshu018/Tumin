@@ -18,6 +18,7 @@ internal object RelationshipRuleEngine {
     fun apply(current: RelationshipState, event: RelationshipEvent, now: Long = System.currentTimeMillis()): RelationshipState {
         if (!event.meaningful || event.type == RelationshipEventType.ROUTINE) return current.normalized()
 
+        val passiveBondGrowth = event.type == RelationshipEventType.BOND_GROWTH
         val intensity = RelationshipPolicy.clampIntensity(event.intensity).coerceAtLeast(1)
         val base = baseDelta(event.type)
         val intensityScale = when (intensity) {
@@ -27,8 +28,14 @@ internal object RelationshipRuleEngine {
             4 -> 1.25
             else -> 1.5
         }
-        val repeatScale = RelationshipPolicy.repeatMultiplier(current.recentEventTypes, event.type.name)
-        val rapidScale = if (current.lastMeaningfulEventAt > 0L && now - current.lastMeaningfulEventAt < 30_000L) 0.5 else 1.0
+        val repeatScale = if (passiveBondGrowth) 1.0 else {
+            RelationshipPolicy.repeatMultiplier(current.recentEventTypes, event.type.name)
+        }
+        val rapidScale = if (
+            !passiveBondGrowth &&
+            current.lastMeaningfulEventAt > 0L &&
+            now - current.lastMeaningfulEventAt < 30_000L
+        ) 0.5 else 1.0
         val scale = intensityScale * repeatScale * rapidScale
 
         fun adjusted(value: Int, currentValue: Int): Int {
@@ -81,9 +88,13 @@ internal object RelationshipRuleEngine {
             milestones = milestones,
             recentChanges = current.recentChanges + RelationshipChange(summary = summary, effects = effects, createdAt = now),
             unresolvedIssues = unresolved,
-            meaningfulInteractionCount = current.meaningfulInteractionCount + 1,
-            lastMeaningfulEventAt = now,
-            recentEventTypes = (current.recentEventTypes + event.type.name).takeLast(12),
+            meaningfulInteractionCount = current.meaningfulInteractionCount + if (passiveBondGrowth) 0 else 1,
+            lastMeaningfulEventAt = if (passiveBondGrowth) current.lastMeaningfulEventAt else now,
+            recentEventTypes = if (passiveBondGrowth) {
+                current.recentEventTypes
+            } else {
+                (current.recentEventTypes + event.type.name).takeLast(12)
+            },
             updatedAt = now,
         ).normalized()
 
