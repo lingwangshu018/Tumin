@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -91,6 +91,14 @@ class VoiceCallService : Service(), KoinComponent {
 
     val conversation: StateFlow<Conversation>
         get() = chatService.getConversationFlow(conversationId)
+
+    /**
+     * Safe accessor for UI bindings that may connect before onStartCommand has initialized
+     * conversationId. Binding a started foreground service and receiving onStartCommand are
+     * separate lifecycle steps, so Compose can briefly receive the binder first.
+     */
+    fun getConversationFlowOrNull(): StateFlow<Conversation>? =
+        if (::conversationId.isInitialized) chatService.getConversationFlow(conversationId) else null
 
     private var vadJob: Job? = null
     private var speakingMonitorJob: Job? = null
