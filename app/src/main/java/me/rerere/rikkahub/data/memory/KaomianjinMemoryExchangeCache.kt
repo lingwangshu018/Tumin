@@ -13,7 +13,7 @@ class KaomianjinMemoryExchangeCache(context: Context) {
     private val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val recentStore = CrossWindowMemoryStore(appContext)
 
-    fun saveKaomianjinSnapshot(assistantId: String, snapshotJson: String): JSONObject {
+    suspend fun saveKaomianjinSnapshot(assistantId: String, snapshotJson: String): JSONObject {
         val config = settings.load()
         if (!config.enabled) return denied("bridge_disabled")
         if (assistantId.isBlank()) return denied("assistant_id_required")
@@ -29,7 +29,21 @@ class KaomianjinMemoryExchangeCache(context: Context) {
             put("longTerm", source.optJSONArray("longTerm") ?: JSONArray())
         }
         prefs.edit().putString(SNAPSHOT_PREFIX + assistantId, normalized.toString()).apply()
-        return JSONObject().apply { put("ok", true) }
+
+        val synced = if (config.autoSyncImportantLongTerm) {
+            syncKaomianjinLongTermIntoTumin(
+                assistantId = assistantId,
+                memories = normalized.optJSONArray("longTerm") ?: JSONArray(),
+            )
+        } else {
+            0
+        }
+
+        return JSONObject().apply {
+            put("ok", true)
+            put("autoSyncImportantLongTerm", config.autoSyncImportantLongTerm)
+            put("syncedLongTermCount", synced)
+        }
     }
 
     fun buildKaomianjinPromptForAssistant(assistantId: String): String {
@@ -94,6 +108,7 @@ class KaomianjinMemoryExchangeCache(context: Context) {
                 items.forEach { entry ->
                     put(JSONObject().apply {
                         put("id", "tumin_recent_${entry.id}")
+                        put("sourceId", "tumin_recent_${entry.id}")
                         put("sourceApp", "tumin")
                         put("assistantId", entry.assistantId)
                         put("conversationId", entry.conversationId)
@@ -111,16 +126,16 @@ class KaomianjinMemoryExchangeCache(context: Context) {
         val config = settings.load()
         if (!config.enabled || !config.allowKaomianjinReadTuminLongTerm) return denied("long_term_read_disabled")
         if (assistantId.isBlank()) return denied("assistant_id_required")
-        val repository = runCatching {
-            KoinJavaComponent.get<MemoryRepository>(MemoryRepository::class.java)
-        }.getOrNull() ?: return denied("memory_repository_unavailable")
+        val repository = memoryRepository() ?: return denied("memory_repository_unavailable")
         val memories = repository.getMemoriesOfAssistant(assistantId).takeLast(limit.coerceIn(1, 200))
         return JSONObject().apply {
             put("ok", true)
+            put("autoSyncImportantLongTerm", config.autoSyncImportantLongTerm)
             put("items", JSONArray().apply {
                 memories.forEach { memory ->
                     put(JSONObject().apply {
                         put("id", "tumin_long_${memory.id}")
+                        put("sourceId", "tumin_long_${memory.id}")
                         put("sourceApp", "tumin")
                         put("assistantId", assistantId)
                         put("content", memory.content)
@@ -129,6 +144,50 @@ class KaomianjinMemoryExchangeCache(context: Context) {
             })
         }
     }
+
+    private suspend fun syncKaomianjinLongTermIntoTumin(
+        assistantId: String,
+        memories: JSONArray,
+    ): Int {
+        val repository = memoryRepository() ?: return 0
+        val importedKey = IMPORTED_IDS_PREFIX + assistantId
+        val importedIds = prefs.getStringSet(importedKey, emptySet()).orEmpty().toMutableSet()
+        val existingContents = repository.getMemoriesOfAssistant(assistantId)
+            .map { it.content.trim() }
+            .filter { it.isNotBlank() }
+            .toMutableSet()
+        var synced = 0
+
+        for (index in 0 until memories.length()) {
+            val item = memories.optJSONObject(index) ?: continue
+            if (item.optString("sourceApp").equals("tumin", ignoreCase = true)) continue
+
+            val content = item.optString("content").trim()
+            if (content.isBlank()) continue
+            val sourceId = item.optString("sourceId")
+                .ifBlank { item.optString("id") }
+                .ifBlank { "legacy_${content.hashCode()}" }
+            val dedupeId = "kaomianjin:$sourceId"
+
+            if (dedupeId in importedIds) continue
+            if (content in existingContents) {
+                importedIds += dedupeId
+                continue
+            }
+
+            repository.addMemory(assistantId, content)
+            existingContents += content
+            importedIds += dedupeId
+            synced++
+        }
+
+        prefs.edit().putStringSet(importedKey, importedIds).apply()
+        return synced
+    }
+
+    private fun memoryRepository(): MemoryRepository? = runCatching {
+        KoinJavaComponent.get<MemoryRepository>(MemoryRepository::class.java)
+    }.getOrNull()
 
     private fun denied(error: String): JSONObject = JSONObject().apply {
         put("ok", false)
@@ -139,6 +198,7 @@ class KaomianjinMemoryExchangeCache(context: Context) {
     companion object {
         private const val PREFS_NAME = "kaomianjin_memory_exchange_v1"
         private const val SNAPSHOT_PREFIX = "snapshot:"
+        private const val IMPORTED_IDS_PREFIX = "imported_ids:"
         private const val MAX_RECENT_CHARS = 2200
         private const val MAX_LONG_TERM_CHARS = 3200
     }
