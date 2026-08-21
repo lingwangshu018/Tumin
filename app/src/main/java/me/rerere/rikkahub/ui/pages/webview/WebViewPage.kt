@@ -11,6 +11,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.net.Uri
+import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebViewClient
@@ -135,6 +136,7 @@ private class FloatPortalWebViewClient(
         state.currentUrl = url
         state.canGoBack = view?.canGoBack() == true
         state.canGoForward = view?.canGoForward() == true
+        CookieManager.getInstance().flush()
     }
 }
 
@@ -341,7 +343,21 @@ fun WebViewPage(url: String, content: String) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(it),
+            onCreated = { webView ->
+                if (floatMode) {
+                    CookieManager.getInstance().apply {
+                        setAcceptCookie(true)
+                        setAcceptThirdPartyCookies(webView, true)
+                    }
+                }
+            },
             onUpdated = { webView ->
+                if (floatMode) {
+                    CookieManager.getInstance().apply {
+                        setAcceptCookie(true)
+                        setAcceptThirdPartyCookies(webView, true)
+                    }
+                }
                 if (floatClient != null && webView.webViewClient !== floatClient) {
                     webView.webViewClient = floatClient
                 }
