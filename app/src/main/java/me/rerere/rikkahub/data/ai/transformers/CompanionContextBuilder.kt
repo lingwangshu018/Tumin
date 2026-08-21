@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.ai.transformers
 
 import android.content.Context
+import me.rerere.rikkahub.data.memory.FloatMemoryExchangeCache
 import me.rerere.rikkahub.data.model.CharacterState
 import me.rerere.rikkahub.data.model.CompanionState
 import me.rerere.rikkahub.data.model.RelationshipStage
@@ -16,9 +17,20 @@ import me.rerere.rikkahub.data.model.Assistant
  */
 object CompanionContextBuilder {
     fun build(context: Context, assistant: Assistant): String {
-        if (!assistant.enableCompanionState) return ""
-        val state = CompanionStateRepository(context).observe(assistant.id).value
-        return CompanionContextFormatter.format(state)
+        val exchange = FloatMemoryExchangeCache(context)
+        // Publishing is cache-only and internally safe-to-fail. It never writes Float data into
+        // Tumin's native memory DB and never blocks normal companion continuity.
+        exchange.publishTuminSnapshot(assistant)
+        val floatContext = exchange.buildFloatPromptForAssistant(assistant.id.toString())
+
+        val companionContext = if (assistant.enableCompanionState) {
+            val state = CompanionStateRepository(context).observe(assistant.id).value
+            CompanionContextFormatter.format(state)
+        } else ""
+
+        return listOf(companionContext, floatContext)
+            .filter { it.isNotBlank() }
+            .joinToString("\n\n")
     }
 }
 
