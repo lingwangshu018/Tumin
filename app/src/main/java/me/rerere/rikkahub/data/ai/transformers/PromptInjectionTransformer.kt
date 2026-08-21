@@ -9,6 +9,7 @@ package me.rerere.rikkahub.data.ai.transformers
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.memory.KaomianjinMemoryExchangeCache
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.PromptInjection
@@ -26,13 +27,56 @@ object PromptInjectionTransformer : InputMessageTransformer {
         ctx: TransformerContext,
         messages: List<UIMessage>,
     ): List<UIMessage> {
-        return transformMessages(
+        val transformed = transformMessages(
             messages = messages,
             assistant = ctx.assistant,
             modeInjections = ctx.settings.modeInjections,
             lorebooks = ctx.settings.lorebooks
         )
+
+        val kaomianjinPrompt = runCatching {
+            KaomianjinMemoryExchangeCache(ctx.context)
+                .buildKaomianjinPromptForAssistant(ctx.assistant.id.toString())
+        }.getOrDefault("")
+
+        return appendKaomianjinMemoryBlock(
+            messages = transformed,
+            prompt = kaomianjinPrompt,
+        )
     }
+}
+
+/**
+ * 把 kaomianjin 借来的近期/长期记忆作为本轮临时 SYSTEM 上下文注入。
+ * 这里只读 snapshot，不写入 Tumin 聊天消息或长期记忆库。
+ */
+internal fun appendKaomianjinMemoryBlock(
+    messages: List<UIMessage>,
+    prompt: String,
+): List<UIMessage> {
+    val content = prompt.trim()
+    if (content.isEmpty()) return messages
+
+    // generateText 可能在一次工具循环里多次跑 input transformers，避免同一轮重复注入。
+    val alreadyInjected = messages.any { message ->
+        message.parts.filterIsInstance<UIMessagePart.Text>().any { part ->
+            part.text.contains("<kaomianjin_recent_context>") ||
+                part.text.contains("<kaomianjin_long_term_memory>")
+        }
+    }
+    if (alreadyInjected) return messages
+
+    val result = messages.toMutableList()
+    val systemIndex = result.indexOfFirst { it.role == MessageRole.SYSTEM }
+    if (systemIndex >= 0) {
+        val systemMessage = result[systemIndex]
+        result[systemIndex] = systemMessage.copy(
+            parts = systemMessage.parts + UIMessagePart.Text(content)
+        )
+    } else {
+        result.add(0, UIMessage.system(content))
+    }
+    return result
 }
 
 /**
