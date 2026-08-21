@@ -75,7 +75,9 @@ class FloatMemoryExchangeCache(context: Context) {
         if (targets.isEmpty()) return
 
         val assistantId = assistant.id.toString()
-        val memoryRepository = runCatching { KoinJavaComponent.get(MemoryRepository::class.java) }.getOrNull() ?: return
+        val memoryRepository = runCatching {
+            KoinJavaComponent.get<MemoryRepository>(MemoryRepository::class.java)
+        }.getOrNull() ?: return
         val bridge = TuminFloatMemoryBridge(appContext, memoryRepository)
         publishAssistantCatalog(targets)
 
@@ -99,13 +101,21 @@ class FloatMemoryExchangeCache(context: Context) {
 
     private fun publishAssistantCatalog(targets: List<android.content.SharedPreferences>) {
         if (targets.isEmpty()) return
-        val assistants = runCatching { KoinJavaComponent.get(SettingsStore::class.java).settingsFlow.value.assistants }.getOrDefault(emptyList())
+        val settingsStore = runCatching {
+            KoinJavaComponent.get<SettingsStore>(SettingsStore::class.java)
+        }.getOrNull() ?: return
+        val assistants: List<Assistant> = settingsStore.settingsFlow.value.assistants
         if (assistants.isEmpty()) return
         val payload = JSONObject().apply {
             put("version", 1)
             put("updatedAt", System.currentTimeMillis())
             put("assistants", JSONArray().apply {
-                assistants.forEach { assistant -> put(JSONObject().apply { put("id", assistant.id.toString()); put("name", assistant.name) }) }
+                assistants.forEach { assistant ->
+                    put(JSONObject().apply {
+                        put("id", assistant.id.toString())
+                        put("name", assistant.name)
+                    })
+                }
             })
         }.toString()
         targets.forEach { it.edit().putString(ASSISTANTS_KEY, payload).apply() }
