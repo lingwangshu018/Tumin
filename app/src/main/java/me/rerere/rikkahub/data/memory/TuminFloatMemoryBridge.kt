@@ -22,13 +22,18 @@ class TuminFloatMemoryBridge(
     private val memoryRepository: MemoryRepository,
 ) {
     private val recentStore = CrossWindowMemoryStore(context.applicationContext)
+    private val settings = FloatMemoryBridgeSettings(context.applicationContext)
 
     fun readRecentForFloat(
         assistantId: String,
         limit: Int = DEFAULT_RECENT_LIMIT,
     ): String {
-        if (assistantId.isBlank()) return emptyResult("recent")
-        val safeLimit = limit.coerceIn(1, MAX_SHARED_LIMIT)
+        val config = settings.load()
+        if (!config.enabled || !config.allowFloatReadTuminRecent) {
+            return deniedResult("recent", assistantId, "Float recent-memory reading is disabled")
+        }
+        if (assistantId.isBlank()) return missingAssistantResult("recent")
+        val safeLimit = minOf(limit.coerceIn(1, MAX_SHARED_LIMIT), config.sharedRecentContextLimit.coerceIn(1, MAX_SHARED_LIMIT))
         val items = recentStore.peekRecent(assistantId, safeLimit)
 
         return JSONObject().apply {
@@ -57,7 +62,11 @@ class TuminFloatMemoryBridge(
         assistantId: String,
         limit: Int = MAX_SHARED_LIMIT,
     ): String {
-        if (assistantId.isBlank()) return emptyResult("long_term")
+        val config = settings.load()
+        if (!config.enabled || !config.allowFloatReadTuminLongTerm) {
+            return deniedResult("long_term", assistantId, "Float long-term-memory reading is disabled")
+        }
+        if (assistantId.isBlank()) return missingAssistantResult("long_term")
         val safeLimit = limit.coerceIn(1, MAX_SHARED_LIMIT)
         val memories = memoryRepository.getMemoriesOfAssistant(assistantId).takeLast(safeLimit)
 
@@ -79,11 +88,19 @@ class TuminFloatMemoryBridge(
         }.toString()
     }
 
-    private fun emptyResult(kind: String): String = JSONObject().apply {
+    private fun missingAssistantResult(kind: String): String = JSONObject().apply {
         put("success", false)
         put("kind", kind)
         put("items", JSONArray())
         put("error", "assistantId is required")
+    }.toString()
+
+    private fun deniedResult(kind: String, assistantId: String, error: String): String = JSONObject().apply {
+        put("success", false)
+        put("kind", kind)
+        if (assistantId.isNotBlank()) put("assistantId", assistantId)
+        put("items", JSONArray())
+        put("error", error)
     }.toString()
 
     private companion object {
