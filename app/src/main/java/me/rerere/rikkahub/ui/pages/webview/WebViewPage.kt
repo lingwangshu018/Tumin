@@ -71,6 +71,47 @@ private const val FLOAT_PORTAL_URL_KEY = "url"
 private const val FLOAT_PORTAL_DATA = "plugin_data_float_isekai"
 private const val FLOAT_MANIFEST_KEY = "__float_memory_bridge_manifest_v1"
 
+private val KAOMIANJIN_BOOTSTRAP_JS = """
+    (function () {
+      try {
+        if (!window.localStorage || !localStorage.getItem('ai_os_characters')) return;
+        if (window.__tuminKaomianjinBootstrapping) return;
+        window.__tuminKaomianjinBootstrapping = true;
+
+        function loadScript(path) {
+          return new Promise(function (resolve, reject) {
+            var script = document.createElement('script');
+            script.src = new URL(path, location.href).href;
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.appendChild(script);
+          });
+        }
+
+        Promise.resolve()
+          .then(function () {
+            return window.WorldBridge ? null : loadScript('world-bridge.js');
+          })
+          .then(function () {
+            return window.KaomianjinMemoryInterop ? null : loadScript('kaomianjin-memory-interop.js');
+          })
+          .then(function () {
+            if (!window.KaomianjinMemoryInterop) return null;
+            return window.KaomianjinMemoryInterop.syncNow({ recentLimit: 20, longTermLimit: 50 });
+          })
+          .catch(function (error) {
+            console.warn('[Tumin] kaomianjin memory bridge bootstrap failed', error);
+          })
+          .finally(function () {
+            window.__tuminKaomianjinBootstrapping = false;
+          });
+      } catch (error) {
+        window.__tuminKaomianjinBootstrapping = false;
+        console.warn('[Tumin] kaomianjin memory bridge bootstrap failed', error);
+      }
+    })();
+""".trimIndent()
+
 private class FloatPortalBridge(private val prefs: SharedPreferences) {
     init {
         prefs.edit().putString(
@@ -137,6 +178,7 @@ private class FloatPortalWebViewClient(
         state.canGoBack = view?.canGoBack() == true
         state.canGoForward = view?.canGoForward() == true
         CookieManager.getInstance().flush()
+        view?.evaluateJavascript(KAOMIANJIN_BOOTSTRAP_JS, null)
     }
 }
 
@@ -452,6 +494,6 @@ fun WebViewPage(url: String, content: String) {
                     )
                 }
             }
-        }
+        )
     }
 }
