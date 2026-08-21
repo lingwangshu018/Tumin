@@ -3,17 +3,19 @@ package me.rerere.rikkahub.ui.pages.memory
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -30,18 +32,31 @@ import me.rerere.hugeicons.stroke.ArrowLeft01
 import me.rerere.rikkahub.data.memory.FloatMemoryBridgeConfig
 import me.rerere.rikkahub.data.memory.FloatMemoryBridgeSettings
 
+private val recentContextPresets = listOf(5, 10, 20, 50)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FloatMemoryBridgeSettingsPage(onBack: () -> Unit) {
     val context = LocalContext.current
     val store = remember { FloatMemoryBridgeSettings(context) }
     var config by remember { mutableStateOf(store.load()) }
+    var customLimitDraft by remember(config.sharedRecentContextLimit) {
+        mutableStateOf(config.sharedRecentContextLimit.toString())
+    }
 
     fun update(transform: (FloatMemoryBridgeConfig) -> FloatMemoryBridgeConfig) {
         val next = transform(config)
         config = next
         store.save(next)
     }
+
+    fun setRecentLimit(value: Int) {
+        val safe = value.coerceIn(1, 200)
+        customLimitDraft = safe.toString()
+        update { old -> old.copy(sharedRecentContextLimit = safe) }
+    }
+
+    val customSelected = config.sharedRecentContextLimit !in recentContextPresets
 
     Scaffold(
         topBar = {
@@ -77,17 +92,41 @@ fun FloatMemoryBridgeSettingsPage(onBack: () -> Unit) {
             }
             item {
                 SectionTitle("共享最近上下文")
-                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-                    Text("${config.sharedRecentContextLimit} 条", style = MaterialTheme.typography.titleMedium)
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     Text("控制跨应用最多共享多少条近期上下文", style = MaterialTheme.typography.bodySmall)
-                    Slider(
-                        value = config.sharedRecentContextLimit.toFloat(),
-                        onValueChange = { value ->
-                            update { old -> old.copy(sharedRecentContextLimit = value.toInt().coerceIn(1, 200)) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        recentContextPresets.forEach { preset ->
+                            FilterChip(
+                                selected = config.sharedRecentContextLimit == preset,
+                                onClick = { setRecentLimit(preset) },
+                                label = { Text("$preset 条") },
+                            )
+                        }
+                    }
+                    FilterChip(
+                        selected = customSelected,
+                        onClick = {
+                            if (!customSelected) setRecentLimit(30)
                         },
-                        valueRange = 1f..200f,
-                        steps = 198,
+                        label = { Text("自定义") },
                     )
+                    if (customSelected) {
+                        OutlinedTextField(
+                            value = customLimitDraft,
+                            onValueChange = { raw ->
+                                val digits = raw.filter(Char::isDigit).take(3)
+                                customLimitDraft = digits
+                                digits.toIntOrNull()?.let(::setRecentLimit)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            label = { Text("共享条数") },
+                            supportingText = { Text("1–200 条") },
+                        )
+                    }
                 }
             }
             item {
