@@ -78,7 +78,9 @@ class WorldPortalBridge(context: Context) {
                 put("error", "snapshot publishing is not enabled for this world")
             }
         }
-        kaomianjin.saveKaomianjinSnapshot(globalCharacterId.trim(), snapshotJson)
+        runBlocking(Dispatchers.IO) {
+            kaomianjin.saveKaomianjinSnapshot(globalCharacterId.trim(), snapshotJson)
+        }
     }
 
     @JavascriptInterface
