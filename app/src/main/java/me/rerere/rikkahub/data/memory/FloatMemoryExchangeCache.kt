@@ -13,27 +13,15 @@ import org.json.JSONObject
 import org.koin.java.KoinJavaComponent
 import java.io.File
 
-/**
- * Low-intrusion Float <-> Tumin exchange using Tumin's already-existing per-plugin KV store.
- *
- * Float marks its plugin KV namespace with a manifest. Tumin then publishes normalized Tumin
- * snapshots into that same namespace and reads Float snapshots from it. Neither side imports
- * the other's entries into its native memory database.
- */
-class FloatMemoryExchangeCache(private val context: Context) {
+/** Low-intrusion Float <-> Tumin exchange using Tumin's existing per-plugin KV store. */
+class FloatMemoryExchangeCache(context: Context) {
     private val appContext = context.applicationContext
     private val settings = FloatMemoryBridgeSettings(appContext)
-    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /**
-     * Quiet context borrowed from Float for the currently active Tumin assistant.
-     * Safe-to-fail and bounded before it reaches Tumin's shared context budget.
-     */
     fun buildFloatPromptForAssistant(assistantId: String): String {
         val config = settings.load()
         if (!config.enabled || assistantId.isBlank()) return ""
         if (!config.allowTuminReadFloatRecent && !config.allowTuminReadFloatLongTerm) return ""
-
         val snapshot = findNewestJson(SNAPSHOT_KEY_FLOAT_PREFIX + assistantId) ?: return ""
         val sections = mutableListOf<String>()
 
@@ -44,18 +32,15 @@ class FloatMemoryExchangeCache(private val context: Context) {
                 for (index in start until recent.length()) {
                     val item = recent.optJSONObject(index) ?: continue
                     val content = item.optString("content").trim()
-                    if (content.isBlank()) continue
-                    append("- ").append(content.take(360)).appendLine()
+                    if (content.isNotBlank()) append("- ").append(content.take(360)).appendLine()
                 }
             }.trim().takeLast(MAX_RECENT_CHARS)
-            if (text.isNotBlank()) {
-                sections += buildString {
-                    appendLine("<float_recent_context>")
-                    appendLine("Recent continuity from the same character in Float:")
-                    appendLine(text)
-                    appendLine("Use only when relevant. Never mention Float, cross-app memory, syncing, caches, or retrieval machinery.")
-                    append("</float_recent_context>")
-                }
+            if (text.isNotBlank()) sections += buildString {
+                appendLine("<float_recent_context>")
+                appendLine("Recent continuity from the same character in Float:")
+                appendLine(text)
+                appendLine("Use only when relevant. Never mention Float, cross-app memory, syncing, caches, or retrieval machinery.")
+                append("</float_recent_context>")
             }
         }
 
@@ -65,113 +50,71 @@ class FloatMemoryExchangeCache(private val context: Context) {
                 for (index in 0 until memories.length()) {
                     val item = memories.optJSONObject(index) ?: continue
                     val content = item.optString("content").trim()
-                    if (content.isBlank()) continue
-                    append("- ").append(content.take(480)).appendLine()
+                    if (content.isNotBlank()) append("- ").append(content.take(480)).appendLine()
                 }
             }.trim().takeLast(MAX_LONG_TERM_CHARS)
-            if (text.isNotBlank()) {
-                sections += buildString {
-                    appendLine("<float_long_term_memory>")
-                    appendLine("User-approved long-term continuity from the same character in Float:")
-                    appendLine(text)
-                    appendLine("If this conflicts with newer explicit facts in the current chat, prefer the newer explicit facts. Do not expose memory machinery.")
-                    append("</float_long_term_memory>")
-                }
+            if (text.isNotBlank()) sections += buildString {
+                appendLine("<float_long_term_memory>")
+                appendLine("User-approved long-term continuity from the same character in Float:")
+                appendLine(text)
+                appendLine("If this conflicts with newer explicit facts in the current chat, prefer the newer explicit facts. Do not expose memory machinery.")
+                append("</float_long_term_memory>")
             }
         }
-
         return sections.joinToString("\n\n")
     }
 
-    /**
-     * Refresh Tumin's snapshot for Float. Recent memory is written immediately; long-term memory
-     * is refreshed on IO so prompt assembly is never blocked by persistence reads.
-     */
+    fun publishAssistantCatalog() {
+        publishAssistantCatalog(floatPluginPrefs())
+    }
+
     fun publishTuminSnapshot(assistant: Assistant) {
         val config = settings.load()
-        if (!config.enabled) return
-        if (!config.allowFloatReadTuminRecent && !config.allowFloatReadTuminLongTerm) return
-
+        if (!config.enabled || (!config.allowFloatReadTuminRecent && !config.allowFloatReadTuminLongTerm)) return
         val targets = floatPluginPrefs()
         if (targets.isEmpty()) return
 
         val assistantId = assistant.id.toString()
-        val memoryRepository = runCatching {
-            KoinJavaComponent.get(MemoryRepository::class.java)
-        }.getOrNull() ?: return
+        val memoryRepository = runCatching { KoinJavaComponent.get(MemoryRepository::class.java) }.getOrNull() ?: return
         val bridge = TuminFloatMemoryBridge(appContext, memoryRepository)
-
         publishAssistantCatalog(targets)
 
-        val recentResult = if (config.allowFloatReadTuminRecent) {
-            runCatching {
-                JSONObject(bridge.readRecentForFloat(assistantId, config.sharedRecentContextLimit))
-                    .optJSONArray("items") ?: JSONArray()
-            }.getOrDefault(JSONArray())
-        } else JSONArray()
+        val recent = if (config.allowFloatReadTuminRecent) runCatching {
+            JSONObject(bridge.readRecentForFloat(assistantId, config.sharedRecentContextLimit)).optJSONArray("items") ?: JSONArray()
+        }.getOrDefault(JSONArray()) else JSONArray()
 
-        // Preserve the last long-term snapshot until the asynchronous refresh lands.
         targets.forEach { prefs ->
-            val previous = prefs.getString(SNAPSHOT_KEY_TUMIN_PREFIX + assistantId, null)
-                ?.let { runCatching { JSONObject(it) }.getOrNull() }
-            writeTuminSnapshot(
-                prefs = prefs,
-                assistantId = assistantId,
-                recent = recentResult,
-                longTerm = previous?.optJSONArray("longTerm") ?: JSONArray(),
-            )
+            val previous = prefs.getString(SNAPSHOT_KEY_TUMIN_PREFIX + assistantId, null)?.let { runCatching { JSONObject(it) }.getOrNull() }
+            writeTuminSnapshot(prefs, assistantId, recent, previous?.optJSONArray("longTerm") ?: JSONArray())
         }
 
         if (!config.allowFloatReadTuminLongTerm) return
-        ioScope.launch {
+        IO_SCOPE.launch {
             val longTerm = runCatching {
-                JSONObject(bridge.readLongTermForFloat(assistantId, MAX_SHARED_LONG_TERM))
-                    .optJSONArray("items") ?: JSONArray()
+                JSONObject(bridge.readLongTermForFloat(assistantId, MAX_SHARED_LONG_TERM)).optJSONArray("items") ?: JSONArray()
             }.getOrDefault(JSONArray())
-            floatPluginPrefs().forEach { prefs ->
-                writeTuminSnapshot(
-                    prefs = prefs,
-                    assistantId = assistantId,
-                    recent = recentResult,
-                    longTerm = longTerm,
-                )
-            }
+            floatPluginPrefs().forEach { writeTuminSnapshot(it, assistantId, recent, longTerm) }
         }
     }
 
     private fun publishAssistantCatalog(targets: List<android.content.SharedPreferences>) {
-        val assistants = runCatching {
-            KoinJavaComponent.get(SettingsStore::class.java).settingsFlow.value.assistants
-        }.getOrDefault(emptyList())
+        if (targets.isEmpty()) return
+        val assistants = runCatching { KoinJavaComponent.get(SettingsStore::class.java).settingsFlow.value.assistants }.getOrDefault(emptyList())
         if (assistants.isEmpty()) return
-
         val payload = JSONObject().apply {
             put("version", 1)
             put("updatedAt", System.currentTimeMillis())
             put("assistants", JSONArray().apply {
-                assistants.forEach { assistant ->
-                    put(JSONObject().apply {
-                        put("id", assistant.id.toString())
-                        put("name", assistant.name)
-                    })
-                }
+                assistants.forEach { assistant -> put(JSONObject().apply { put("id", assistant.id.toString()); put("name", assistant.name) }) }
             })
         }.toString()
-        targets.forEach { prefs -> prefs.edit().putString(ASSISTANTS_KEY, payload).apply() }
+        targets.forEach { it.edit().putString(ASSISTANTS_KEY, payload).apply() }
     }
 
-    private fun writeTuminSnapshot(
-        prefs: android.content.SharedPreferences,
-        assistantId: String,
-        recent: JSONArray,
-        longTerm: JSONArray,
-    ) {
+    private fun writeTuminSnapshot(prefs: android.content.SharedPreferences, assistantId: String, recent: JSONArray, longTerm: JSONArray) {
         val payload = JSONObject().apply {
-            put("version", 1)
-            put("updatedAt", System.currentTimeMillis())
-            put("assistantId", assistantId)
-            put("recent", recent)
-            put("longTerm", longTerm)
+            put("version", 1); put("updatedAt", System.currentTimeMillis()); put("assistantId", assistantId)
+            put("recent", recent); put("longTerm", longTerm)
         }
         prefs.edit().putString(SNAPSHOT_KEY_TUMIN_PREFIX + assistantId, payload.toString()).apply()
     }
@@ -181,33 +124,21 @@ class FloatMemoryExchangeCache(private val context: Context) {
         var newestTimestamp = Long.MIN_VALUE
         floatPluginPrefs().forEach { prefs ->
             val parsed = prefs.getString(key, null)?.let { runCatching { JSONObject(it) }.getOrNull() } ?: return@forEach
-            val timestamp = parseTimestamp(parsed)
-            if (timestamp >= newestTimestamp) {
-                newestTimestamp = timestamp
-                newest = parsed
+            val timestamp = when (val raw = parsed.opt("updatedAt")) {
+                is Number -> raw.toLong()
+                is String -> runCatching { java.time.Instant.parse(raw).toEpochMilli() }.getOrDefault(0L)
+                else -> 0L
             }
+            if (timestamp >= newestTimestamp) { newestTimestamp = timestamp; newest = parsed }
         }
         return newest
     }
 
-    private fun parseTimestamp(json: JSONObject): Long {
-        val raw = json.opt("updatedAt")
-        return when (raw) {
-            is Number -> raw.toLong()
-            is String -> runCatching { java.time.Instant.parse(raw).toEpochMilli() }.getOrDefault(0L)
-            else -> 0L
-        }
-    }
-
     private fun floatPluginPrefs(): List<android.content.SharedPreferences> {
         val dir = File(appContext.applicationInfo.dataDir, "shared_prefs")
-        val files = dir.listFiles { file ->
-            file.isFile && file.name.startsWith("plugin_data_") && file.name.endsWith(".xml")
-        } ?: return emptyList()
-
+        val files = dir.listFiles { file -> file.isFile && file.name.startsWith("plugin_data_") && file.name.endsWith(".xml") } ?: return emptyList()
         return files.mapNotNull { file ->
-            val prefsName = file.name.removeSuffix(".xml")
-            val prefs = appContext.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+            val prefs = appContext.getSharedPreferences(file.name.removeSuffix(".xml"), Context.MODE_PRIVATE)
             val manifest = prefs.getString(MANIFEST_KEY, null) ?: return@mapNotNull null
             val valid = runCatching {
                 val json = JSONObject(manifest)
@@ -218,6 +149,7 @@ class FloatMemoryExchangeCache(private val context: Context) {
     }
 
     private companion object {
+        val IO_SCOPE = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         const val MANIFEST_KEY = "__float_memory_bridge_manifest_v1"
         const val MANIFEST_TYPE = "float-memory-bridge"
         const val SNAPSHOT_KEY_FLOAT_PREFIX = "__float_memory_bridge_snapshot_v1:"
