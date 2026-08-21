@@ -40,6 +40,7 @@ import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.ui.pages.memory.FloatMemoryBridgeSettingsPage
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
@@ -68,7 +69,13 @@ fun SettingMemoryPage(vm: SettingVM = koinViewModel()) {
     var recentRefresh by remember { mutableStateOf(0) }
     var confirmClear by remember { mutableStateOf(false) }
     var advancedExpanded by remember { mutableStateOf(false) }
+    var showFloatMemoryBridge by remember { mutableStateOf(false) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
+    if (showFloatMemoryBridge) {
+        FloatMemoryBridgeSettingsPage(onBack = { showFloatMemoryBridge = false })
+        return
+    }
 
     fun updateAssistant(transform: (Assistant) -> Assistant) {
         val current = assistant ?: return
@@ -152,6 +159,16 @@ fun SettingMemoryPage(vm: SettingVM = koinViewModel()) {
                     optionToString = { it.name.ifBlank { "未命名角色" } },
                     modifier = Modifier.fillMaxWidth(),
                 )
+            }
+
+            item {
+                CardGroup(title = { Text("🔗 跨应用记忆") }) {
+                    item(
+                        onClick = { showFloatMemoryBridge = true },
+                        headlineContent = { Text("float 记忆互通") },
+                        supportingContent = { Text("管理兔眠与 float 的短期、长期记忆共享。") },
+                    )
+                }
             }
 
             item {
