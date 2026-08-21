@@ -721,6 +721,13 @@ private fun DrawerActions(
 ) {
     Column {
         DrawerNavigationItem(
+            icon = HugeIcons.Sparkles,
+            label = "异世界连接",
+            onClick = { navController.navigate(Screen.WebView(url = "tumin://float")) },
+            drawerItemAlpha = drawerItemAlpha,
+        )
+
+        DrawerNavigationItem(
             icon = HugeIcons.InLove,
             label = "情侣空间",
             onClick = { navController.navigate(Screen.CoupleSpace) },
