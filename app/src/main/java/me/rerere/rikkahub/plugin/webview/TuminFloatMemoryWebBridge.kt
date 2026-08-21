@@ -34,7 +34,7 @@ object TuminFloatMemoryWebBridge {
         val assistantId = uri.getQueryParameter("assistantId").orEmpty()
         val limit = uri.getQueryParameter("limit")?.toIntOrNull()?.coerceIn(1, 200) ?: 20
 
-        val memoryRepository = KoinJavaComponent.get<MemoryRepository>(MemoryRepository::class.java)
+        val memoryRepository = KoinJavaComponent.get(MemoryRepository::class.java)
         val bridge = TuminFloatMemoryBridge(context, memoryRepository)
 
         when (method) {
