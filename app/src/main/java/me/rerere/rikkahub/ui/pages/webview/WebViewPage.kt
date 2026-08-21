@@ -163,6 +163,9 @@ fun WebViewPage(url: String, content: String) {
     val portalBridge = remember(floatMode, portalData) {
         portalData?.let { FloatPortalBridge(it) }
     }
+    val worldBridge = remember(floatMode) {
+        if (floatMode) WorldPortalBridge(context) else null
+    }
 
     var configuredFloatUrl by remember(floatMode) {
         mutableStateOf(if (floatMode) portalSettings.getString(FLOAT_PORTAL_URL_KEY, "").orEmpty() else "")
@@ -180,7 +183,10 @@ fun WebViewPage(url: String, content: String) {
     val state = if (floatMode) {
         rememberWebViewState(
             url = configuredFloatUrl.ifBlank { "about:blank" },
-            interfaces = portalBridge?.let { mapOf("TuminFloatBridge" to it) }.orEmpty(),
+            interfaces = buildMap {
+                portalBridge?.let { put("TuminFloatBridge", it) }
+                worldBridge?.let { put("TuminWorldBridge", it) }
+            },
             settings = {
                 builtInZoomControls = true
                 displayZoomControls = false
