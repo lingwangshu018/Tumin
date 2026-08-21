@@ -156,9 +156,11 @@ fun WebViewPage(url: String, content: String) {
         context.getSharedPreferences(FLOAT_PORTAL_SETTINGS, Context.MODE_PRIVATE)
     }
     val portalData = remember(floatMode) {
-        context.getSharedPreferences(FLOAT_PORTAL_DATA, Context.MODE_PRIVATE)
+        if (floatMode) context.getSharedPreferences(FLOAT_PORTAL_DATA, Context.MODE_PRIVATE) else null
     }
-    val portalBridge = remember(floatMode) { FloatPortalBridge(portalData) }
+    val portalBridge = remember(floatMode, portalData) {
+        portalData?.let { FloatPortalBridge(it) }
+    }
 
     var configuredFloatUrl by remember(floatMode) {
         mutableStateOf(if (floatMode) portalSettings.getString(FLOAT_PORTAL_URL_KEY, "").orEmpty() else "")
@@ -176,7 +178,7 @@ fun WebViewPage(url: String, content: String) {
     val state = if (floatMode) {
         rememberWebViewState(
             url = configuredFloatUrl.ifBlank { "about:blank" },
-            interfaces = mapOf("TuminFloatBridge" to portalBridge),
+            interfaces = portalBridge?.let { mapOf("TuminFloatBridge" to it) }.orEmpty(),
             settings = {
                 builtInZoomControls = true
                 displayZoomControls = false
