@@ -196,7 +196,8 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
 
     val uiState by (service?.uiState ?: MutableStateFlow(VoiceCallUiState()))
         .collectAsStateWithLifecycle(initialValue = VoiceCallUiState())
-    val conversationFlow = service?.conversation
+    // bindService can deliver the binder before onStartCommand initializes conversationId.
+    val conversationFlow = service?.getConversationFlowOrNull()
         ?.map { it as me.rerere.rikkahub.data.model.Conversation? }
         ?: flowOf(null)
     val conversation by conversationFlow.collectAsStateWithLifecycle(initialValue = null)
@@ -219,12 +220,13 @@ fun VideoCallPage(conversationId: Uuid, onBack: () -> Unit) {
     LaunchedEffect(service, conversation?.assistantId, displayName) {
         val activeService = service ?: return@LaunchedEffect
         val current = conversation ?: return@LaunchedEffect
+        val activeConversationFlow = activeService.getConversationFlowOrNull() ?: return@LaunchedEffect
         VideoCallArchiveRuntime.attach(
             store = archiveStore,
             conversationId = conversationId,
             assistantId = current.assistantId,
             assistantName = displayName,
-            conversationFlow = activeService.conversation,
+            conversationFlow = activeConversationFlow,
         )
     }
 
